@@ -6,7 +6,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 import kr.ktb.zura.needu.taste.type.TasteAnalysisDecision;
 import kr.ktb.zura.needu.taste.type.TasteAnalysisStatus;
@@ -43,15 +43,15 @@ public class TasteAnalysis {
     @Column(nullable = false, length = 20)
     private TasteAnalysisDecision decision = TasteAnalysisDecision.PENDING;
 
-    private Instant completedAt;
+    private LocalDateTime completedAt;
 
-    private Instant decidedAt;
+    private LocalDateTime decidedAt;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 
     @UpdateTimestamp
     @Column(nullable = false)
-    private Instant updatedAt;
+    private LocalDateTime updatedAt;
 }

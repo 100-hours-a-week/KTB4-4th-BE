@@ -8,7 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import lombok.Getter;
@@ -35,15 +35,15 @@ public class AiChatRoom {
     @Column(nullable = false, length = 20)
     private AiChatRoomStatus status = AiChatRoomStatus.ACTIVE;
 
-    private Instant purgeAt;
+    private LocalDateTime purgeAt;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 
     @UpdateTimestamp
     @Column(nullable = false)
-    private Instant updatedAt;
+    private LocalDateTime updatedAt;
 
-    private Instant deletedAt;
+    private LocalDateTime deletedAt;
 }

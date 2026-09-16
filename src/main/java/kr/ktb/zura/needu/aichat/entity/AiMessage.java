@@ -2,7 +2,7 @@ package kr.ktb.zura.needu.aichat.entity;
 
 import jakarta.persistence.*;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.type.SenderType;
@@ -43,7 +43,7 @@ public class AiMessage {
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 
-    private Instant deletedAt;
+    private LocalDateTime deletedAt;
 }
