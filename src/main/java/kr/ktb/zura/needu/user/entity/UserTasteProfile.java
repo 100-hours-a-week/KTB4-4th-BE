@@ -24,11 +24,7 @@ public class UserTasteProfile {
 
     @MapsId
     @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false,
-            foreignKey = @ForeignKey(
-                    name = "FK_users_TO_user_taste_profiles_1"
-            )
-    )
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @Column(columnDefinition = "TEXT")

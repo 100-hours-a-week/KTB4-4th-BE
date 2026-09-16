@@ -19,19 +19,11 @@ public class Friend {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "owner_user_id", nullable = false,
-            foreignKey = @ForeignKey(
-                    name = "FK_FRIENDS_OWNER_USER"
-            )
-    )
+    @JoinColumn(name = "owner_user_id", nullable = false)
     private User ownerUser;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "friend_user_id", nullable = false,
-            foreignKey = @ForeignKey(
-                    name = "FK_FRIENDS_FRIEND_USER"
-            )
-    )
+    @JoinColumn(name = "friend_user_id", nullable = false)
     private User friendUser;
 
     @Column(name = "is_favorite", nullable = false)
