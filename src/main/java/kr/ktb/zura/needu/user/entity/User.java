@@ -41,11 +41,14 @@ public class User {
     private LocalDate birthDate;
 
     @Column(nullable = false)
-    private boolean onboardingCompleted = false;
+    private boolean onboardingCompleted = true;
+
+    @Column(nullable = false)
+    private boolean tasteAnalysisCompleted = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private UserStatus status = UserStatus.ONBOARDING;
+    private UserStatus status = UserStatus.ACTIVE;
 
     @Column
     private LocalDateTime blockedAt;
@@ -70,12 +73,15 @@ public class User {
         this.profileImageUrl = profileImageUrl;
         this.gender = gender;
         this.birthDate = birthDate;
-        this.onboardingCompleted = false;
     }
 
     public void completeOnboarding() {
         this.onboardingCompleted = true;
         this.status = UserStatus.ACTIVE;
+    }
+
+    public void completeTasteAnalysis() {
+        this.tasteAnalysisCompleted = true;
     }
 
     public void recordLogin() {
