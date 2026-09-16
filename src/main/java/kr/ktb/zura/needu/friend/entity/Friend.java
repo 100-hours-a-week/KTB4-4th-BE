@@ -2,14 +2,15 @@ package kr.ktb.zura.needu.friend.entity;
 
 import jakarta.persistence.*;
 import kr.ktb.zura.needu.user.entity.User;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Getter
 @Table(name = "friends")
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = PROTECTED)
 public class Friend {
 
     @Id

@@ -1,7 +1,6 @@
 package kr.ktb.zura.needu.user.entity;
 
 import jakarta.persistence.*;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -12,10 +11,12 @@ import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static lombok.AccessLevel.PROTECTED;
+
 @Entity
 @Getter
 @Table(name = "user_taste_profiles")
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = PROTECTED)
 public class UserTasteProfile {
 
     @Id

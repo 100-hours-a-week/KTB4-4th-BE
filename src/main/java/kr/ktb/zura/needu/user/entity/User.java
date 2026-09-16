@@ -3,7 +3,6 @@ package kr.ktb.zura.needu.user.entity;
 import jakarta.persistence.*;
 import kr.ktb.zura.needu.user.type.Gender;
 import kr.ktb.zura.needu.user.type.UserStatus;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -12,10 +11,12 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import static lombok.AccessLevel.PROTECTED;
+
 @Entity
 @Getter
 @Table(name = "users")
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = PROTECTED)
 public class User {
 
     @Id
