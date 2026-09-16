@@ -20,7 +20,6 @@ import static lombok.AccessLevel.PROTECTED;
 public class UserTasteProfile {
 
     @Id
-    @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @MapsId
@@ -32,25 +31,25 @@ public class UserTasteProfile {
     )
     private User user;
 
-    @Column(name = "recent_tastes", columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String recentTastes;
 
-    @Column(name = "recent_interests", columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String recentInterests;
 
-    @Column(name = "ai_summary", columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String aiSummary;
 
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "onboarding_tastes", nullable = false)
+    @Column(nullable = false)
     private Map<String, Object> onboardingTastes;
 
     public UserTasteProfile(User user, Map<String, Object> onboardingTastes) {

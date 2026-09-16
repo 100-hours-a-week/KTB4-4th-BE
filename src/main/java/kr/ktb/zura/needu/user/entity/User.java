@@ -21,47 +21,47 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
+    @Column(nullable = false)
     private Long id;
 
-    @Column(name = "external_id")
+    @Column
     private Long externalId;
 
-    @Column(name = "nickname", nullable = false, length = 50)
+    @Column(nullable = false, length = 50)
     private String nickname;
 
-    @Column(name = "profile_image_url", length = 2048)
+    @Column(length = 2048)
     private String profileImageUrl;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "gender", nullable = false)
+    @Column(nullable = false)
     private Gender gender;
 
-    @Column(name = "birth_date")
+    @Column
     private LocalDate birthDate;
 
-    @Column(name = "onboarding_completed", nullable = false)
+    @Column(nullable = false)
     private boolean onboardingCompleted = false;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 30)
+    @Column(nullable = false, length = 30)
     private UserStatus status = UserStatus.ONBOARDING;
 
-    @Column(name = "blocked_at")
+    @Column
     private LocalDateTime blockedAt;
 
-    @Column(name = "last_login_at")
+    @Column
     private LocalDateTime lastLoginAt;
 
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    @Column(name = "deleted_at")
+    @Column
     private LocalDateTime deletedAt;
 
     public User(Long externalId, String nickname, String profileImageUrl, Gender gender, LocalDate birthDate) {
