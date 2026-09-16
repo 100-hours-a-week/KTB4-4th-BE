@@ -19,7 +19,18 @@ public class UserService {
     public UserSummaryResponse findUserSummary(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+        validateActiveUser(user);
 
         return UserSummaryResponse.from(user);
+    }
+
+    private void validateActiveUser(User user) {
+        switch (user.getStatus()) {
+            case ACTIVE -> {
+            }
+            case ONBOARDING -> throw new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED);
+            case BLOCKED -> throw new BusinessException(UserErrorCode.USER_BLOCKED);
+            case WITHDRAWN -> throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
+        }
     }
 }
