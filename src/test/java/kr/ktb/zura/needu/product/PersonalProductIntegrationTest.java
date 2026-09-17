@@ -4,8 +4,8 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
-import kr.ktb.zura.needu.TestcontainersConfiguration;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
@@ -17,9 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -33,14 +31,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+// 테스트용 application.properties가 운영 설정 파일을 가리므로, 요청 제한 정책은 테스트에서 직접 지정한다.
+@SpringBootTest(properties = {
+        "needu.rate-limit.policies.personal-recommendations.method=GET",
+        "needu.rate-limit.policies.personal-recommendations.path-pattern=/api/v1/users/me/personal-recommendations",
+        "needu.rate-limit.policies.personal-recommendations.limit=" + PersonalProductIntegrationTest.RATE_LIMIT,
+        "needu.rate-limit.policies.personal-recommendations.window=1m",
+        "needu.rate-limit.policies.personal-recommendations.maximum-size=1000"
+})
 @AutoConfigureMockMvc
-@ActiveProfiles("test")
-@Import(TestcontainersConfiguration.class)
 class PersonalProductIntegrationTest {
 
+    static final int RATE_LIMIT = 10;
+
     private static final String URL = "/api/v1/users/me/personal-recommendations";
-    private static final int RATE_LIMIT = 120;
+
+    private final AtomicLong externalIdSequence = new AtomicLong();
 
     @Autowired
     private MockMvc mockMvc;
@@ -165,7 +171,7 @@ class PersonalProductIntegrationTest {
     }
 
     private User createUser() {
-        return new User(100L, "니듀", null, Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        return new User(externalIdSequence.incrementAndGet(), "니듀", null, Gender.FEMALE, LocalDate.of(2000, 1, 1));
     }
 
     private PersonalProduct savePersonalProduct(Long userId, String score, String name, String price) {

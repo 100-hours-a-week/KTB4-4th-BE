@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import kr.ktb.zura.needu.TestcontainersConfiguration;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.type.ProductStatus;
@@ -12,16 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Limit;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-@ActiveProfiles("test")
-@Import(TestcontainersConfiguration.class)
 class PersonalProductRepositoryTest {
 
     private static final Long USER_ID = 1L;
