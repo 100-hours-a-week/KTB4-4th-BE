@@ -1,9 +1,8 @@
 package kr.ktb.zura.needu.auth.controller;
 
 import java.net.URI;
-import kr.ktb.zura.needu.auth.dto.response.KakaoLoginResponse;
 import kr.ktb.zura.needu.auth.service.AuthService;
-import kr.ktb.zura.needu.auth.type.AuthErrorCode;
+import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,14 +12,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class AuthControllerTest {
@@ -42,38 +43,39 @@ class AuthControllerTest {
                 .thenAnswer(invocation -> URI.create("https://kauth.kakao.com/oauth/authorize?state="
                         + invocation.getArgument(0)));
 
-        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize"))
+        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+                        .param("returnUrl", "https://needu.example.com/login?next=%2Fhome"))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", containsString("https://kauth.kakao.com/oauth/authorize")))
                 .andReturn().getRequest().getSession(false);
 
         assertNotNull(session.getAttribute("kakaoOAuthState"));
+        assertEquals(URI.create("https://needu.example.com/login?next=%2Fhome"),
+                session.getAttribute("kakaoOAuthReturnUrl"));
     }
 
     @Test
-    void validCallback_returnsMemberJson() throws Exception {
-        MockHttpSession session = sessionWithState("state-123");
-        when(authService.loginWithKakao("valid-code"))
-                .thenReturn(new KakaoLoginResponse(1L, 42L, "테스터", null, false));
+    void validCallback_redirectsToStoredReturnUrl() throws Exception {
+        when(authService.createKakaoAuthorizationUri(anyString()))
+                .thenReturn(URI.create("https://kauth.kakao.com/oauth/authorize"));
+        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+                        .param("returnUrl", "https://needu.example.com/login?next=%2Fhome"))
+                .andReturn().getRequest().getSession(false);
+        String state = (String) session.getAttribute("kakaoOAuthState");
 
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(session).param("code", "valid-code").param("state", "state-123"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("카카오 연동에 성공했습니다."))
-                .andExpect(jsonPath("$.data.userId").value(1))
-                .andExpect(jsonPath("$.data.kakaoId").value(42))
-                .andExpect(jsonPath("$.data.onboardingCompleted").value(false));
+                        .session(session).param("code", "valid-code").param("state", state))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://needu.example.com/login?next=%2Fhome"));
+        verify(authService).loginWithKakao("valid-code");
     }
 
     @Test
     void reusedState_returnsBadRequest() throws Exception {
         MockHttpSession session = sessionWithState("state-123");
-        when(authService.loginWithKakao("valid-code"))
-                .thenReturn(new KakaoLoginResponse(1L, 42L, "테스터", null, false));
-
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
                         .session(session).param("code", "valid-code").param("state", "state-123"))
-                .andExpect(status().isOk());
+                .andExpect(status().isFound());
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
                         .param("code", "valid-code").param("state", "state-123"))
                 .andExpect(status().isBadRequest());
@@ -99,8 +101,8 @@ class AuthControllerTest {
 
     @Test
     void kakaoFailure_returnsServiceUnavailable() throws Exception {
-        when(authService.loginWithKakao("code"))
-                .thenThrow(new BusinessException(AuthErrorCode.AUTH_KAKAO_UNAVAILABLE));
+        doThrow(new BusinessException(AuthErrorCode.AUTH_KAKAO_UNAVAILABLE))
+                .when(authService).loginWithKakao("code");
 
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
                         .session(sessionWithState("state-123"))
@@ -108,9 +110,18 @@ class AuthControllerTest {
                 .andExpect(status().isServiceUnavailable());
     }
 
+    @Test
+    void invalidReturnUrl_returnsBadRequestWithoutStartingLogin() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+                        .param("returnUrl", "javascript:alert(1)"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(authService);
+    }
+
     private MockHttpSession sessionWithState(String state) {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("kakaoOAuthState", state);
+        session.setAttribute("kakaoOAuthReturnUrl", URI.create("https://needu.example.com/login"));
         return session;
     }
 }

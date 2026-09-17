@@ -2,7 +2,7 @@ package kr.ktb.zura.needu.auth.client;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import kr.ktb.zura.needu.auth.type.AuthErrorCode;
+import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

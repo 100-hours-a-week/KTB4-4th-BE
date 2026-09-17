@@ -28,7 +28,8 @@ class NeeduBeApplicationTests {
 
     @Test
     void kakaoAuthorize_isAccessibleWithoutAuthentication() throws Exception {
-        mockMvc.perform(get("/api/v1/auth/kakao/authorize"))
+        mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+                        .param("returnUrl", "https://needu.example.com/login"))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", startsWith("https://kauth.kakao.com/oauth/authorize")));
     }

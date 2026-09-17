@@ -10,4 +10,4 @@
 
 DB 연결은 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`로 설정합니다. HTTPS 운영 환경에서는 `SERVER_SERVLET_SESSION_COOKIE_SECURE=true`로 설정합니다.
 
-브라우저에서 `GET /api/v1/auth/kakao/authorize`로 이동하면 카카오 로그인 화면으로 리다이렉트됩니다. 성공 후 콜백은 회원 정보 JSON을 반환하며 NeedU 인증 토큰은 발급하지 않습니다. 기존 MySQL `users` 테이블에는 [`db/unique_users_external_id.sql`](db/unique_users_external_id.sql)을 적용해야 합니다. 적용 전 `external_id` 중복 행을 정리하세요.
+브라우저에서 `GET /api/v1/auth/kakao/authorize?returnUrl=https%3A%2F%2Fexample.com%2Flogin`으로 이동하면 카카오 로그인 화면으로 리다이렉트됩니다. 성공 후 콜백은 전달받은 `returnUrl`로 302 리다이렉트하며 NeedU 인증 토큰은 발급하지 않습니다. `returnUrl`은 절대 `http` 또는 `https` URL이어야 합니다. 기존 MySQL `users` 테이블에는 [`db/unique_users_external_id.sql`](db/unique_users_external_id.sql)을 적용해야 합니다. 적용 전 `external_id` 중복 행을 정리하세요.
