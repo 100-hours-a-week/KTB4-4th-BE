@@ -10,6 +10,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -24,7 +25,7 @@ public class User {
     @Column(nullable = false)
     private Long id;
 
-    @Column
+    @Column(unique = true)
     private Long externalId;
 
     @Column(nullable = false, length = 50)
@@ -68,7 +69,7 @@ public class User {
         this.externalId = externalId;
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
-        this.gender = gender;
+        this.gender = gender == null ? Gender.NONE : gender;
         this.birthDate = birthDate;
         this.onboardingCompleted = false;
     }
@@ -79,7 +80,7 @@ public class User {
     }
 
     public void recordLogin() {
-        this.lastLoginAt = LocalDateTime.now();
+        this.lastLoginAt = LocalDateTime.now(ZoneOffset.UTC);
     }
 
     public void block() {
