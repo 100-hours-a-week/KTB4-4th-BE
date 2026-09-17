@@ -66,4 +66,16 @@ public class Product {
     private LocalDateTime updatedAt;
 
     private LocalDateTime deletedAt;
+
+    public Product(String externalId, String name, String category, String description, BigDecimal price,
+                   String imageUrl, String sellerName, String purchaseUrl) {
+        this.externalId = externalId;
+        this.name = name;
+        this.category = category;
+        this.description = description;
+        this.price = price;
+        this.imageUrl = imageUrl;
+        this.sellerName = sellerName;
+        this.purchaseUrl = purchaseUrl;
+    }
 }

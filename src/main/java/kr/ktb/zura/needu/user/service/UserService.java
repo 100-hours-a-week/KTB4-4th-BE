@@ -27,13 +27,10 @@ public class UserService {
         User user = userRepository.findByExternalId(kakaoId)
                 .orElseGet(() -> userRepository.save(new User(
                         kakaoId, normalizeNickname(nickname), profileImageUrl, Gender.NONE, null)));
-        if (user.getStatus() == UserStatus.BLOCKED) {
-            throw new BusinessException(UserErrorCode.USER_BLOCKED);
-        }
-        if (user.getStatus() == UserStatus.WITHDRAWN) {
-            throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
-        }
+
+        validateLoginAvailableUser(user);
         user.recordLogin();
+
         return UserResponse.from(user);
     }
 
@@ -45,13 +42,19 @@ public class UserService {
         return UserSummaryResponse.from(user);
     }
 
-    private void validateActiveUser(User user) {
+    private void validateLoginAvailableUser(User user) {
         switch (user.getStatus()) {
-            case ACTIVE -> {
+            case ACTIVE, ONBOARDING -> {
             }
-            case ONBOARDING -> throw new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED);
             case BLOCKED -> throw new BusinessException(UserErrorCode.USER_BLOCKED);
             case WITHDRAWN -> throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
+        }
+    }
+
+    private void validateActiveUser(User user) {
+        validateLoginAvailableUser(user);
+        if (user.getStatus() == UserStatus.ONBOARDING) {
+            throw new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED);
         }
     }
 
