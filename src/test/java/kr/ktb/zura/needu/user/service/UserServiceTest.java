@@ -4,11 +4,14 @@ import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.entity.User;
+import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.type.Gender;
+import kr.ktb.zura.needu.user.type.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -63,5 +66,64 @@ class UserServiceTest {
 
         assertThrows(BusinessException.class,
                 () -> userService.findOrCreateKakaoUser(42L, "차단회원", null));
+    }
+
+    @Test
+    void withdrawnUser_findOrCreateKakaoUser_throwsUserWithdrawn() {
+        User withdrawn = new User(42L, "탈퇴회원", null, Gender.NONE, null);
+        withdrawn.withdraw();
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(withdrawn));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findOrCreateKakaoUser(42L, "탈퇴회원", null));
+
+        assertEquals(UserErrorCode.USER_WITHDRAWN, exception.getErrorCode());
+    }
+
+    @Test
+    void onboardingUser_findOrCreateKakaoUser_allowsLogin() {
+        User onboarding = createOnboardingUser();
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(onboarding));
+
+        UserResponse user = userService.findOrCreateKakaoUser(42L, "온보딩회원", null);
+
+        assertEquals(42L, user.externalId());
+        assertNotNull(onboarding.getLastLoginAt());
+    }
+
+    @Test
+    void onboardingUser_findUserSummary_throwsOnboardingRequired() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createOnboardingUser()));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findUserSummary(1L));
+
+        assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
+    void blockedUser_findUserSummary_throwsUserBlocked() {
+        User blocked = new User(42L, "차단회원", null, Gender.NONE, null);
+        blocked.block();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(blocked));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findUserSummary(1L));
+
+        assertEquals(UserErrorCode.USER_BLOCKED, exception.getErrorCode());
+    }
+
+    @Test
+    void activeUser_findUserSummary_returnsSummary() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+
+        assertEquals("니듀", userService.findUserSummary(1L).nickname());
+    }
+
+    private User createOnboardingUser() {
+        User user = new User(42L, "온보딩회원", null, Gender.NONE, null);
+        // 현재 User 기본 상태는 ACTIVE이고 ONBOARDING으로 바꾸는 도메인 메서드가 없어 테스트에서만 직접 설정한다.
+        ReflectionTestUtils.setField(user, "status", UserStatus.ONBOARDING);
+        return user;
     }
 }
