@@ -27,11 +27,16 @@ public class UserService {
         User user = userRepository.findByExternalId(kakaoId)
                 .orElseGet(() -> userRepository.save(new User(
                         kakaoId, normalizeNickname(nickname), profileImageUrl, Gender.NONE, null)));
-
         validateLoginAvailableUser(user);
         user.recordLogin();
 
         return UserResponse.from(user);
+    }
+
+    public void validateAuthenticatableUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+        validateLoginAvailableUser(user);
     }
 
     public UserSummaryResponse findUserSummary(Long userId) {

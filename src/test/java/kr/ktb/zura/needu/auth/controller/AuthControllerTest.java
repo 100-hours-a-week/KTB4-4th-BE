@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.auth.controller;
 
 import java.net.URI;
+import java.time.Duration;
 import kr.ktb.zura.needu.auth.service.AuthService;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -12,6 +13,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -32,7 +35,9 @@ class AuthControllerTest {
     @BeforeEach
     void setUp() {
         authService = mock(AuthService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService))
+        when(authService.loginWithKakao(anyString()))
+                .thenReturn(new AuthService.Tokens("access-token", "refresh-token", Duration.ofDays(14)));
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, true, Duration.ofMinutes(15)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -66,7 +71,11 @@ class AuthControllerTest {
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
                         .session(session).param("code", "valid-code").param("state", state))
                 .andExpect(status().isFound())
-                .andExpect(header().string("Location", "https://needu.example.com/login?next=%2Fhome"));
+                .andExpect(header().string("Location", "https://needu.example.com/login?next=%2Fhome"))
+                .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
+                        containsString("NEEDU_ACCESS_TOKEN=access-token"),
+                        containsString("Max-Age=900"), containsString("HttpOnly"),
+                        containsString("Secure"), containsString("SameSite=Lax")))));
         verify(authService).loginWithKakao("valid-code");
     }
 
