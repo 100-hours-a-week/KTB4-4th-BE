@@ -27,14 +27,15 @@ public class UserService {
         User user = userRepository.findByExternalId(kakaoId)
                 .orElseGet(() -> userRepository.save(new User(
                         kakaoId, normalizeNickname(nickname), profileImageUrl, Gender.NONE, null)));
-        if (user.getStatus() == UserStatus.BLOCKED) {
-            throw new BusinessException(UserErrorCode.USER_BLOCKED);
-        }
-        if (user.getStatus() == UserStatus.WITHDRAWN) {
-            throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
-        }
+        validateAuthenticatableUser(user);
         user.recordLogin();
         return UserResponse.from(user);
+    }
+
+    public void validateAuthenticatableUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+        validateAuthenticatableUser(user);
     }
 
     public UserSummaryResponse findUserSummary(Long userId) {
@@ -52,6 +53,15 @@ public class UserService {
             case ONBOARDING -> throw new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED);
             case BLOCKED -> throw new BusinessException(UserErrorCode.USER_BLOCKED);
             case WITHDRAWN -> throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
+        }
+    }
+
+    private void validateAuthenticatableUser(User user) {
+        if (user.getStatus() == UserStatus.BLOCKED) {
+            throw new BusinessException(UserErrorCode.USER_BLOCKED);
+        }
+        if (user.getStatus() == UserStatus.WITHDRAWN) {
+            throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
         }
     }
 
