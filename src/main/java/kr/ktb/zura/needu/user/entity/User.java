@@ -10,7 +10,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -86,7 +85,7 @@ public class User {
     }
 
     public void recordLogin() {
-        this.lastLoginAt = LocalDateTime.now(ZoneOffset.UTC);
+        this.lastLoginAt = LocalDateTime.now();
     }
 
     public void block() {
