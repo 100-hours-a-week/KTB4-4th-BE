@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -93,7 +94,7 @@ class AuthFlowIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(refreshCookie, csrfCookie).header("X-XSRF-TOKEN", csrfToken))
                 .andExpect(status().isUnauthorized());
-        MvcResult logout = mockMvc.perform(post("/api/v1/auth/logout")
+        MvcResult logout = mockMvc.perform(delete("/api/v1/auth/session")
                         .cookie(nextRefreshCookie, csrfCookie).header("X-XSRF-TOKEN", csrfToken))
                 .andExpect(status().isNoContent()).andReturn();
         assertThat(logout.getResponse().getCookie(AuthCookieNames.ACCESS_TOKEN).getMaxAge()).isZero();

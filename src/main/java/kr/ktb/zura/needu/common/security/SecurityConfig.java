@@ -32,7 +32,7 @@ public class SecurityConfig {
         BearerTokenResolver cookieTokenResolver = request -> {
             String path = request.getRequestURI().substring(request.getContextPath().length());
             if (path.startsWith("/api/v1/auth/kakao/") || path.equals("/api/v1/auth/csrf")
-                    || path.equals("/api/v1/auth/refresh") || path.equals("/api/v1/auth/logout")) {
+                    || path.equals("/api/v1/auth/refresh") || path.equals("/api/v1/auth/session")) {
                 return null;
             }
             var cookie = WebUtils.getCookie(request, AuthCookieNames.ACCESS_TOKEN);
@@ -43,8 +43,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/kakao/authorize", "/api/v1/auth/kakao/callback")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/logout")
-                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/session").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
