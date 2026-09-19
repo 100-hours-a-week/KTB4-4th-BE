@@ -4,17 +4,23 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "gift_products")
+@Table(
+        name = "gift_products",
+        indexes = @Index(name = "idx_gift_products_user_id_score_id", columnList = "user_id, score, id")
+)
 @NoArgsConstructor(access = PROTECTED)
 public class GiftProduct {
 
@@ -35,8 +41,8 @@ public class GiftProduct {
     @Column(length = 500)
     private String reason;
 
-    @Column(columnDefinition = "TEXT")
-    private String tasteKeywords;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<String> tasteKeywords;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -45,4 +51,12 @@ public class GiftProduct {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    public GiftProduct(Long userId, Product product, BigDecimal score, String reason, List<String> tasteKeywords) {
+        this.userId = userId;
+        this.product = product;
+        this.score = score;
+        this.reason = reason;
+        this.tasteKeywords = tasteKeywords;
+    }
 }
