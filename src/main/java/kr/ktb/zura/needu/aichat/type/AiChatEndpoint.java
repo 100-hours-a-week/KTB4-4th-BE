@@ -9,8 +9,8 @@ import org.springframework.http.HttpMethod;
 public enum AiChatEndpoint {
 
     CHECK_HEALTH("/health", HttpMethod.GET),
-    START_CHAT("/chats", HttpMethod.POST),
-    SEND_MESSAGE("/chats/{chatId}/messages", HttpMethod.POST),
+    START_SESSION("/v1/chat/sessions", HttpMethod.POST),
+    SEND_MESSAGE("/v1/chat/sessions/{conversationRoomId}/messages", HttpMethod.POST),
     CONFIRM_TASTE_PROFILE("/taste-profiles/{tasteProfileId}/confirm", HttpMethod.POST);
 
     private final String url;
