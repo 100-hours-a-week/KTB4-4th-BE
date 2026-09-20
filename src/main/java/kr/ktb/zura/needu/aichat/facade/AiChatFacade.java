@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -18,6 +19,7 @@ import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -57,6 +59,12 @@ public class AiChatFacade {
             return restartConversation(userId, room.getId());
         }
         return AiConversationStartResult.resumed(AiConversationResponse.from(room));
+    }
+
+    public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
+            Long userId, Long conversationId, String cursor, int size) {
+        aiChatRoomService.findActiveRoom(userId, conversationId);
+        return aiMessageService.findAllMessages(conversationId, cursor, size);
     }
 
     public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {

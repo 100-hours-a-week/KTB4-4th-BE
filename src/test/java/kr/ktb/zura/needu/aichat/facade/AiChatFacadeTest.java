@@ -2,12 +2,14 @@ package kr.ktb.zura.needu.aichat.facade;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -17,8 +19,10 @@ import kr.ktb.zura.needu.aichat.service.AiChatRoomService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
+import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -299,6 +303,31 @@ class AiChatFacadeTest {
                 .isInstanceOf(BusinessException.class);
 
         assertThat(aiConversationLock.tryLock(ROOM_ID)).isTrue();
+    }
+
+    @Test
+    void activeConversation_findAllMessages_returnsMessagePage() {
+        givenActiveRoom();
+        CursorPageResponse<AiMessageSummaryResponse> page = new CursorPageResponse<>(
+                List.of(new AiMessageSummaryResponse(USER_MESSAGE_ID, SenderType.USER, USER_CONTENT,
+                        LocalDateTime.now())),
+                "cursor",
+                true
+        );
+        given(aiMessageService.findAllMessages(ROOM_ID, null, 20)).willReturn(page);
+
+        assertThat(aiChatFacade.findAllMessages(USER_ID, ROOM_ID, null, 20)).isEqualTo(page);
+    }
+
+    @Test
+    void inaccessibleConversation_findAllMessages_doesNotReadMessages() {
+        given(aiChatRoomService.findActiveRoom(USER_ID, ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN));
+
+        assertThatThrownBy(() -> aiChatFacade.findAllMessages(USER_ID, ROOM_ID, null, 20))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
+        verifyNoInteractions(aiMessageService);
     }
 
     private void givenActiveRoom() {
