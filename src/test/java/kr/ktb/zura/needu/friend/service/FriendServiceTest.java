@@ -17,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -70,39 +71,43 @@ class FriendServiceTest {
     }
 
     @Test
-    void newKakaoFriends_addKakaoFriends_savesOnlyNewMatchedUsers() {
+    void missingKakaoFriendRelations_syncKakaoFriends_savesBothDirections() {
         when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn(Map.of(10L, 1L, 20L, 2L, 30L, 3L));
         when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L, 3L)))
                 .thenReturn(List.of(new Friend(1L, 2L)));
+        when(friendRepository.findAllByOwnerUserIdInAndFriendUserId(java.util.Set.of(2L, 3L), 1L))
+                .thenReturn(List.of(new Friend(3L, 1L)));
 
-        friendService.addKakaoFriends(1L, List.of(20L, 30L, 10L));
+        friendService.syncKakaoFriends(1L, List.of(20L, 30L, 10L));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Friend>> captor = ArgumentCaptor.forClass(List.class);
         verify(friendRepository).saveAll(captor.capture());
-        assertThat(captor.getValue()).extracting(Friend::getFriendUserId).containsExactly(3L);
+        assertThat(captor.getValue())
+                .extracting(Friend::getOwnerUserId, Friend::getFriendUserId)
+                .containsExactlyInAnyOrder(tuple(1L, 3L), tuple(2L, 1L));
         verify(userService).completeKakaoFriendSync(1L);
     }
 
     @Test
-    void emptyKakaoFriends_addKakaoFriends_marksSyncComplete() {
+    void emptyKakaoFriends_syncKakaoFriends_marksSyncComplete() {
         when(userService.findUserIdsByExternalIds(java.util.Set.of())).thenReturn(Map.of());
 
-        friendService.addKakaoFriends(1L, List.of());
+        friendService.syncKakaoFriends(1L, List.of());
 
         verify(userService).completeKakaoFriendSync(1L);
     }
 
     @Test
-    void friendSaveFailure_addKakaoFriends_doesNotMarkSyncComplete() {
+    void friendSaveFailure_syncKakaoFriends_doesNotMarkSyncComplete() {
         when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn(Map.of(20L, 2L));
         when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L)))
                 .thenReturn(List.of());
         doThrow(new IllegalStateException()).when(friendRepository).saveAll(anyList());
 
-        assertThatThrownBy(() -> friendService.addKakaoFriends(1L, List.of(20L)))
+        assertThatThrownBy(() -> friendService.syncKakaoFriends(1L, List.of(20L)))
                 .isInstanceOf(IllegalStateException.class);
 
         verify(userService, never()).completeKakaoFriendSync(1L);

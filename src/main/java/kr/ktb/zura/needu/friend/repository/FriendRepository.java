@@ -12,4 +12,6 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
     List<Friend> findAllByOwnerUserIdOrderByIdAsc(Long ownerUserId);
 
     List<Friend> findAllByOwnerUserIdAndFriendUserIdIn(Long ownerUserId, Collection<Long> friendUserIds);
+
+    List<Friend> findAllByOwnerUserIdInAndFriendUserId(Collection<Long> ownerUserIds, Long friendUserId);
 }

@@ -42,7 +42,7 @@ class KakaoFriendSyncServiceTest {
         assertThrows(BusinessException.class, () -> syncService.sync(1L, "code"));
 
         verify(kakaoFriendClient, never()).findAllFriendIds("kakao-access");
-        verify(friendService, never()).addKakaoFriends(org.mockito.ArgumentMatchers.anyLong(),
+        verify(friendService, never()).syncKakaoFriends(org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyList());
     }
 }
