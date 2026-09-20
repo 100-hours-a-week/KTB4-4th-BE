@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
@@ -67,17 +66,9 @@ public class FriendService {
                 : friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(ownerUserId, candidateUserIds).stream()
                         .map(Friend::getFriendUserId)
                         .collect(Collectors.toSet());
-        Set<Long> existingOwnerUserIds = candidateUserIds.isEmpty() ? Set.of()
-                : friendRepository.findAllByOwnerUserIdInAndFriendUserId(candidateUserIds, ownerUserId).stream()
-                        .map(Friend::getOwnerUserId)
-                        .collect(Collectors.toSet());
-        List<Friend> newFriends = Stream.concat(
-                        candidateUserIds.stream()
-                                .filter(friendUserId -> !existingFriendUserIds.contains(friendUserId))
-                                .map(friendUserId -> new Friend(ownerUserId, friendUserId)),
-                        candidateUserIds.stream()
-                                .filter(friendUserId -> !existingOwnerUserIds.contains(friendUserId))
-                                .map(friendUserId -> new Friend(friendUserId, ownerUserId)))
+        List<Friend> newFriends = candidateUserIds.stream()
+                .filter(friendUserId -> !existingFriendUserIds.contains(friendUserId))
+                .map(friendUserId -> new Friend(ownerUserId, friendUserId))
                 .toList();
         friendRepository.saveAll(newFriends);
         userService.completeKakaoFriendSync(ownerUserId);

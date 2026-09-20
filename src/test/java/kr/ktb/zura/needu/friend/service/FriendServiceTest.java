@@ -71,13 +71,11 @@ class FriendServiceTest {
     }
 
     @Test
-    void missingKakaoFriendRelations_syncKakaoFriends_savesBothDirections() {
+    void newKakaoFriends_syncKakaoFriends_savesOwnerRelationsOnly() {
         when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn(Map.of(10L, 1L, 20L, 2L, 30L, 3L));
         when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L, 3L)))
                 .thenReturn(List.of(new Friend(1L, 2L)));
-        when(friendRepository.findAllByOwnerUserIdInAndFriendUserId(java.util.Set.of(2L, 3L), 1L))
-                .thenReturn(List.of(new Friend(3L, 1L)));
 
         friendService.syncKakaoFriends(1L, List.of(20L, 30L, 10L));
 
@@ -86,7 +84,7 @@ class FriendServiceTest {
         verify(friendRepository).saveAll(captor.capture());
         assertThat(captor.getValue())
                 .extracting(Friend::getOwnerUserId, Friend::getFriendUserId)
-                .containsExactlyInAnyOrder(tuple(1L, 3L), tuple(2L, 1L));
+                .containsExactly(tuple(1L, 3L));
         verify(userService).completeKakaoFriendSync(1L);
     }
 
