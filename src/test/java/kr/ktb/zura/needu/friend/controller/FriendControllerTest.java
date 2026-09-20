@@ -6,6 +6,7 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
+import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -35,6 +36,9 @@ class FriendControllerTest {
 
     @MockitoBean
     private FriendService friendService;
+
+    @MockitoBean
+    private KakaoFriendSyncService kakaoFriendSyncService;
 
     @Test
     void friendExists_findFriend_returnsFriendUser() throws Exception {
