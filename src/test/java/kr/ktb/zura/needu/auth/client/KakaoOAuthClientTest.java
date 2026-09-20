@@ -34,7 +34,8 @@ class KakaoOAuthClientTest {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         client = new KakaoOAuthClient(builder, "rest-key", "secret",
-                "http://localhost:8080/api/v1/auth/kakao/callback");
+                "http://localhost:8080/api/v1/auth/kakao/callback",
+                "http://localhost:8080/api/v1/friends/kakao/callback");
     }
 
     @Test
@@ -44,6 +45,17 @@ class KakaoOAuthClientTest {
 
         assertTrue(query.contains("client_id=rest-key"));
         assertTrue(query.contains("redirect_uri=http://localhost:8080/api/v1/auth/kakao/callback"));
+        assertTrue(query.contains("state=state-123"));
+        assertTrue(!query.contains("scope=friends"));
+    }
+
+    @Test
+    void friendAuthorizationUri_includesFriendsScopeAndFriendRedirectUri() {
+        String query = URLDecoder.decode(client.createFriendAuthorizationUri("state-123").getRawQuery(),
+                StandardCharsets.UTF_8);
+
+        assertTrue(query.contains("redirect_uri=http://localhost:8080/api/v1/friends/kakao/callback"));
+        assertTrue(query.contains("scope=friends"));
         assertTrue(query.contains("state=state-123"));
     }
 

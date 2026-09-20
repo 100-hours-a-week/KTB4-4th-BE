@@ -25,15 +25,18 @@ public class KakaoOAuthClient {
     private final String clientId;
     private final String clientSecret;
     private final String redirectUri;
+    private final String friendRedirectUri;
 
     public KakaoOAuthClient(RestClient.Builder restClientBuilder,
                             @Value("${kakao.oauth.client-id}") String clientId,
                             @Value("${kakao.oauth.client-secret}") String clientSecret,
-                            @Value("${kakao.oauth.redirect-uri}") String redirectUri) {
+                            @Value("${kakao.oauth.redirect-uri}") String redirectUri,
+                            @Value("${kakao.oauth.friend-redirect-uri}") String friendRedirectUri) {
         this.restClient = restClientBuilder.build();
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.redirectUri = redirectUri;
+        this.friendRedirectUri = friendRedirectUri;
     }
 
     public URI createAuthorizationUri(String state) {
@@ -45,8 +48,26 @@ public class KakaoOAuthClient {
                 .build().encode().toUri();
     }
 
+    public URI createFriendAuthorizationUri(String state) {
+        return UriComponentsBuilder.fromUriString(AUTHORIZE_URI)
+                .queryParam("client_id", clientId)
+                .queryParam("redirect_uri", friendRedirectUri)
+                .queryParam("response_type", "code")
+                .queryParam("scope", "friends")
+                .queryParam("state", state)
+                .build().encode().toUri();
+    }
+
     public KakaoUserInfo findUserInfo(String code) {
-        String accessToken = requestAccessToken(code);
+        return requestUserInfo(requestAccessToken(code, redirectUri));
+    }
+
+    public KakaoAuthorization authorizeFriend(String code) {
+        String accessToken = requestAccessToken(code, friendRedirectUri);
+        return new KakaoAuthorization(requestUserInfo(accessToken), accessToken);
+    }
+
+    private KakaoUserInfo requestUserInfo(String accessToken) {
         try {
             KakaoUserResponse response = restClient.get()
                     .uri(USER_INFO_URI)
@@ -66,12 +87,12 @@ public class KakaoOAuthClient {
         }
     }
 
-    private String requestAccessToken(String code) {
+    private String requestAccessToken(String code, String requestRedirectUri) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("client_id", clientId);
         form.add("client_secret", clientSecret);
-        form.add("redirect_uri", redirectUri);
+        form.add("redirect_uri", requestRedirectUri);
         form.add("code", code);
         try {
             KakaoTokenResponse response = restClient.post()
@@ -95,6 +116,9 @@ public class KakaoOAuthClient {
     }
 
     public record KakaoUserInfo(Long id, String nickname, String profileImageUrl) {
+    }
+
+    public record KakaoAuthorization(KakaoUserInfo userInfo, String accessToken) {
     }
 
     private record KakaoTokenResponse(@JsonProperty("access_token") String accessToken) {
