@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
@@ -10,12 +11,15 @@ import kr.ktb.zura.needu.user.type.Gender;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -118,6 +122,38 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
 
         assertEquals("니듀", userService.findUserSummary(1L).nickname());
+    }
+
+    @Test
+    void activeUser_findUserById_returnsDetails() {
+        User user = new User(42L, "친구", "https://example.com/profile.jpg", Gender.NONE, LocalDate.of(2000, 2, 29));
+        user.completeTasteAnalysis();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        var response = userService.findUserById(1L).orElseThrow();
+
+        assertEquals("친구", response.nickname());
+        assertEquals(user.getProfileImageUrl(), response.profileImageUrl());
+        assertEquals(LocalDate.of(2000, 2, 29), response.birthDate());
+        assertTrue(response.tasteAnalysisCompleted());
+        verify(userRepository).findById(1L);
+    }
+
+    @Test
+    void missingUser_findUserById_returnsEmpty() {
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertTrue(userService.findUserById(1L).isEmpty());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserStatus.class, names = {"ONBOARDING", "BLOCKED", "WITHDRAWN"})
+    void inactiveUser_findUserById_returnsEmpty(UserStatus status) {
+        User user = new User(42L, "친구", null, Gender.NONE, null);
+        ReflectionTestUtils.setField(user, "status", status);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertTrue(userService.findUserById(1L).isEmpty());
     }
 
     private User createOnboardingUser() {
