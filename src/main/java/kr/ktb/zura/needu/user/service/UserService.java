@@ -1,5 +1,9 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
@@ -47,6 +51,33 @@ public class UserService {
         return UserSummaryResponse.from(user);
     }
 
+    public List<UserResponse> findAllUsers(Collection<Long> userIds) {
+        return userRepository.findAllById(userIds).stream()
+                .map(UserResponse::from)
+                .toList();
+    }
+
+    public Map<Long, Long> findUserIdsByExternalIds(Collection<Long> externalIds) {
+        return userRepository.findAllByExternalIdIn(externalIds).stream()
+                .collect(Collectors.toMap(User::getExternalId, User::getId));
+    }
+
+    public boolean isKakaoFriendSynced(Long userId) {
+        return findUser(userId).getKakaoFriendSyncedAt() != null;
+    }
+
+    public void validateKakaoIdentity(Long userId, Long kakaoUserId) {
+        User user = findUser(userId);
+        if (!user.getExternalId().equals(kakaoUserId)) {
+            throw new BusinessException(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH);
+        }
+    }
+
+    @Transactional
+    public void completeKakaoFriendSync(Long userId) {
+        findUser(userId).completeKakaoFriendSync();
+    }
+
     private void validateLoginAvailableUser(User user) {
         switch (user.getStatus()) {
             case ACTIVE, ONBOARDING -> {
@@ -54,6 +85,11 @@ public class UserService {
             case BLOCKED -> throw new BusinessException(UserErrorCode.USER_BLOCKED);
             case WITHDRAWN -> throw new BusinessException(UserErrorCode.USER_WITHDRAWN);
         }
+    }
+
+    private User findUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
     }
 
     private void validateActiveUser(User user) {

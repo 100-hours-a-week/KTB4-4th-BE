@@ -10,6 +10,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -56,6 +57,9 @@ public class User {
     @Column
     private LocalDateTime lastLoginAt;
 
+    @Column
+    private LocalDateTime kakaoFriendSyncedAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -86,6 +90,10 @@ public class User {
 
     public void recordLogin() {
         this.lastLoginAt = LocalDateTime.now();
+    }
+
+    public void completeKakaoFriendSync() {
+        this.kakaoFriendSyncedAt = LocalDateTime.now(ZoneOffset.UTC);
     }
 
     public void block() {
