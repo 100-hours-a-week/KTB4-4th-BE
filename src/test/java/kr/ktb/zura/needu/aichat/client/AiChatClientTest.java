@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.util.stream.Stream;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -20,6 +21,7 @@ import org.springframework.web.client.RestClient;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -48,6 +50,23 @@ class AiChatClientTest {
         HealthResponse response = client.checkHealth();
 
         assertEquals(new HealthResponse(), response);
+        server.verify();
+    }
+
+    @Test
+    void startSession_requestsSessionEndpointAndParsesResponse() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {"userId": 1, "conversationRoomId": 101}
+                        """))
+                .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"sessionId": 101, "greeting": "안녕하세요", "maxTurns": 20}
+                        """));
+
+        AiServerStartSessionResponse response = client.startSession(1L, 101L);
+
+        assertEquals(new AiServerStartSessionResponse(101L, "안녕하세요", 20), response);
         server.verify();
     }
 

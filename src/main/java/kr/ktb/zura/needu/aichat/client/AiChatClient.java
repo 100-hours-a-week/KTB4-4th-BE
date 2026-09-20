@@ -3,6 +3,8 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.Map;
+import kr.ktb.zura.needu.aichat.dto.request.AiServerStartSessionRequest;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.type.AiChatEndpoint;
@@ -30,8 +32,9 @@ public class AiChatClient {
         return request(AiChatEndpoint.CHECK_HEALTH, Map.of(), null, HealthResponse.class);
     }
 
-    public void startChat() {
-
+    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
+        return request(AiChatEndpoint.START_SESSION, Map.of(),
+                new AiServerStartSessionRequest(userId, conversationRoomId), AiServerStartSessionResponse.class);
     }
 
     public void sendMessage() {
