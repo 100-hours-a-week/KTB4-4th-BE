@@ -3,13 +3,15 @@ package kr.ktb.zura.needu.friend.service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
+import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
+import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
-import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,20 +43,31 @@ class FriendServiceTest {
     @Test
     void friendExists_findFriend_returnsFriendUser() {
         when(friendRepository.existsByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(true);
-        when(userService.findAllUsers(List.of(2L)))
-                .thenReturn(List.of(new UserResponse(2L, 20L, "친구", null, true)));
-        when(userService.findUserSummary(2L))
-                .thenReturn(new UserSummaryResponse(2L, "친구", LocalDate.now(), true));
+        when(userService.findUserById(2L))
+                .thenReturn(Optional.of(new UserDetailResponse(
+                        2L, "친구", null, true, LocalDate.of(2000, 2, 29))));
 
-        FriendResponse response = friendService.findFriend(1L, 2L);
+        FriendDetailResponse response = friendService.findFriend(1L, 2L);
 
-        assertThat(response).isEqualTo(new FriendResponse(2L, "친구", null, true));
+        assertThat(response).isEqualTo(new FriendDetailResponse(2L, "친구", null, true, LocalDate.of(2000, 2, 29)));
     }
 
     @Test
     void notFriend_findFriend_throwsFriendNotFound() {
         assertThatThrownBy(() -> friendService.findFriend(1L, 2L))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
+        verify(userService, never()).findUserById(2L);
+    }
+
+    @Test
+    void missingUser_findFriend_throwsFriendNotFound() {
+        when(friendRepository.existsByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(true);
+        when(userService.findUserById(2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> friendService.findFriend(1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
     }
 
     @Test

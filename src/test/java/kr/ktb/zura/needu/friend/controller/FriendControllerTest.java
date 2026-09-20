@@ -1,9 +1,10 @@
 package kr.ktb.zura.needu.friend.controller;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
-import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
@@ -43,7 +44,7 @@ class FriendControllerTest {
     @Test
     void friendExists_findFriend_returnsFriendUser() throws Exception {
         given(friendService.findFriend(LOGIN_USER_ID, FRIEND_USER_ID))
-                .willReturn(new FriendResponse(FRIEND_USER_ID, "사용자", null, true));
+                .willReturn(new FriendDetailResponse(FRIEND_USER_ID, "사용자", null, true, LocalDate.of(2000, 2, 29)));
 
         mockMvc.perform(get(URL, FRIEND_USER_ID).with(authenticatedUser()))
                 .andExpect(status().isOk())
@@ -51,7 +52,8 @@ class FriendControllerTest {
                 .andExpect(jsonPath("$.data.id").value(123))
                 .andExpect(jsonPath("$.data.nickname").value("사용자"))
                 .andExpect(jsonPath("$.data.profileImageUrl").isEmpty())
-                .andExpect(jsonPath("$.data.tasteAnalysisCompleted").value(true));
+                .andExpect(jsonPath("$.data.tasteAnalysisCompleted").value(true))
+                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"));
     }
 
     @Test

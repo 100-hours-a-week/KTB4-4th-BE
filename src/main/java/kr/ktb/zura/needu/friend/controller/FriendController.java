@@ -6,8 +6,8 @@ import java.net.URI;
 import java.util.UUID;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
@@ -45,7 +45,7 @@ public class FriendController {
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<FriendResponse>> findFriend(
+    public ResponseEntity<ApiResponse<FriendDetailResponse>> findFriend(
             @AuthenticationPrincipal Long loginUserId,
             @PathVariable Long userId
     ) {

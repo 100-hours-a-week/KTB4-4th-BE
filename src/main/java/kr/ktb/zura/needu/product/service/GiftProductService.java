@@ -6,7 +6,7 @@ import java.util.List;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
@@ -55,7 +55,7 @@ public class GiftProductService {
     }
 
     // 추천 상품은 친구의 취향 분석 결과로 만들어지므로, 분석이 끝나지 않은 친구는 조회할 수 없다.
-    private void validateTasteAnalysisCompleted(FriendResponse friend) {
+    private void validateTasteAnalysisCompleted(FriendDetailResponse friend) {
         if (!friend.tasteAnalysisCompleted()) {
             throw new BusinessException(ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN);
         }
