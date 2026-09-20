@@ -1,17 +1,22 @@
 package kr.ktb.zura.needu.aichat.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
+import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -23,10 +28,12 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -173,6 +180,109 @@ class AiChatControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void validRequest_findAllMessages_returnsOldestFirstMessages() throws Exception {
+        given(aiChatFacade.findAllMessages(USER_ID, CONVERSATION_ID, null, 20))
+                .willReturn(new CursorPageResponse<>(
+                        List.of(
+                                new AiMessageSummaryResponse(101L, SenderType.USER, USER_CONTENT,
+                                        LocalDateTime.of(2026, 9, 5, 21, 30, 15)),
+                                new AiMessageSummaryResponse(102L, SenderType.AI, "러닝을 좋아하시는군요.",
+                                        LocalDateTime.of(2026, 9, 5, 21, 30, 17))
+                        ),
+                        "eyJtZXNzYWdlSWQiOjEwMX0",
+                        true
+                ));
+
+        mockMvc.perform(getMessages("?size=20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("대화 메시지를 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].messageId").value(101))
+                .andExpect(jsonPath("$.data.items[0].role").value("USER"))
+                .andExpect(jsonPath("$.data.items[0].content").value(USER_CONTENT))
+                .andExpect(jsonPath("$.data.items[0].createdAt").value("2026-09-05T21:30:15"))
+                .andExpect(jsonPath("$.data.items[1].messageId").value(102))
+                .andExpect(jsonPath("$.data.items[1].role").value("AI"))
+                .andExpect(jsonPath("$.nextCursor").value("eyJtZXNzYWdlSWQiOjEwMX0"))
+                .andExpect(jsonPath("$.hasNext").value(true));
+    }
+
+    @Test
+    void lastPage_findAllMessages_returnsNullCursor() throws Exception {
+        given(aiChatFacade.findAllMessages(USER_ID, CONVERSATION_ID, "cursor", 20))
+                .willReturn(new CursorPageResponse<>(List.of(), null, false));
+
+        mockMvc.perform(getMessages("?cursor=cursor&size=20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isEmpty())
+                .andExpect(jsonPath("$.nextCursor").doesNotExist())
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void missingSize_findAllMessages_returnsBadRequest() throws Exception {
+        mockMvc.perform(getMessages(""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
+    void sizeOverMax_findAllMessages_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(getMessages("?size=51"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
+    void nonNumericSize_findAllMessages_returnsBadRequest() throws Exception {
+        mockMvc.perform(getMessages("?size=many"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
+    void invalidCursor_findAllMessages_returnsBadRequest() throws Exception {
+        given(aiChatFacade.findAllMessages(USER_ID, CONVERSATION_ID, "broken", 20))
+                .willThrow(new BusinessException(CommonErrorCode.COMMON_INVALID_REQUEST));
+
+        mockMvc.perform(getMessages("?cursor=broken&size=20"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+    }
+
+    @Test
+    void conversationOwnedByAnotherUser_findAllMessages_returnsForbidden() throws Exception {
+        given(aiChatFacade.findAllMessages(eq(USER_ID), eq(CONVERSATION_ID), isNull(), eq(20)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN));
+
+        mockMvc.perform(getMessages("?size=20"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 AI 대화에 접근할 수 없습니다."));
+    }
+
+    @Test
+    void conversationNotFound_findAllMessages_returnsNotFound() throws Exception {
+        given(aiChatFacade.findAllMessages(eq(USER_ID), eq(CONVERSATION_ID), isNull(), eq(20)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND));
+
+        mockMvc.perform(getMessages("?size=20"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("AI 대화를 찾을 수 없습니다."));
+    }
+
+    @Test
+    void unauthenticated_findAllMessages_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get(MESSAGES_URL + "?size=20"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private static MockHttpServletRequestBuilder getMessages(String query) {
+        return get(MESSAGES_URL + query)
+                .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())));
     }
 
     private static String messageBody(String clientMessageId, String content) {
