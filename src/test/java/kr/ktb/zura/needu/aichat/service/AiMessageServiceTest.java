@@ -1,12 +1,16 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.util.List;
 import java.util.UUID;
 
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
 import kr.ktb.zura.needu.aichat.type.SenderType;
+import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -116,5 +120,92 @@ class AiMessageServiceTest {
         aiMessageService.createUserMessage(otherConversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
 
         assertThat(aiMessageRepository.findAll()).hasSize(2);
+    }
+
+    @Test
+    void messagesSaved_findAllMessages_returnsOldestFirstWithoutNextCursor() {
+        AiMessage first = saveUserMessage();
+        AiMessage second = saveUserMessage();
+        entityManager.clear();
+
+        CursorPageResponse<AiMessageSummaryResponse> result =
+                aiMessageService.findAllMessages(conversationId, null, 10);
+
+        assertThat(result.hasNext()).isFalse();
+        assertThat(result.nextCursor()).isNull();
+        assertThat(result.items()).extracting(AiMessageSummaryResponse::messageId)
+                .containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    void moreMessagesThanSize_findAllMessages_returnsLatestPageWithNextCursor() {
+        saveUserMessage();
+        AiMessage second = saveUserMessage();
+        AiMessage third = saveUserMessage();
+        entityManager.clear();
+
+        CursorPageResponse<AiMessageSummaryResponse> result =
+                aiMessageService.findAllMessages(conversationId, null, 2);
+
+        assertThat(result.hasNext()).isTrue();
+        assertThat(result.items()).extracting(AiMessageSummaryResponse::messageId)
+                .containsExactly(second.getId(), third.getId());
+        // 다음 요청이 이어 받을 지점은 이번 페이지에서 가장 오래된 메시지다
+        assertThat(AiMessageCursor.decode(result.nextCursor()).messageId()).isEqualTo(second.getId());
+    }
+
+    @Test
+    void nextCursorGiven_findAllMessages_returnsOlderMessagesOnly() {
+        AiMessage first = saveUserMessage();
+        saveUserMessage();
+        saveUserMessage();
+        entityManager.clear();
+
+        CursorPageResponse<AiMessageSummaryResponse> firstPage =
+                aiMessageService.findAllMessages(conversationId, null, 2);
+        CursorPageResponse<AiMessageSummaryResponse> secondPage =
+                aiMessageService.findAllMessages(conversationId, firstPage.nextCursor(), 2);
+
+        assertThat(secondPage.hasNext()).isFalse();
+        assertThat(secondPage.nextCursor()).isNull();
+        assertThat(secondPage.items()).extracting(AiMessageSummaryResponse::messageId)
+                .containsExactly(first.getId());
+    }
+
+    @Test
+    void noMessages_findAllMessages_returnsEmptyPage() {
+        CursorPageResponse<AiMessageSummaryResponse> result =
+                aiMessageService.findAllMessages(conversationId, null, 10);
+
+        assertThat(result.items()).isEmpty();
+        assertThat(result.hasNext()).isFalse();
+        assertThat(result.nextCursor()).isNull();
+    }
+
+    @Test
+    void messagesFromBothSenders_findAllMessages_returnsRoleAndContent() {
+        AiMessage userMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
+        aiMessageService.createReply(conversationId, userMessage.getId(), AI_CONTENT);
+        aiMessageRepository.flush();
+        entityManager.clear();
+
+        List<AiMessageSummaryResponse> items =
+                aiMessageService.findAllMessages(conversationId, null, 10).items();
+
+        assertThat(items).extracting(AiMessageSummaryResponse::role)
+                .containsExactly(SenderType.USER, SenderType.AI);
+        assertThat(items).extracting(AiMessageSummaryResponse::content)
+                .containsExactly(USER_CONTENT, AI_CONTENT);
+        assertThat(items).allSatisfy(item -> assertThat(item.createdAt()).isNotNull());
+    }
+
+    @Test
+    void invalidCursor_findAllMessages_throwsInvalidRequestException() {
+        assertThatThrownBy(() -> aiMessageService.findAllMessages(conversationId, "not-base64!!", 10))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    private AiMessage saveUserMessage() {
+        return aiMessageService.createUserMessage(conversationId, UUID.randomUUID(), USER_CONTENT);
     }
 }
