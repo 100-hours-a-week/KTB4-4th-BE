@@ -46,4 +46,14 @@ public class AiMessage {
     private LocalDateTime createdAt;
 
     private LocalDateTime deletedAt;
+
+    private AiMessage(AiChatRoom aiChatRoom, SenderType senderType, String content) {
+        this.aiChatRoom = aiChatRoom;
+        this.senderType = senderType;
+        this.content = content;
+    }
+
+    public static AiMessage createAiMessage(AiChatRoom aiChatRoom, String content) {
+        return new AiMessage(aiChatRoom, SenderType.AI, content);
+    }
 }
