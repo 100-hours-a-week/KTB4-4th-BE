@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.util.stream.Stream;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -31,13 +32,17 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AiChatClientTest {
 
     private MockRestServiceServer server;
+    private MockRestServiceServer messageServer;
     private AiChatClient client;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:9000");
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new AiChatClient(builder.build(), "service-token");
+        // 메시지 전송은 read timeout이 다른 전용 RestClient를 쓰므로 대역도 따로 둔다
+        RestClient.Builder messageBuilder = RestClient.builder().baseUrl("http://localhost:9000");
+        messageServer = MockRestServiceServer.bindTo(messageBuilder).build();
+        client = new AiChatClient(builder.build(), messageBuilder.build(), "service-token");
     }
 
     @Test
@@ -68,6 +73,75 @@ class AiChatClientTest {
 
         assertEquals(new AiServerStartSessionResponse(101L, "안녕하세요", 20), response);
         server.verify();
+    }
+
+    @Test
+    void sendMessage_requestsMessageEndpointAndParsesReply() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer service-token"))
+                .andExpect(content().json("""
+                        {"message": "주말마다 캠핑 가요"}
+                        """))
+                .andRespond(withSuccess("""
+                        {"reply": "캠핑 좋죠.", "turn": 3, "maxTurns": 20, "inputLocked": false}
+                        """, MediaType.APPLICATION_JSON));
+
+        AiServerSendMessageResponse response = client.sendMessage(101L, "주말마다 캠핑 가요");
+
+        assertEquals(new AiServerSendMessageResponse("캠핑 좋죠."), response);
+        messageServer.verify();
+    }
+
+    @ParameterizedTest
+    @MethodSource("sendMessageHttpErrors")
+    void sendMessageHttpError_sendMessage_throwsMappedBusinessException(HttpStatus status,
+                                                                        AiChatErrorCode errorCode) {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages"))
+                .andRespond(withStatus(status));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.sendMessage(101L, "주말마다 캠핑 가요"));
+
+        assertEquals(errorCode, exception.getErrorCode());
+    }
+
+    @Test
+    void sessionClosedConflict_sendMessage_throwsSessionClosed() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages"))
+                .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "SESSION_CLOSED", "message": "이미 끝난 대화입니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.sendMessage(101L, "주말마다 캠핑 가요"));
+
+        assertEquals(AiChatErrorCode.AICHAT_SESSION_CLOSED, exception.getErrorCode());
+    }
+
+    @Test
+    void turnInProgressConflict_sendMessage_throwsTurnInProgress() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages"))
+                .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "TURN_IN_PROGRESS", "message": "이전 메시지를 처리 중입니다.", "retryable": true}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.sendMessage(101L, "주말마다 캠핑 가요"));
+
+        assertEquals(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS, exception.getErrorCode());
+    }
+
+    // 원인을 모르면 대화방을 만료시키지 않는 쪽으로 처리한다
+    @Test
+    void conflictWithoutErrorCode_sendMessage_throwsTurnInProgress() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages"))
+                .andRespond(withStatus(HttpStatus.CONFLICT));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.sendMessage(101L, "주말마다 캠핑 가요"));
+
+        assertEquals(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS, exception.getErrorCode());
     }
 
     @ParameterizedTest
@@ -117,6 +191,15 @@ class AiChatClientTest {
                 client::checkHealth);
 
         assertEquals(AiChatErrorCode.AICHAT_INVALID_RESPONSE, exception.getErrorCode());
+    }
+
+    private static Stream<Arguments> sendMessageHttpErrors() {
+        return Stream.of(
+                Arguments.of(HttpStatus.NOT_FOUND, AiChatErrorCode.AICHAT_SESSION_NOT_FOUND),
+                Arguments.of(HttpStatus.TOO_MANY_REQUESTS, AiChatErrorCode.AICHAT_REQUEST_REJECTED),
+                Arguments.of(HttpStatus.UNAUTHORIZED, AiChatErrorCode.AICHAT_AUTHENTICATION_FAILED),
+                Arguments.of(HttpStatus.BAD_GATEWAY, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+        );
     }
 
     private static Stream<Arguments> httpErrors() {
