@@ -27,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AiChatRoomServiceTest {
 
     private static final Long USER_ID = 1L;
+    private static final Long OTHER_USER_ID = 2L;
+    private static final Long UNKNOWN_ROOM_ID = 999L;
     private static final String GREETING = "안녕하세요";
 
     @Autowired
@@ -133,6 +135,81 @@ class AiChatRoomServiceTest {
     }
 
     @Test
+    void activeRoomOwnedByUser_findActiveRoom_returnsRoom() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+
+        AiChatRoom room = aiChatRoomService.findActiveRoom(USER_ID, activeRoom.getId());
+
+        assertThat(room.getId()).isEqualTo(activeRoom.getId());
+    }
+
+    @Test
+    void unknownRoomId_findActiveRoom_throwsConversationNotFound() {
+        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, UNKNOWN_ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+    }
+
+    @Test
+    void roomOwnedByAnotherUser_findActiveRoom_throwsConversationForbidden() {
+        AiChatRoom activeRoom = activateRoom(OTHER_USER_ID);
+
+        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void pendingRoom_findActiveRoom_throwsConversationNotFound() {
+        AiChatRoom pendingRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
+
+        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, pendingRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+    }
+
+    @Test
+    void purgeAtPassed_findActiveRoom_throwsConversationNotFound() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        jdbcTemplate.update("update ai_chat_rooms set purge_at = ? where id = ?",
+                LocalDateTime.now().minusMinutes(1), activeRoom.getId());
+        entityManager.clear();
+
+        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+    }
+
+    @Test
+    void activeRoom_expireRoom_marksExpiredAndReleasesActiveUser() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+
+        aiChatRoomService.expireRoom(activeRoom.getId());
+        aiChatRoomRepository.flush();
+        entityManager.clear();
+
+        AiChatRoom expiredRoom = aiChatRoomRepository.findById(activeRoom.getId()).orElseThrow();
+        assertThat(expiredRoom.getStatus()).isEqualTo(AiChatRoomStatus.EXPIRED);
+        assertThat(expiredRoom.getActiveUserId()).isNull();
+    }
+
+    @Test
+    void activeRoom_extendSession_movesPurgeAtForward() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        LocalDateTime purgeAt = LocalDateTime.now().minusMinutes(10);
+        jdbcTemplate.update("update ai_chat_rooms set purge_at = ? where id = ?", purgeAt, activeRoom.getId());
+        entityManager.clear();
+
+        aiChatRoomService.extendSession(activeRoom.getId());
+        aiChatRoomRepository.flush();
+        entityManager.clear();
+
+        AiChatRoom extendedRoom = aiChatRoomRepository.findById(activeRoom.getId()).orElseThrow();
+        assertThat(extendedRoom.getPurgeAt()).isAfter(purgeAt);
+        assertThat(extendedRoom.getPurgeAt()).isAfter(LocalDateTime.now().plusMinutes(28));
+    }
+
+    @Test
     void pendingRoom_discardRoom_releasesActiveUserSoNewRoomCanBeReserved() {
         AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
 
@@ -140,5 +217,10 @@ class AiChatRoomServiceTest {
         aiChatRoomRepository.flush();
 
         assertThat(aiChatRoomService.findOrReserveRoom(USER_ID).getId()).isNotEqualTo(reservedRoom.getId());
+    }
+
+    private AiChatRoom activateRoom(Long userId) {
+        AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(userId);
+        return aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING);
     }
 }
