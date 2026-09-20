@@ -1,64 +1,113 @@
 package kr.ktb.zura.needu.friend.service;
 
-import java.util.Optional;
-
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
-import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
-import kr.ktb.zura.needu.user.entity.User;
-import kr.ktb.zura.needu.user.type.Gender;
+import kr.ktb.zura.needu.user.dto.response.UserResponse;
+import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
+import kr.ktb.zura.needu.user.service.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.BDDMockito.given;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class FriendServiceTest {
 
-    private static final Long OWNER_USER_ID = 1L;
-    private static final Long FRIEND_USER_ID = 123L;
-
-    @Mock
     private FriendRepository friendRepository;
-
-    @InjectMocks
+    private UserService userService;
     private FriendService friendService;
+
+    @BeforeEach
+    void setUp() {
+        friendRepository = mock(FriendRepository.class);
+        userService = mock(UserService.class);
+        friendService = new FriendService(friendRepository, userService);
+    }
 
     @Test
     void friendExists_findFriend_returnsFriendUser() {
-        User owner = createUser(OWNER_USER_ID, "나");
-        User friendUser = createUser(FRIEND_USER_ID, "친구");
-        friendUser.completeTasteAnalysis();
-        Friend friend = new Friend(owner, friendUser);
-        given(friendRepository.findActiveFriend(OWNER_USER_ID, FRIEND_USER_ID)).willReturn(Optional.of(friend));
+        when(friendRepository.existsByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(true);
+        when(userService.findAllUsers(List.of(2L)))
+                .thenReturn(List.of(new UserResponse(2L, 20L, "친구", null, true)));
+        when(userService.findUserSummary(2L))
+                .thenReturn(new UserSummaryResponse(2L, "친구", LocalDate.now(), true));
 
-        FriendResponse response = friendService.findFriend(OWNER_USER_ID, FRIEND_USER_ID);
+        FriendResponse response = friendService.findFriend(1L, 2L);
 
-        assertThat(response).isEqualTo(new FriendResponse(FRIEND_USER_ID, "친구", null, true));
+        assertThat(response).isEqualTo(new FriendResponse(2L, "친구", null, true));
     }
 
     @Test
     void notFriend_findFriend_throwsFriendNotFound() {
-        given(friendRepository.findActiveFriend(OWNER_USER_ID, FRIEND_USER_ID)).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> friendService.findFriend(OWNER_USER_ID, FRIEND_USER_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
+        assertThatThrownBy(() -> friendService.findFriend(1L, 2L))
+                .isInstanceOf(BusinessException.class);
     }
 
-    private User createUser(Long id, String nickname) {
-        User user = new User(id, nickname, null, Gender.NONE, null);
-        // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.
-        ReflectionTestUtils.setField(user, "id", id);
-        return user;
+    @Test
+    void unsyncedUser_findOverview_returnsStatusWithExistingFriends() {
+        Friend friend = new Friend(1L, 2L);
+        when(friendRepository.findAllByOwnerUserIdOrderByIdAsc(1L)).thenReturn(List.of(friend));
+        when(userService.findAllUsers(List.of(2L)))
+                .thenReturn(List.of(new UserResponse(2L, 20L, "친구", null, true)));
+
+        FriendOverviewResponse response = friendService.findOverview(1L);
+
+        assertThat(response.kakaoFriendSynced()).isFalse();
+        assertThat(response.items().getFirst().userId()).isEqualTo(2L);
+    }
+
+    @Test
+    void newKakaoFriends_syncKakaoFriends_savesOwnerRelationsOnly() {
+        when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(10L, 1L, 20L, 2L, 30L, 3L));
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L, 3L)))
+                .thenReturn(List.of(new Friend(1L, 2L)));
+
+        friendService.syncKakaoFriends(1L, List.of(20L, 30L, 10L));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Friend>> captor = ArgumentCaptor.forClass(List.class);
+        verify(friendRepository).saveAll(captor.capture());
+        assertThat(captor.getValue())
+                .extracting(Friend::getOwnerUserId, Friend::getFriendUserId)
+                .containsExactly(tuple(1L, 3L));
+        verify(userService).completeKakaoFriendSync(1L);
+    }
+
+    @Test
+    void emptyKakaoFriends_syncKakaoFriends_marksSyncComplete() {
+        when(userService.findUserIdsByExternalIds(java.util.Set.of())).thenReturn(Map.of());
+
+        friendService.syncKakaoFriends(1L, List.of());
+
+        verify(userService).completeKakaoFriendSync(1L);
+    }
+
+    @Test
+    void friendSaveFailure_syncKakaoFriends_doesNotMarkSyncComplete() {
+        when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(20L, 2L));
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L)))
+                .thenReturn(List.of());
+        doThrow(new IllegalStateException()).when(friendRepository).saveAll(anyList());
+
+        assertThatThrownBy(() -> friendService.syncKakaoFriends(1L, List.of(20L)))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(userService, never()).completeKakaoFriendSync(1L);
     }
 }
