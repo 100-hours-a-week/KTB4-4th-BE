@@ -73,8 +73,36 @@ public class AiChatRoomService {
     public AiChatRoom activateRoom(Long roomId, String greeting) {
         AiChatRoom room = findRoom(roomId);
         room.activate(calculatePurgeAt(room, LocalDateTime.now()));
-        aiMessageRepository.save(AiMessage.createAiMessage(room, greeting));
+        aiMessageRepository.save(AiMessage.createGreeting(room, greeting));
         return room;
+    }
+
+    // 메시지를 보낼 수 있는 상태(소유자 본인, ACTIVE, 만료 전)인지 확인한다
+    @Transactional(readOnly = true)
+    public AiChatRoom findActiveRoom(Long userId, Long roomId) {
+        AiChatRoom room = aiChatRoomRepository.findById(roomId)
+                .filter(found -> !found.isDeleted())
+                .orElseThrow(() -> new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND));
+        // 명세상 남의 대화는 403, 끝났거나 만료된 대화는 404로 구분해야 해 소유자 조건을 쿼리에 넣지 않는다
+        if (!room.isOwnedBy(userId)) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
+        }
+        if (!room.isActive() || room.isExpiredAt(LocalDateTime.now())) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+        }
+        return room;
+    }
+
+    @Transactional
+    public void expireRoom(Long roomId) {
+        findRoom(roomId).expire();
+    }
+
+    // 마지막 활동 시각이 갱신됐으므로 만료 시각을 다시 계산한다
+    @Transactional
+    public void extendSession(Long roomId) {
+        AiChatRoom room = findRoom(roomId);
+        room.extendPurgeAt(calculatePurgeAt(room, LocalDateTime.now()));
     }
 
     @Transactional

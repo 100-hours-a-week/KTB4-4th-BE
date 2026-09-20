@@ -82,9 +82,22 @@ public class AiChatRoom {
         this.activeUserId = null;
     }
 
+    // 마지막 활동 시각을 반영해 만료(=삭제 예정) 시각을 미룬다
+    public void extendPurgeAt(LocalDateTime purgeAt) {
+        this.purgeAt = purgeAt;
+    }
+
     public void discard(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
         this.activeUserId = null;
+    }
+
+    public boolean isOwnedBy(Long userId) {
+        return this.userId.equals(userId);
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 
     public boolean isPending() {
