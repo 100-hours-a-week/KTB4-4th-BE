@@ -108,7 +108,7 @@ class GiftProductRepositoryTest {
     }
 
     private Product saveProduct(String name, String price) {
-        return entityManager.persist(new Product(null, name, "LIVING", null, new BigDecimal(price), null, null, null));
+        return entityManager.persist(new Product(null, name, "LIVING", null, new BigDecimal(price), null, null));
     }
 
     private GiftProduct saveGiftProduct(Long userId, String score, Product product) {
