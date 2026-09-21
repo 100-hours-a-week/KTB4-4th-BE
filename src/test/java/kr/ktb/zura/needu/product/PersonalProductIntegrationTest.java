@@ -176,7 +176,7 @@ class PersonalProductIntegrationTest {
 
     private PersonalProduct savePersonalProduct(Long userId, String score, String name, String price) {
         Product product = new Product(
-                null, name, null, null, new BigDecimal(price), "https://image.test/product.png", null, null);
+                null, name, null, null, new BigDecimal(price), "https://image.test/product.png", null);
         transactionTemplate.executeWithoutResult(status -> entityManager.persist(product));
         return personalProductRepository.save(new PersonalProduct(userId, product, new BigDecimal(score), null));
     }
