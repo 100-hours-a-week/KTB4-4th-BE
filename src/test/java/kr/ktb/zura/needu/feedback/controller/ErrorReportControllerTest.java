@@ -38,7 +38,6 @@ class ErrorReportControllerTest {
               "errorContext": {
                 "errorType": "NETWORK",
                 "errorCode": "NETWORK_DISCONNECTED",
-                "screenId": "NU-11",
                 "occurredAt": "2026-08-26T19:40:00+09:00",
                 "appVersion": "1.0.0"
               },
@@ -72,7 +71,6 @@ class ErrorReportControllerTest {
                           "errorContext": {
                             "errorType": "NETWORK",
                             "errorCode": "NETWORK_DISCONNECTED",
-                            "screenId": "NU-11",
                             "occurredAt": "2026-08-26T19:40:00+09:00",
                             "appVersion": "1.0.0"
                           }
@@ -98,7 +96,7 @@ class ErrorReportControllerTest {
     @Test
     void detailOver500CharactersWithOtherInvalidField_createErrorReport_returnsUnprocessableContent() throws Exception {
         String body = VALID_BODY.replace("추천 목록이 열리지 않아요.", "가".repeat(501))
-                .replace("\"screenId\": \"NU-11\",", "");
+                .replace("\"errorType\": \"NETWORK\",", "");
 
         mockMvc.perform(postErrorReport(body))
                 .andExpect(status().isUnprocessableContent());
@@ -112,7 +110,7 @@ class ErrorReportControllerTest {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
 
-        mockMvc.perform(postErrorReport(VALID_BODY.replace("\"screenId\": \"NU-11\",", "")))
+        mockMvc.perform(postErrorReport(VALID_BODY.replace("\"errorType\": \"NETWORK\",", "")))
                 .andExpect(status().isUnprocessableContent());
 
         verify(errorReportService, never()).createErrorReport(anyLong(), any());

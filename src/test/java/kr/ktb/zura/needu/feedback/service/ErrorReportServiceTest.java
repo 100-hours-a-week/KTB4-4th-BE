@@ -63,7 +63,6 @@ class ErrorReportServiceTest {
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
         assertThat(saved.getErrorType()).isEqualTo("NETWORK");
         assertThat(saved.getErrorCode()).isEqualTo("NETWORK_DISCONNECTED");
-        assertThat(saved.getScreenId()).isEqualTo("NU-11");
         assertThat(saved.getOccurredAt()).isEqualTo(LOCAL_OCCURRED_AT);
         assertThat(saved.getAppVersion()).isEqualTo("1.0.0");
         assertThat(saved.getProblemType()).isEqualTo("SCREEN_NOT_DISPLAYED");
@@ -127,7 +126,7 @@ class ErrorReportServiceTest {
 
     private void givenDuplicated(boolean duplicated) {
         given(errorReportRepository.existsByUserIdAndOccurrence(
-                USER_ID, "NETWORK_DISCONNECTED", "NETWORK", "NU-11", LOCAL_OCCURRED_AT))
+                USER_ID, "NETWORK_DISCONNECTED", "NETWORK", LOCAL_OCCURRED_AT))
                 .willReturn(duplicated);
     }
 
@@ -137,7 +136,7 @@ class ErrorReportServiceTest {
 
     private CreateErrorReportRequest createRequest(OffsetDateTime occurredAt, String detail) {
         return new CreateErrorReportRequest(
-                new ErrorContextRequest("NETWORK", "NETWORK_DISCONNECTED", "NU-11", occurredAt, "1.0.0"),
+                new ErrorContextRequest("NETWORK", "NETWORK_DISCONNECTED", occurredAt, "1.0.0"),
                 new ErrorFeedbackRequest("SCREEN_NOT_DISPLAYED", detail)
         );
     }
