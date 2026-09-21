@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpSession;
 import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
+import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
 import kr.ktb.zura.needu.auth.dto.response.CsrfTokenResponse;
 import kr.ktb.zura.needu.auth.service.AuthService;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -97,6 +99,13 @@ public class AuthController {
     public ResponseEntity<ApiResponse<CsrfTokenResponse>> csrf(@RequestAttribute("_csrf") CsrfToken csrfToken) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(ApiResponse.of("CSRF 토큰을 조회했습니다.", CsrfTokenResponse.from(csrfToken)));
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<ApiResponse<AuthSessionResponse>> findSession(
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(ApiResponse.of(
+                "로그인 유효성을 조회했습니다.", authService.findSession(userId)));
     }
 
     @PostMapping("/refresh")
