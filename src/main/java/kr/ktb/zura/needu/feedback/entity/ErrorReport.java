@@ -22,7 +22,7 @@ import static lombok.AccessLevel.PROTECTED;
         name = "error_reports",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_error_reports_user_id_occurrence",
-                columnNames = {"user_id", "error_code", "error_type", "screen_id", "occurred_at"}
+                columnNames = {"user_id", "error_code", "error_type", "occurred_at"}
         )
 )
 @NoArgsConstructor(access = PROTECTED)
@@ -41,9 +41,6 @@ public class ErrorReport {
     @Column(nullable = false, length = 30)
     private String errorType;
 
-    @Column(nullable = false, length = 50)
-    private String screenId;
-
     @Column(nullable = false)
     private LocalDateTime occurredAt;
 
@@ -60,12 +57,11 @@ public class ErrorReport {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public ErrorReport(Long userId, String errorCode, String errorType, String screenId, LocalDateTime occurredAt,
+    public ErrorReport(Long userId, String errorCode, String errorType, LocalDateTime occurredAt,
                        String appVersion, String problemType, String detail) {
         this.userId = userId;
         this.errorCode = errorCode;
         this.errorType = errorType;
-        this.screenId = screenId;
         this.occurredAt = occurredAt;
         this.appVersion = appVersion;
         this.problemType = problemType;

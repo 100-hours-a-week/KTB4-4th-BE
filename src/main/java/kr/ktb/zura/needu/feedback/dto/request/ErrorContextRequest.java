@@ -9,13 +9,11 @@ import java.time.OffsetDateTime;
 public record ErrorContextRequest(
         @NotBlank @Size(max = MAX_ERROR_TYPE_LENGTH) String errorType,
         @NotBlank @Size(max = MAX_ERROR_CODE_LENGTH) String errorCode,
-        @NotBlank @Size(max = MAX_SCREEN_ID_LENGTH) String screenId,
         @NotNull OffsetDateTime occurredAt,
         @NotBlank @Size(max = MAX_APP_VERSION_LENGTH) String appVersion
 ) {
 
     private static final int MAX_ERROR_TYPE_LENGTH = 30;
     private static final int MAX_ERROR_CODE_LENGTH = 50;
-    private static final int MAX_SCREEN_ID_LENGTH = 50;
     private static final int MAX_APP_VERSION_LENGTH = 30;
 }
