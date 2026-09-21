@@ -125,6 +125,17 @@ class UserServiceTest {
     }
 
     @Test
+    void authenticatedUser_findAuthenticatedUser_returnsSessionUser() {
+        User user = new User(42L, "니듀", null, Gender.NONE, LocalDate.of(2000, 1, 1));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        UserResponse response = userService.findAuthenticatedUser(1L);
+
+        assertEquals("니듀", response.nickname());
+        assertEquals(LocalDate.of(2000, 1, 1), response.birthDate());
+    }
+
+    @Test
     void activeUser_findUserById_returnsDetails() {
         User user = new User(42L, "친구", "https://example.com/profile.jpg", Gender.NONE, LocalDate.of(2000, 2, 29));
         user.completeTasteAnalysis();

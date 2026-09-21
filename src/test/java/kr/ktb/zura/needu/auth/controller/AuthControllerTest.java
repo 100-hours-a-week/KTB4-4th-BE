@@ -2,13 +2,20 @@ package kr.ktb.zura.needu.auth.controller;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.LocalDate;
+import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
+import kr.ktb.zura.needu.auth.dto.response.SessionUserResponse;
 import kr.ktb.zura.needu.auth.service.AuthService;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -25,6 +32,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class AuthControllerTest {
@@ -38,8 +46,30 @@ class AuthControllerTest {
         when(authService.loginWithKakao(anyString()))
                 .thenReturn(new AuthService.Tokens("access-token", "refresh-token", Duration.ofDays(14)));
         mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, true, Duration.ofMinutes(15)))
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void validSession_returnsUser() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(1L, null));
+        when(authService.findSession(1L)).thenReturn(new AuthSessionResponse(
+                new SessionUserResponse(1L, "사용자", null), LocalDate.of(2000, 1, 1)));
+
+        mockMvc.perform(get("/api/v1/auth/session"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("로그인 유효성을 조회했습니다."))
+                .andExpect(jsonPath("$.data.user.id").value(1L))
+                .andExpect(jsonPath("$.data.user.nickname").value("사용자"))
+                .andExpect(jsonPath("$.data.user.profileImageUrl").isEmpty())
+                .andExpect(jsonPath("$.data.birthday").value("2000-01-01"));
     }
 
     @Test

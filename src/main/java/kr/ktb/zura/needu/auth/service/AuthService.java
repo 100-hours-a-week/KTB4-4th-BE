@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.auth.service;
 import java.net.URI;
 import java.time.Duration;
 import kr.ktb.zura.needu.auth.client.KakaoOAuthClient;
+import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,10 @@ public class AuthService {
 
     public void logout(String refreshToken) {
         authSessionService.revoke(refreshToken);
+    }
+
+    public AuthSessionResponse findSession(Long userId) {
+        return AuthSessionResponse.from(userService.findAuthenticatedUser(userId));
     }
 
     private Tokens toTokens(AuthSessionService.RefreshToken refresh) {

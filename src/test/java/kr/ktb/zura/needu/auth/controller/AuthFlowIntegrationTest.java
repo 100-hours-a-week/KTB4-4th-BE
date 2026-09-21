@@ -48,6 +48,9 @@ class AuthFlowIntegrationTest {
         when(kakaoOAuthClient.findUserInfo("valid-code"))
                 .thenReturn(new KakaoOAuthClient.KakaoUserInfo(987654321L, "tester", null));
 
+        mockMvc.perform(get("/api/v1/auth/session"))
+                .andExpect(status().isUnauthorized());
+
         MvcResult csrf = mockMvc.perform(get("/api/v1/auth/csrf"))
                 .andExpect(status().isOk()).andReturn();
         String csrfToken = JsonPath.read(csrf.getResponse().getContentAsString(), "$.data.token");
@@ -77,6 +80,11 @@ class AuthFlowIntegrationTest {
 
         mockMvc.perform(get("/api/v1/guidance").cookie(accessCookie))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/auth/session").cookie(accessCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("로그인 유효성을 조회했습니다."))
+                .andExpect(jsonPath("$.data.user.nickname").value("tester"))
+                .andExpect(jsonPath("$.data.birthday").doesNotExist());
         mockMvc.perform(post("/api/v1/auth/refresh").cookie(refreshCookie, csrfCookie))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));

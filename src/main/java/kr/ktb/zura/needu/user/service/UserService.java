@@ -40,9 +40,11 @@ public class UserService {
     }
 
     public void validateAuthenticatableUser(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-        validateLoginAvailableUser(user);
+        findAuthenticatableUser(userId);
+    }
+
+    public UserResponse findAuthenticatedUser(Long userId) {
+        return UserResponse.from(findAuthenticatableUser(userId));
     }
 
     public UserSummaryResponse findUserSummary(Long userId) {
@@ -98,6 +100,12 @@ public class UserService {
     private User findUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+    }
+
+    private User findAuthenticatableUser(Long userId) {
+        User user = findUser(userId);
+        validateLoginAvailableUser(user);
+        return user;
     }
 
     private void validateActiveUser(User user) {
