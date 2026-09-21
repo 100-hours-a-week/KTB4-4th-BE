@@ -4,7 +4,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
@@ -31,6 +33,7 @@ class FriendControllerTest {
     private static final Long LOGIN_USER_ID = 1L;
     private static final Long FRIEND_USER_ID = 123L;
     private static final String URL = "/api/v1/friends/{userId}";
+    private static final String LIST_URL = "/api/v1/friends";
 
     @Autowired
     private MockMvc mockMvc;
@@ -40,6 +43,54 @@ class FriendControllerTest {
 
     @MockitoBean
     private KakaoFriendSyncService kakaoFriendSyncService;
+
+    @Test
+    void friendsExist_findAllFriends_returnsBirthdayPage() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(
+                FRIEND_USER_ID, "친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29), true);
+        given(friendService.findAllFriends(LOGIN_USER_ID, null, 20))
+                .willReturn(new CursorPageResponse<>(List.of(friend), "next", true));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("sort", "birthday")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("친구 목록 조회에 성공했습니다."))
+                .andExpect(jsonPath("$.data.items[0].userId").value(FRIEND_USER_ID))
+                .andExpect(jsonPath("$.data.items[0].name").value("친구"))
+                .andExpect(jsonPath("$.data.items[0].birthDate").value("2000-02-29"))
+                .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.nextCursor").value("next"));
+    }
+
+    @Test
+    void missingSort_findAllFriends_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(LIST_URL).param("size", "20").with(authenticatedUser()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+    }
+
+    @Test
+    void unsupportedSort_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("sort", "name")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message")
+                        .value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+    }
+
+    @Test
+    void sizeOutOfRange_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("sort", "birthday")
+                        .param("size", "51")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+    }
 
     @Test
     void friendExists_findFriend_returnsFriendUser() throws Exception {

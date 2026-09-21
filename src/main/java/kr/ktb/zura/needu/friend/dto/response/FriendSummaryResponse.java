@@ -1,9 +1,12 @@
 package kr.ktb.zura.needu.friend.dto.response;
 
+import java.time.LocalDate;
+
 public record FriendSummaryResponse(
         Long userId,
-        String nickname,
+        String name,
         String profileImageUrl,
-        boolean favorite
+        LocalDate birthDate,
+        boolean isFavorite
 ) {
 }

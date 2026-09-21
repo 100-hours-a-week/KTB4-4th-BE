@@ -1,21 +1,22 @@
 package kr.ktb.zura.needu.friend.service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
-import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class FriendService {
+
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
     private final FriendRepository friendRepository;
     private final UserService userService;
@@ -37,16 +40,22 @@ public class FriendService {
                 .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
     }
 
-    public FriendOverviewResponse findOverview(Long userId) {
-        List<Friend> friends = friendRepository.findAllByOwnerUserIdOrderByIdAsc(userId);
-        Map<Long, UserResponse> users = userService.findAllUsers(
-                        friends.stream().map(Friend::getFriendUserId).toList()).stream()
-                .collect(Collectors.toMap(UserResponse::id, Function.identity()));
-        List<FriendSummaryResponse> items = friends.stream()
-                .filter(friend -> users.containsKey(friend.getFriendUserId()))
-                .map(friend -> toResponse(friend, users.get(friend.getFriendUserId())))
-                .toList();
-        return new FriendOverviewResponse(items, userService.isKakaoFriendSynced(userId));
+    public CursorPageResponse<FriendSummaryResponse> findAllFriends(Long userId, String cursor, int size) {
+        userService.findUserSummary(userId);
+
+        FriendCursor decodedCursor = cursor == null ? null : FriendCursor.decode(cursor);
+        LocalDate referenceDate = decodedCursor == null ? LocalDate.now(KOREA_ZONE) : decodedCursor.referenceDate();
+        int currentBirthdayKey = FriendCursor.birthdayKey(referenceDate);
+        Limit limit = Limit.of(size + 1);
+        List<FriendSummaryResponse> friends = decodedCursor == null
+                ? friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(userId, currentBirthdayKey, limit)
+                : friendRepository.findAllByOwnerUserIdAfterBirthdayCursor(
+                        userId, currentBirthdayKey, decodedCursor.sortKey(), decodedCursor.userId(), limit);
+
+        boolean hasNext = friends.size() > size;
+        List<FriendSummaryResponse> pageItems = hasNext ? friends.subList(0, size) : friends;
+        String nextCursor = hasNext ? FriendCursor.from(referenceDate, pageItems.getLast()).encode() : null;
+        return new CursorPageResponse<>(pageItems, nextCursor, hasNext);
     }
 
     @Transactional
@@ -65,9 +74,5 @@ public class FriendService {
                 .toList();
         friendRepository.saveAll(newFriends);
         userService.completeKakaoFriendSync(ownerUserId);
-    }
-
-    private FriendSummaryResponse toResponse(Friend friend, UserResponse user) {
-        return new FriendSummaryResponse(user.id(), user.nickname(), user.profileImageUrl(), friend.isFavorite());
     }
 }
