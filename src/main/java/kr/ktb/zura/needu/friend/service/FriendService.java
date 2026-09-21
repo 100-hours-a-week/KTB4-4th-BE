@@ -9,13 +9,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
-import kr.ktb.zura.needu.user.dto.response.UserResponse;
-import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
@@ -33,19 +31,13 @@ public class FriendService {
     private final UserService userService;
 
     // 내 친구 목록에 없는 사용자는 존재 여부를 드러내지 않도록 권한 없음이 아닌 친구 없음으로 응답한다.
-    public FriendResponse findFriend(Long ownerUserId, Long friendUserId) {
+    public FriendDetailResponse findFriend(Long ownerUserId, Long friendUserId) {
         if (!friendRepository.existsByOwnerUserIdAndFriendUserId(ownerUserId, friendUserId)) {
             throw new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND);
         }
-        try {
-            UserResponse friendUser = userService.findAllUsers(List.of(friendUserId)).stream()
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
-            UserSummaryResponse friendSummary = userService.findUserSummary(friendUserId);
-            return FriendResponse.from(friendUser, friendSummary);
-        } catch (BusinessException exception) {
-            throw new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND);
-        }
+        return userService.findUserById(friendUserId)
+                .map(FriendDetailResponse::from)
+                .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
     }
 
     public CursorPageResponse<FriendSummaryResponse> findAllFriends(Long userId, String cursor, int size) {

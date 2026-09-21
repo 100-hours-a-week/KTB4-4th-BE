@@ -7,7 +7,7 @@ import java.util.List;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
@@ -185,7 +185,7 @@ class GiftProductServiceTest {
     private void givenFriend(boolean tasteAnalysisCompleted) {
         given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         given(friendService.findFriend(USER_ID, FRIEND_USER_ID)).willReturn(
-                new FriendResponse(FRIEND_USER_ID, "친구", null, tasteAnalysisCompleted));
+                new FriendDetailResponse(FRIEND_USER_ID, "친구", null, tasteAnalysisCompleted, null));
     }
 
     private GiftProductSearchCondition condition(String cursor, int size) {

@@ -67,10 +67,10 @@ class FriendListIntegrationTest {
         mockMvc.perform(validRequest().with(authenticatedUser(owner.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("친구 목록 조회에 성공했습니다."))
-                .andExpect(jsonPath("$.data.friends.length()").value(1))
-                .andExpect(jsonPath("$.data.friends[0].name").value("첫 번째"))
-                .andExpect(jsonPath("$.data.hasNext").value(true))
-                .andExpect(jsonPath("$.data.nextCursor").isString());
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("첫 번째"))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.nextCursor").isString());
     }
 
     @Test

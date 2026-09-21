@@ -3,8 +3,10 @@ package kr.ktb.zura.needu.user.service;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.entity.User;
@@ -49,6 +51,12 @@ public class UserService {
         validateActiveUser(user);
 
         return UserSummaryResponse.from(user);
+    }
+
+    public Optional<UserDetailResponse> findUserById(Long userId) {
+        return userRepository.findById(userId)
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .map(UserDetailResponse::from);
     }
 
     public List<UserResponse> findAllUsers(Collection<Long> userIds) {
