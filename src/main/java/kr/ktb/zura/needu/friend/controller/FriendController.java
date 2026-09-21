@@ -2,12 +2,16 @@ package kr.ktb.zura.needu.friend.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import java.net.URI;
 import java.util.UUID;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
+import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
@@ -31,6 +35,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class FriendController {
 
     private static final String FRIEND_FOUND_MESSAGE = "친구 정보를 조회했습니다.";
+    private static final String FRIENDS_FOUND_MESSAGE = "친구 목록 조회에 성공했습니다.";
+    private static final int MIN_PAGE_SIZE = 1;
+    private static final int MAX_PAGE_SIZE = 50;
     private static final String KAKAO_FRIEND_STATE = "kakaoFriendOAuthState";
     private static final String KAKAO_FRIEND_USER_ID = "kakaoFriendOAuthUserId";
     private static final String KAKAO_FRIEND_RETURN_URL = "kakaoFriendOAuthReturnUrl";
@@ -39,9 +46,16 @@ public class FriendController {
     private final KakaoFriendSyncService kakaoFriendSyncService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<FriendOverviewResponse>> findOverview(
-            @AuthenticationPrincipal Long userId) {
-        return ResponseEntity.ok(ApiResponse.of("친구 목록을 조회했습니다.", friendService.findOverview(userId)));
+    public ResponseEntity<CursorApiResponse<FriendSummaryResponse>> findAllFriends(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @Pattern(regexp = "birthday") String sort,
+            @RequestParam(required = false) String cursor,
+            @RequestParam @Min(MIN_PAGE_SIZE) @Max(MAX_PAGE_SIZE) int size
+    ) {
+        return ResponseEntity.ok(CursorApiResponse.of(
+                FRIENDS_FOUND_MESSAGE,
+                friendService.findAllFriends(userId, cursor, size)
+        ));
     }
 
     @GetMapping("/{userId}")

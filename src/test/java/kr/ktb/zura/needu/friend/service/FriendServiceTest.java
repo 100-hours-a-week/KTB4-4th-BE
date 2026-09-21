@@ -4,8 +4,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import kr.ktb.zura.needu.common.exception.BusinessException;
-import kr.ktb.zura.needu.friend.dto.response.FriendOverviewResponse;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
@@ -14,11 +15,14 @@ import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Limit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,16 +62,32 @@ class FriendServiceTest {
     }
 
     @Test
-    void unsyncedUser_findOverview_returnsStatusWithExistingFriends() {
-        Friend friend = new Friend(1L, 2L);
-        when(friendRepository.findAllByOwnerUserIdOrderByIdAsc(1L)).thenReturn(List.of(friend));
-        when(userService.findAllUsers(List.of(2L)))
-                .thenReturn(List.of(new UserResponse(2L, 20L, "친구", null, true)));
+    void moreFriendsThanSize_findAllFriends_returnsPageAndCursor() {
+        FriendSummaryResponse first = friendSummary(2L, LocalDate.of(2000, 10, 1));
+        FriendSummaryResponse second = friendSummary(3L, LocalDate.of(2000, 10, 2));
+        FriendSummaryResponse extra = friendSummary(4L, LocalDate.of(2000, 10, 3));
+        when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
+                .thenReturn(List.of(first, second, extra));
 
-        FriendOverviewResponse response = friendService.findOverview(1L);
+        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, null, 2);
 
-        assertThat(response.kakaoFriendSynced()).isFalse();
-        assertThat(response.items().getFirst().userId()).isEqualTo(2L);
+        assertThat(response.items()).containsExactly(first, second);
+        assertThat(response.hasNext()).isTrue();
+        assertThat(FriendCursor.decode(response.nextCursor()).userId()).isEqualTo(3L);
+        verify(userService).findUserSummary(1L);
+    }
+
+    @Test
+    void lastPage_findAllFriends_returnsNullCursor() {
+        FriendSummaryResponse friend = friendSummary(2L, LocalDate.of(2000, 10, 1));
+        when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
+                .thenReturn(List.of(friend));
+
+        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, null, 2);
+
+        assertThat(response.items()).containsExactly(friend);
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.nextCursor()).isNull();
     }
 
     @Test
@@ -109,5 +129,9 @@ class FriendServiceTest {
                 .isInstanceOf(IllegalStateException.class);
 
         verify(userService, never()).completeKakaoFriendSync(1L);
+    }
+
+    private FriendSummaryResponse friendSummary(Long userId, LocalDate birthDate) {
+        return new FriendSummaryResponse(userId, "친구", null, birthDate, false);
     }
 }

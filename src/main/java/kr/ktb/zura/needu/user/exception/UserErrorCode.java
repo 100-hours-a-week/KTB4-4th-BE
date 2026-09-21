@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum UserErrorCode implements ErrorCode {
 
-    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 사용자를 찾을 수 없습니다."),
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자 정보를 찾을 수 없습니다."),
     USER_KAKAO_ACCOUNT_MISMATCH(HttpStatus.CONFLICT, "로그인한 카카오계정과 일치하지 않습니다."),
     USER_WITHDRAWN(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     USER_BLOCKED(HttpStatus.FORBIDDEN, "이용이 제한된 계정입니다."),
