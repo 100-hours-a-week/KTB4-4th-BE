@@ -15,14 +15,12 @@ public interface ErrorReportRepository extends JpaRepository<ErrorReport, Long> 
             where er.userId = :userId
               and er.errorCode = :errorCode
               and er.errorType = :errorType
-              and er.screenId = :screenId
               and er.occurredAt = :occurredAt
             """)
     boolean existsByUserIdAndOccurrence(
             @Param("userId") Long userId,
             @Param("errorCode") String errorCode,
             @Param("errorType") String errorType,
-            @Param("screenId") String screenId,
             @Param("occurredAt") LocalDateTime occurredAt
     );
 }

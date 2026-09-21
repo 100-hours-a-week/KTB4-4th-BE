@@ -25,7 +25,7 @@ class ErrorReportRepositoryTest {
     void sameOccurrenceSaved_existsByUserIdAndOccurrence_returnsTrue() {
         errorReportRepository.saveAndFlush(createErrorReport(USER_ID, OCCURRED_AT));
 
-        assertThat(errorReportRepository.existsByUserIdAndOccurrence(USER_ID, "1232", "NETWORK", "NU-09", OCCURRED_AT))
+        assertThat(errorReportRepository.existsByUserIdAndOccurrence(USER_ID, "1232", "NETWORK", OCCURRED_AT))
                 .isTrue();
     }
 
@@ -34,9 +34,9 @@ class ErrorReportRepositoryTest {
         errorReportRepository.saveAndFlush(createErrorReport(USER_ID, OCCURRED_AT));
 
         assertThat(errorReportRepository.existsByUserIdAndOccurrence(
-                OTHER_USER_ID, "1232", "NETWORK", "NU-09", OCCURRED_AT)).isFalse();
+                OTHER_USER_ID, "1232", "NETWORK", OCCURRED_AT)).isFalse();
         assertThat(errorReportRepository.existsByUserIdAndOccurrence(
-                USER_ID, "1232", "NETWORK", "NU-09", OCCURRED_AT.plusSeconds(1))).isFalse();
+                USER_ID, "1232", "NETWORK", OCCURRED_AT.plusSeconds(1))).isFalse();
     }
 
     @Test
@@ -48,6 +48,6 @@ class ErrorReportRepositoryTest {
     }
 
     private ErrorReport createErrorReport(Long userId, LocalDateTime occurredAt) {
-        return new ErrorReport(userId, "1232", "NETWORK", "NU-09", occurredAt, "1.0.0", "SCREEN_NOT_DISPLAYED", "상세 내용");
+        return new ErrorReport(userId, "1232", "NETWORK", occurredAt, "1.0.0", "SCREEN_NOT_DISPLAYED", "상세 내용");
     }
 }

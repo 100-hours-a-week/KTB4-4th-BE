@@ -49,7 +49,7 @@ public class ErrorReportService {
 
     private void validateNotDuplicated(Long userId, ErrorContextRequest errorContext, LocalDateTime occurredAt) {
         boolean isDuplicated = errorReportRepository.existsByUserIdAndOccurrence(
-                userId, errorContext.errorCode(), errorContext.errorType(), errorContext.screenId(), occurredAt);
+                userId, errorContext.errorCode(), errorContext.errorType(), occurredAt);
         if (isDuplicated) {
             throw new BusinessException(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_DUPLICATED);
         }
@@ -75,7 +75,6 @@ public class ErrorReportService {
                 userId,
                 errorContext.errorCode(),
                 errorContext.errorType(),
-                errorContext.screenId(),
                 occurredAt,
                 errorContext.appVersion(),
                 feedback.problemType(),
