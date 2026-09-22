@@ -98,14 +98,14 @@ public class AuthController {
     @GetMapping("/csrf")
     public ResponseEntity<ApiResponse<CsrfTokenResponse>> csrf(@RequestAttribute("_csrf") CsrfToken csrfToken) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(ApiResponse.of("CSRF 토큰을 조회했습니다.", CsrfTokenResponse.from(csrfToken)));
+                .body(ApiResponse.of(AuthResponseMessages.CSRF_TOKEN_FOUND, CsrfTokenResponse.from(csrfToken)));
     }
 
     @GetMapping("/session")
     public ResponseEntity<ApiResponse<AuthSessionResponse>> findSession(
             @AuthenticationPrincipal Long userId) {
         return ResponseEntity.ok(ApiResponse.of(
-                "로그인 유효성을 조회했습니다.", authService.findSession(userId)));
+                AuthResponseMessages.SESSION_FOUND, authService.findSession(userId)));
     }
 
     @PostMapping("/refresh")
