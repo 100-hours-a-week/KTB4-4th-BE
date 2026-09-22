@@ -5,6 +5,7 @@ import java.net.http.HttpTimeoutException;
 import java.util.Map;
 import kr.ktb.zura.needu.aichat.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.AiServerStartSessionRequest;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerErrorResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
@@ -51,6 +52,11 @@ public class AiChatClient {
     public AiServerSendMessageResponse sendMessage(Long conversationRoomId, String message) {
         return request(AiChatEndpoint.SEND_MESSAGE, Map.of(CONVERSATION_ROOM_ID, conversationRoomId),
                 new AiServerSendMessageRequest(message), AiServerSendMessageResponse.class);
+    }
+
+    public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
+        return request(AiChatEndpoint.CREATE_ANALYSIS, Map.of(CONVERSATION_ROOM_ID, conversationRoomId),
+                null, AiServerAnalysisResponse.class);
     }
 
     public void confirmTasteProfile() {

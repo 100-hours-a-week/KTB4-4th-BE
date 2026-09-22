@@ -8,10 +8,14 @@ import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -330,6 +334,33 @@ class AiChatFacadeTest {
         verifyNoInteractions(aiMessageService);
     }
 
+    @Test
+    void activeConversation_createAnalysis_returnsMappedAnalysis() {
+        givenActiveRoom();
+        given(aiChatClient.createAnalysis(ROOM_ID)).willReturn(analysisResponse(true));
+
+        AnalysisResultResponse response = aiChatFacade.createAnalysis(USER_ID, ROOM_ID);
+
+        assertThat(response).isEqualTo(new AnalysisResultResponse(
+                "캠핑과 핸드드립을 즐깁니다.",
+                new AnalysisKeywordsResponse(
+                        List.of("핸드드립", "가벼운 장비"),
+                        List.of("캠핑", "티타늄 머그컵")
+                ),
+                true
+        ));
+    }
+
+    @Test
+    void analysisWithoutCorrectionAvailability_createAnalysis_throwsInvalidResponse() {
+        givenActiveRoom();
+        given(aiChatClient.createAnalysis(ROOM_ID)).willReturn(analysisResponse(null));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+    }
+
     private void givenActiveRoom() {
         given(aiChatRoomService.findActiveRoom(USER_ID, ROOM_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE, LocalDateTime.now().plusMinutes(29)));
@@ -351,6 +382,17 @@ class AiChatFacadeTest {
 
     private static AiServerStartSessionResponse startSessionResponse(Long roomId) {
         return new AiServerStartSessionResponse(roomId, GREETING, 20);
+    }
+
+    private static AiServerAnalysisResponse analysisResponse(Boolean correctionAvailable) {
+        return new AiServerAnalysisResponse(
+                "캠핑과 핸드드립을 즐깁니다.",
+                new AiServerAnalysisKeywordsResponse(
+                        List.of("핸드드립", "가벼운 장비"),
+                        List.of("캠핑", "티타늄 머그컵")
+                ),
+                correctionAvailable
+        );
     }
 
     private static AiChatRoom room(Long id, AiChatRoomStatus status, LocalDateTime purgeAt) {

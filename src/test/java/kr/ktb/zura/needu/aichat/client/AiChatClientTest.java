@@ -2,7 +2,10 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.util.List;
 import java.util.stream.Stream;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
@@ -91,6 +94,38 @@ class AiChatClientTest {
 
         assertEquals(new AiServerSendMessageResponse("캠핑 좋죠."), response);
         messageServer.verify();
+    }
+
+    @Test
+    void createAnalysis_requestsAnalysisEndpointAndParsesResponse() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/analysis"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer service-token"))
+                .andRespond(withSuccess("""
+                        {
+                          "profile": {"schemaVersion": "3.0", "userId": 10293},
+                          "summary": "캠핑과 핸드드립을 즐깁니다.",
+                          "keywords": {
+                            "taste": ["핸드드립", "가벼운 장비"],
+                            "interest": ["캠핑", "티타늄 머그컵"]
+                          },
+                          "correctionAvailable": true,
+                          "profileCompleteness": "sufficient",
+                          "missingSignals": []
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        AiServerAnalysisResponse response = client.createAnalysis(101L);
+
+        assertEquals(new AiServerAnalysisResponse(
+                "캠핑과 핸드드립을 즐깁니다.",
+                new AiServerAnalysisKeywordsResponse(
+                        List.of("핸드드립", "가벼운 장비"),
+                        List.of("캠핑", "티타늄 머그컵")
+                ),
+                true
+        ), response);
+        server.verify();
     }
 
     @ParameterizedTest

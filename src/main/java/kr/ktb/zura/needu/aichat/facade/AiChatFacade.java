@@ -9,8 +9,10 @@ import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -165,5 +167,21 @@ public class AiChatFacade {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
         return session.greeting();
+    }
+
+    public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
+        aiChatRoomService.findActiveRoom(userId, conversationId);
+        return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
+    }
+
+    private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {
+        if (response.summary() == null || response.summary().isBlank()
+                || response.keywords() == null
+                || response.keywords().taste() == null
+                || response.keywords().interest() == null
+                || response.correctionAvailable() == null) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+        }
+        return AnalysisResultResponse.from(response);
     }
 }

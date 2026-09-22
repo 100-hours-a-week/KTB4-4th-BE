@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
 import kr.ktb.zura.needu.aichat.type.AiChatResponseMessage;
@@ -70,5 +71,14 @@ public class AiChatController {
     ) {
         AiMessageResponse response = aiChatFacade.sendMessage(userId, conversationId, request);
         return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.MESSAGE_SENT.getMessage(), response));
+    }
+
+    @PostMapping("/{conversationId}/analysis")
+    public ResponseEntity<ApiResponse<AnalysisResultResponse>> createAnalysis(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long conversationId
+    ) {
+        AnalysisResultResponse response = aiChatFacade.createAnalysis(userId, conversationId);
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.ANALYSIS_COMPLETED.getMessage(), response));
     }
 }
