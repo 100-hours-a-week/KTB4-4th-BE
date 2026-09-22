@@ -22,6 +22,7 @@ COPY src/ src/
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew bootJar --no-daemon
 
+
 # =========================================================
 # 2. Runtime Stage
 # =========================================================
@@ -29,6 +30,11 @@ RUN --mount=type=cache,target=/root/.gradle \
 FROM eclipse-temurin:25 AS runtime
 
 WORKDIR /app
+
+# Docker healthcheck에서 사용할 curl 설치
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Application 전용 non-root 사용자 생성
 RUN groupadd --system app \
