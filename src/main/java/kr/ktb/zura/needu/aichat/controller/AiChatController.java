@@ -4,14 +4,17 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
+import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
+import kr.ktb.zura.needu.aichat.dto.response.AiChatResponseMessage;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
+import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationResponse;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
-import kr.ktb.zura.needu.aichat.type.AiChatResponseMessage;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -81,4 +85,34 @@ public class AiChatController {
         AnalysisResultResponse response = aiChatFacade.createAnalysis(userId, conversationId);
         return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.ANALYSIS_COMPLETED.getMessage(), response));
     }
+
+    @PatchMapping("/{conversationId}/analysis")
+    public ResponseEntity<ApiResponse<AnalysisResultResponse>> patchAnalysis(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long conversationId,
+            @Valid @RequestBody PatchAnalyzeMessageRequest request
+    ) {
+        AnalysisResultResponse response = aiChatFacade.patchAnalyze(userId, conversationId, request);
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.ANALYSIS_UPDATED.getMessage(), response));
+    }
+
+    @PostMapping("/{conversationId}/confirm")
+    public ResponseEntity<ApiResponse<ProductRecommendationResponse>> confirmAnalysis(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long conversationId
+    ) {
+        ProductRecommendationResponse response = aiChatFacade.confirmAnalysis(userId, conversationId);
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_COMPLETED.getMessage(), response));
+    }
+
+    @PostMapping("/{conversationId}/session")
+    public ResponseEntity<ApiResponse<AiSessionResponse>> getSession(
+            @PathVariable Long conversationId,
+            @AuthenticationPrincipal Long userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_FOUND.getMessage(),
+                aiChatFacade.getSession(userId, conversationId)));
+    }
+
+
 }

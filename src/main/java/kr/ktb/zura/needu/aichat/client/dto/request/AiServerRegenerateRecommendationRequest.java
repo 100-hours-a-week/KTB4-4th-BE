@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.aichat.client.dto.request;
 
 import java.util.List;
+
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerTasteProfile;
 
 public record AiServerRegenerateRecommendationRequest(

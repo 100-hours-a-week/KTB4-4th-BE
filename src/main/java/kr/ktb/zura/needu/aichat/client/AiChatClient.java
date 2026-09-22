@@ -3,11 +3,13 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.Map;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerStartSessionRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerErrorResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationJobResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
@@ -67,12 +69,18 @@ public class AiChatClient {
                 null, AiServerAnalysisResponse.class);
     }
 
-    private Map<String, Long> pathVariables(Long conversationRoomId) {
-        return Map.of(AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId);
+    public AiServerAnalysisResponse patchAnalyze(Long conversationId, AiServerPatchAnalysisRequest request) {
+        return request(AiChatEndpoint.PATCH_ANALYZE, pathVariables(conversationId),
+                request, AiServerAnalysisResponse.class);
     }
 
-    public void confirmTasteProfile() {
+    public AiServerRecommendationJobResponse confirmAnalysis(Long conversationId) {
+        return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationId),
+                null, AiServerRecommendationJobResponse.class);
+    }
 
+    private Map<String, Long> pathVariables(Long conversationRoomId) {
+        return Map.of(AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId);
     }
 
     private <T> T request(AiChatEndpoint endpoint,
