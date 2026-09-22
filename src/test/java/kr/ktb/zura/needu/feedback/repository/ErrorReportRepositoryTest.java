@@ -1,6 +1,6 @@
 package kr.ktb.zura.needu.feedback.repository;
 
-import java.time.LocalDateTime;
+import java.util.UUID;
 
 import kr.ktb.zura.needu.feedback.entity.ErrorReport;
 import org.junit.jupiter.api.Test;
@@ -16,38 +16,45 @@ class ErrorReportRepositoryTest {
 
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
-    private static final LocalDateTime OCCURRED_AT = LocalDateTime.of(2026, 9, 18, 10, 15, 30);
+    private static final UUID IDEMPOTENCY_KEY = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID OTHER_IDEMPOTENCY_KEY = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @Autowired
     private ErrorReportRepository errorReportRepository;
 
     @Test
-    void sameOccurrenceSaved_existsByUserIdAndOccurrence_returnsTrue() {
-        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, OCCURRED_AT));
+    void sameIdempotencyKeySaved_existsByUserIdAndIdempotencyKey_returnsTrue() {
+        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, IDEMPOTENCY_KEY));
 
-        assertThat(errorReportRepository.existsByUserIdAndOccurrence(USER_ID, "1232", "NETWORK", OCCURRED_AT))
+        assertThat(errorReportRepository.existsByUserIdAndIdempotencyKey(USER_ID, IDEMPOTENCY_KEY))
                 .isTrue();
     }
 
     @Test
-    void otherUserOrOtherTime_existsByUserIdAndOccurrence_returnsFalse() {
-        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, OCCURRED_AT));
+    void otherUserOrOtherKey_existsByUserIdAndIdempotencyKey_returnsFalse() {
+        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, IDEMPOTENCY_KEY));
 
-        assertThat(errorReportRepository.existsByUserIdAndOccurrence(
-                OTHER_USER_ID, "1232", "NETWORK", OCCURRED_AT)).isFalse();
-        assertThat(errorReportRepository.existsByUserIdAndOccurrence(
-                USER_ID, "1232", "NETWORK", OCCURRED_AT.plusSeconds(1))).isFalse();
+        assertThat(errorReportRepository.existsByUserIdAndIdempotencyKey(OTHER_USER_ID, IDEMPOTENCY_KEY)).isFalse();
+        assertThat(errorReportRepository.existsByUserIdAndIdempotencyKey(USER_ID, OTHER_IDEMPOTENCY_KEY)).isFalse();
     }
 
     @Test
-    void sameOccurrenceSavedTwice_saveAndFlush_violatesUniqueConstraint() {
-        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, OCCURRED_AT));
+    void sameUserAndIdempotencyKeySavedTwice_saveAndFlush_violatesUniqueConstraint() {
+        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, IDEMPOTENCY_KEY));
 
-        assertThatThrownBy(() -> errorReportRepository.saveAndFlush(createErrorReport(USER_ID, OCCURRED_AT)))
+        assertThatThrownBy(() -> errorReportRepository.saveAndFlush(createErrorReport(USER_ID, IDEMPOTENCY_KEY)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
-    private ErrorReport createErrorReport(Long userId, LocalDateTime occurredAt) {
-        return new ErrorReport(userId, "1232", "NETWORK", occurredAt, "1.0.0", "SCREEN_NOT_DISPLAYED", "상세 내용");
+    @Test
+    void sameIdempotencyKeyForDifferentUsers_saveAndFlush_savesBothReports() {
+        errorReportRepository.saveAndFlush(createErrorReport(USER_ID, IDEMPOTENCY_KEY));
+        errorReportRepository.saveAndFlush(createErrorReport(OTHER_USER_ID, IDEMPOTENCY_KEY));
+
+        assertThat(errorReportRepository.count()).isEqualTo(2);
+    }
+
+    private ErrorReport createErrorReport(Long userId, UUID idempotencyKey) {
+        return new ErrorReport(userId, idempotencyKey, "SCREEN_NOT_DISPLAYED", "상세 내용");
     }
 }
