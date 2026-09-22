@@ -12,6 +12,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.type.AiChatEndpoint;
+import kr.ktb.zura.needu.aichat.type.AiChatRequestField;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,7 +26,6 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class AiChatClient {
 
-    private static final String CONVERSATION_ROOM_ID = "conversationRoomId";
     private static final String SESSION_CLOSED_CODE = "SESSION_CLOSED";
 
     private final RestClient restClient;
@@ -50,13 +50,17 @@ public class AiChatClient {
     }
 
     public AiServerSendMessageResponse sendMessage(Long conversationRoomId, String message) {
-        return request(AiChatEndpoint.SEND_MESSAGE, Map.of(CONVERSATION_ROOM_ID, conversationRoomId),
+        return request(AiChatEndpoint.SEND_MESSAGE, pathVariables(conversationRoomId),
                 new AiServerSendMessageRequest(message), AiServerSendMessageResponse.class);
     }
 
     public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
-        return request(AiChatEndpoint.CREATE_ANALYSIS, Map.of(CONVERSATION_ROOM_ID, conversationRoomId),
+        return request(AiChatEndpoint.CREATE_ANALYSIS, pathVariables(conversationRoomId),
                 null, AiServerAnalysisResponse.class);
+    }
+
+    private Map<String, Long> pathVariables(Long conversationRoomId) {
+        return Map.of(AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId);
     }
 
     public void confirmTasteProfile() {
