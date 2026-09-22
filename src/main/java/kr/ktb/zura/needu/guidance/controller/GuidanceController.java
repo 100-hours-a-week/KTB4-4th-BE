@@ -15,12 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/guidance")
 public class GuidanceController {
 
-    private static final String GUIDANCE_FOUND_MESSAGE = "메인 정보를 조회했습니다.";
-
     private final GuidanceService guidanceService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<GuidanceResponse>> findGuidance(@AuthenticationPrincipal Long userId) {
-        return ResponseEntity.ok(ApiResponse.of(GUIDANCE_FOUND_MESSAGE, guidanceService.findGuidance(userId)));
+        return ResponseEntity.ok(ApiResponse.of(GuidanceResponseMessages.FOUND, guidanceService.findGuidance(userId)));
     }
 }
