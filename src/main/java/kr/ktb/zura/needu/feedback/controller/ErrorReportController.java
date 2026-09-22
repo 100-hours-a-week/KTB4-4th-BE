@@ -23,8 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/error-reports")
 public class ErrorReportController {
 
-    private static final String ERROR_REPORT_CREATED_MESSAGE = "피드백을 보내주셔서 감사합니다.";
-
     private final ErrorReportService errorReportService;
 
     @PostMapping
@@ -34,7 +32,7 @@ public class ErrorReportController {
             @RequestBody @Valid CreateErrorReportRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(
-                ERROR_REPORT_CREATED_MESSAGE,
+                ErrorReportResponseMessages.CREATED,
                 errorReportService.createErrorReport(userId, idempotencyKey, request)
         ));
     }
