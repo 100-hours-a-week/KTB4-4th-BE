@@ -166,7 +166,7 @@ class AiChatFacadeTest {
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
         given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT))
-                .willReturn(new AiServerSendMessageResponse(AI_CONTENT));
+                .willReturn(sendMessageResponse(AI_CONTENT));
         given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
 
@@ -277,7 +277,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT)).willReturn(new AiServerSendMessageResponse(" "));
+        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT)).willReturn(sendMessageResponse(" "));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -387,13 +387,20 @@ class AiChatFacadeTest {
 
     private static AiServerAnalysisResponse analysisResponse(Boolean correctionAvailable) {
         return new AiServerAnalysisResponse(
+                null,
                 "캠핑과 핸드드립을 즐깁니다.",
                 new AiServerAnalysisKeywordsResponse(
                         List.of("핸드드립", "가벼운 장비"),
                         List.of("캠핑", "티타늄 머그컵")
                 ),
-                correctionAvailable
+                correctionAvailable,
+                "sufficient",
+                List.of()
         );
+    }
+
+    private static AiServerSendMessageResponse sendMessageResponse(String reply) {
+        return new AiServerSendMessageResponse(reply, 1, 20, false, 1, false, null, null, false);
     }
 
     private static AiChatRoom room(Long id, AiChatRoomStatus status, LocalDateTime purgeAt) {

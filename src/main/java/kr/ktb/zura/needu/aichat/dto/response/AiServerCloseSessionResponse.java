@@ -2,12 +2,12 @@ package kr.ktb.zura.needu.aichat.dto.response;
 
 import java.util.List;
 
-public record AiServerAnalysisResponse(
+public record AiServerCloseSessionResponse(
         AiServerTasteProfile profile,
         String summary,
         AiServerAnalysisKeywordsResponse keywords,
-        Boolean correctionAvailable,
         String profileCompleteness,
-        List<String> missingSignals
+        List<String> missingSignals,
+        String completionReason
 ) {
 }
