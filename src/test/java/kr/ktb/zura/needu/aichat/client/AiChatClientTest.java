@@ -2,12 +2,15 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerHealthResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerSessionMessageResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -60,6 +63,50 @@ class AiChatClientTest {
         AiServerHealthResponse response = client.checkHealth();
 
         assertEquals(new AiServerHealthResponse("ok", "0.1.0"), response);
+        server.verify();
+    }
+
+    @Test
+    void getSession_requestsSessionEndpoint() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101?userId=1"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer service-token"))
+                .andExpect(content().string(""))
+                .andRespond(withSuccess("""
+                        {
+                          "sessionId": 101,
+                          "userId": 1,
+                          "status": "active",
+                          "turn": 1,
+                          "maxTurns": 20,
+                          "messages": [{"role": "assistant", "content": "안녕하세요"}],
+                          "itemCount": 1,
+                          "inputLocked": false,
+                          "analysisAvailable": false,
+                          "canClose": false,
+                          "completionReason": null,
+                          "profileCompleteness": null,
+                          "lastActiveAt": "2026-09-22T05:20:00Z"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        AiServerSessionResponse response = client.getSession(1L, 101L);
+
+        assertEquals(new AiServerSessionResponse(
+                101L,
+                1L,
+                "active",
+                1,
+                20,
+                List.of(new AiServerSessionMessageResponse("assistant", "안녕하세요")),
+                1,
+                false,
+                false,
+                false,
+                null,
+                null,
+                Instant.parse("2026-09-22T05:20:00Z")
+        ), response);
         server.verify();
     }
 

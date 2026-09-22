@@ -1,7 +1,8 @@
 package kr.ktb.zura.needu.aichat.type;
 
 public enum AiChatRequestField {
-    CONVERSATION_ROOM_ID("conversationRoomId");
+    CONVERSATION_ROOM_ID("conversationRoomId"),
+    USER_ID("userId");
 
     private final String fieldName;
 

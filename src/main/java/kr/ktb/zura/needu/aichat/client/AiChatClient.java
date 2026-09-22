@@ -9,6 +9,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerErrorResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerHealthResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiServerSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.type.AiChatEndpoint;
@@ -42,6 +43,13 @@ public class AiChatClient {
 
     public AiServerHealthResponse checkHealth() {
         return request(AiChatEndpoint.CHECK_HEALTH, Map.of(), null, AiServerHealthResponse.class);
+    }
+
+    public AiServerSessionResponse getSession(Long userId, Long conversationRoomId) {
+        return request(AiChatEndpoint.GET_SESSION, Map.of(
+                AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId,
+                AiChatRequestField.USER_ID.getFieldName(), userId
+        ), null, AiServerSessionResponse.class);
     }
 
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
