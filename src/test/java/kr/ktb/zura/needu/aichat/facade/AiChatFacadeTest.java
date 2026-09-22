@@ -8,12 +8,12 @@ import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisKeywordsResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;

@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.aichat.dto.response;
 
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+
 public record AnalysisResultResponse(
         String summary,
         AnalysisKeywordsResponse keywords,
