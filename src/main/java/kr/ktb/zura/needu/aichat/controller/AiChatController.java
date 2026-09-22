@@ -10,6 +10,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
+import kr.ktb.zura.needu.aichat.type.AiChatResponseMessage;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,10 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/ai/conversations")
 public class AiChatController {
 
-    private static final String CONVERSATION_FOUND_MESSAGE = "AI 대화를 조회했습니다.";
-    private static final String CONVERSATION_CREATED_MESSAGE = "AI 대화를 시작했습니다.";
-    private static final String MESSAGE_SENT_MESSAGE = "메시지를 전송했습니다.";
-    private static final String MESSAGES_FOUND_MESSAGE = "대화 메시지를 조회했습니다.";
     private static final int MIN_PAGE_SIZE = 1;
     private static final int MAX_PAGE_SIZE = 50;
 
@@ -45,9 +42,11 @@ public class AiChatController {
         AiConversationStartResult result = aiChatFacade.startOrResumeConversation(userId);
         if (result.isCreated()) {
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.of(CONVERSATION_CREATED_MESSAGE, result.conversation()));
+                    .body(ApiResponse.of(AiChatResponseMessage.CONVERSATION_CREATED.getMessage(),
+                            result.conversation()));
         }
-        return ResponseEntity.ok(ApiResponse.of(CONVERSATION_FOUND_MESSAGE, result.conversation()));
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_FOUND.getMessage(),
+                result.conversation()));
     }
 
     @GetMapping("/{conversationId}/messages")
@@ -58,7 +57,7 @@ public class AiChatController {
             @RequestParam @Min(MIN_PAGE_SIZE) @Max(MAX_PAGE_SIZE) int size
     ) {
         return ResponseEntity.ok(CursorApiResponse.of(
-                MESSAGES_FOUND_MESSAGE,
+                AiChatResponseMessage.MESSAGES_FOUND.getMessage(),
                 aiChatFacade.findAllMessages(userId, conversationId, cursor, size)
         ));
     }
@@ -70,6 +69,6 @@ public class AiChatController {
             @Valid @RequestBody SendMessageRequest request
     ) {
         AiMessageResponse response = aiChatFacade.sendMessage(userId, conversationId, request);
-        return ResponseEntity.ok(ApiResponse.of(MESSAGE_SENT_MESSAGE, response));
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.MESSAGE_SENT.getMessage(), response));
     }
 }
