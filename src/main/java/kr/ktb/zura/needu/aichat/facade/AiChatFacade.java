@@ -5,12 +5,18 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiSessionResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
+import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -63,13 +69,13 @@ public class AiChatFacade {
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
             Long userId, Long conversationId, String cursor, int size) {
-        aiChatRoomService.findActiveRoom(userId, conversationId);
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
         return aiMessageService.findAllMessages(conversationId, cursor, size);
     }
 
     public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
-        aiChatRoomService.findActiveRoom(userId, conversationId);
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
         if (!aiConversationLock.tryLock(conversationId)) {
             log.info("AI message already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
@@ -165,5 +171,37 @@ public class AiChatFacade {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
         return session.greeting();
+    }
+
+
+    public AiSessionResponse getSession(Long userId, Long conversationId) {
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        return AiSessionResponse.from(aiChatClient.getSession(userId, conversationId));
+    }
+
+    public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
+    }
+
+    public AnalysisResultResponse patchAnalyze(Long userId, Long conversationId, PatchAnalyzeMessageRequest request) {
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        return toAnalysisResult(aiChatClient.patchAnalyze(conversationId, new AiServerPatchAnalysisRequest()));
+    }
+
+    public ProductRecommendationResponse confirmAnalysis(Long userId, Long conversationId) {
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        return ProductRecommendationResponse.from(aiChatClient.confirmAnalysis(conversationId));
+    }
+
+    private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {
+        if (response.summary() == null || response.summary().isBlank()
+                || response.keywords() == null
+                || response.keywords().taste() == null
+                || response.keywords().interest() == null
+                || response.correctionAvailable() == null) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+        }
+        return AnalysisResultResponse.from(response);
     }
 }

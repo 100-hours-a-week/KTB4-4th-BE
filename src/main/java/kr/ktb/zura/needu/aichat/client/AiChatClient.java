@@ -3,14 +3,19 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.Map;
-import kr.ktb.zura.needu.aichat.dto.request.AiServerSendMessageRequest;
-import kr.ktb.zura.needu.aichat.dto.request.AiServerStartSessionRequest;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerErrorResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
-import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerStartSessionRequest;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerErrorResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationJobResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.type.AiChatEndpoint;
+import kr.ktb.zura.needu.aichat.type.AiChatRequestField;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +29,6 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class AiChatClient {
 
-    private static final String CONVERSATION_ROOM_ID = "conversationRoomId";
     private static final String SESSION_CLOSED_CODE = "SESSION_CLOSED";
 
     private final RestClient restClient;
@@ -39,8 +43,15 @@ public class AiChatClient {
         this.serviceToken = serviceToken;
     }
 
-    public HealthResponse checkHealth() {
-        return request(AiChatEndpoint.CHECK_HEALTH, Map.of(), null, HealthResponse.class);
+    public AiServerHealthResponse checkHealth() {
+        return request(AiChatEndpoint.CHECK_HEALTH, Map.of(), null, AiServerHealthResponse.class);
+    }
+
+    public AiServerSessionResponse getSession(Long userId, Long conversationRoomId) {
+        return request(AiChatEndpoint.GET_SESSION, Map.of(
+                AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId,
+                AiChatRequestField.USER_ID.getFieldName(), userId
+        ), null, AiServerSessionResponse.class);
     }
 
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
@@ -49,12 +60,27 @@ public class AiChatClient {
     }
 
     public AiServerSendMessageResponse sendMessage(Long conversationRoomId, String message) {
-        return request(AiChatEndpoint.SEND_MESSAGE, Map.of(CONVERSATION_ROOM_ID, conversationRoomId),
+        return request(AiChatEndpoint.SEND_MESSAGE, pathVariables(conversationRoomId),
                 new AiServerSendMessageRequest(message), AiServerSendMessageResponse.class);
     }
 
-    public void confirmTasteProfile() {
+    public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
+        return request(AiChatEndpoint.CREATE_ANALYSIS, pathVariables(conversationRoomId),
+                null, AiServerAnalysisResponse.class);
+    }
 
+    public AiServerAnalysisResponse patchAnalyze(Long conversationId, AiServerPatchAnalysisRequest request) {
+        return request(AiChatEndpoint.PATCH_ANALYZE, pathVariables(conversationId),
+                request, AiServerAnalysisResponse.class);
+    }
+
+    public AiServerRecommendationJobResponse confirmAnalysis(Long conversationId) {
+        return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationId),
+                null, AiServerRecommendationJobResponse.class);
+    }
+
+    private Map<String, Long> pathVariables(Long conversationRoomId) {
+        return Map.of(AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId);
     }
 
     private <T> T request(AiChatEndpoint endpoint,

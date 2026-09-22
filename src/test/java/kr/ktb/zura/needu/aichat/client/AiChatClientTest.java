@@ -2,10 +2,16 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.time.Instant;
+import java.util.List;
 import java.util.stream.Stream;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerSendMessageResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiServerStartSessionResponse;
-import kr.ktb.zura.needu.aichat.dto.response.HealthResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionMessageResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,11 +56,57 @@ class AiChatClientTest {
         server.expect(requestTo("http://localhost:9000/health"))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer service-token"))
-                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess("""
+                        {"status": "ok", "version": "0.1.0"}
+                        """, MediaType.APPLICATION_JSON));
 
-        HealthResponse response = client.checkHealth();
+        AiServerHealthResponse response = client.checkHealth();
 
-        assertEquals(new HealthResponse(), response);
+        assertEquals(new AiServerHealthResponse("ok", "0.1.0"), response);
+        server.verify();
+    }
+
+    @Test
+    void getSession_requestsSessionEndpoint() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101?userId=1"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer service-token"))
+                .andExpect(content().string(""))
+                .andRespond(withSuccess("""
+                        {
+                          "sessionId": 101,
+                          "userId": 1,
+                          "status": "active",
+                          "turn": 1,
+                          "maxTurns": 20,
+                          "messages": [{"role": "assistant", "content": "안녕하세요"}],
+                          "itemCount": 1,
+                          "inputLocked": false,
+                          "analysisAvailable": false,
+                          "canClose": false,
+                          "completionReason": null,
+                          "profileCompleteness": null,
+                          "lastActiveAt": "2026-09-22T05:20:00Z"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        AiServerSessionResponse response = client.getSession(1L, 101L);
+
+        assertEquals(new AiServerSessionResponse(
+                101L,
+                1L,
+                "active",
+                1,
+                20,
+                List.of(new AiServerSessionMessageResponse("assistant", "안녕하세요")),
+                1,
+                false,
+                false,
+                false,
+                null,
+                null,
+                Instant.parse("2026-09-22T05:20:00Z")
+        ), response);
         server.verify();
     }
 
@@ -84,13 +136,56 @@ class AiChatClientTest {
                         {"message": "주말마다 캠핑 가요"}
                         """))
                 .andRespond(withSuccess("""
-                        {"reply": "캠핑 좋죠.", "turn": 3, "maxTurns": 20, "inputLocked": false}
+                        {
+                          "reply": "캠핑 좋죠.",
+                          "turn": 3,
+                          "maxTurns": 20,
+                          "canClose": false,
+                          "itemCount": 4,
+                          "inputLocked": false,
+                          "completionReason": null,
+                          "profileCompleteness": null,
+                          "lastTurnExtractionFailed": false
+                        }
                         """, MediaType.APPLICATION_JSON));
 
         AiServerSendMessageResponse response = client.sendMessage(101L, "주말마다 캠핑 가요");
 
-        assertEquals(new AiServerSendMessageResponse("캠핑 좋죠."), response);
+        assertEquals(new AiServerSendMessageResponse(
+                "캠핑 좋죠.", 3, 20, false, 4, false, null, null, false), response);
         messageServer.verify();
+    }
+
+    @Test
+    void createAnalysis_requestsAnalysisEndpointAndParsesResponse() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/analysis"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer service-token"))
+                .andRespond(withSuccess("""
+                        {
+                          "profile": {"schemaVersion": "3.0", "userId": 10293},
+                          "summary": "캠핑과 핸드드립을 즐깁니다.",
+                          "keywords": {
+                            "taste": ["핸드드립", "가벼운 장비"],
+                            "interest": ["캠핑", "티타늄 머그컵"]
+                          },
+                          "correctionAvailable": true,
+                          "profileCompleteness": "sufficient",
+                          "missingSignals": []
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        AiServerAnalysisResponse response = client.createAnalysis(101L);
+
+        assertEquals("3.0", response.profile().schemaVersion());
+        assertEquals(10293L, response.profile().userId());
+        assertEquals("캠핑과 핸드드립을 즐깁니다.", response.summary());
+        assertEquals(new AiServerAnalysisKeywordsResponse(
+                List.of("핸드드립", "가벼운 장비"),
+                List.of("캠핑", "티타늄 머그컵")
+        ), response.keywords());
+        assertEquals(true, response.correctionAvailable());
+        server.verify();
     }
 
     @ParameterizedTest

@@ -1,4 +1,4 @@
-package kr.ktb.zura.needu.aichat.dto.request;
+package kr.ktb.zura.needu.aichat.client.dto.request;
 
 public record AiServerSendMessageRequest(String message) {
 }
