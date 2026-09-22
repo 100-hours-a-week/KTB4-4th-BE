@@ -97,7 +97,7 @@ class PersonalProductRepositoryTest {
     }
 
     private Product saveProduct(String name) {
-        return entityManager.persist(new Product(null, name, null, null, new BigDecimal("10000.00"), null, null, null));
+        return entityManager.persist(new Product(null, name, null, null, new BigDecimal("10000.00"), null, null));
     }
 
     private PersonalProduct savePersonalProduct(Long userId, String score, Product product) {

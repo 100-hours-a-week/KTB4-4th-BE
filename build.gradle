@@ -19,6 +19,7 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -40,8 +41,31 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+def integrationTestPattern = '*IntegrationTest'
+
 tasks.named('test') {
     useJUnitPlatform()
+    filter {
+        excludeTestsMatching integrationTestPattern
+    }
+}
+
+// 실제 MySQL이 필요하므로 check/build에 연결하지 않는다. CI의 release-check에서만 실행한다.
+tasks.register('integrationTest', Test) {
+    group = 'verification'
+    description = '실제 MySQL에 연결해 통합 테스트를 실행한다.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching integrationTestPattern
+    }
+
+    systemProperty 'spring.profiles.active', 'integration'
+
+    shouldRunAfter tasks.named('test')
 }
 
 tasks.named('bootJar') {

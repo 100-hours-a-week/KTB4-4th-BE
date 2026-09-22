@@ -1,13 +1,9 @@
 package kr.ktb.zura.needu.feedback.service;
 
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.util.UUID;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.feedback.dto.request.CreateErrorReportRequest;
-import kr.ktb.zura.needu.feedback.dto.request.ErrorContextRequest;
-import kr.ktb.zura.needu.feedback.dto.request.ErrorFeedbackRequest;
 import kr.ktb.zura.needu.feedback.dto.response.ErrorReportResponse;
 import kr.ktb.zura.needu.feedback.entity.ErrorReport;
 import kr.ktb.zura.needu.feedback.exception.FeedbackErrorCode;
@@ -28,13 +24,14 @@ public class ErrorReportService {
     private final ErrorReportRepository errorReportRepository;
 
     @Transactional
-    public ErrorReportResponse createErrorReport(Long userId, CreateErrorReportRequest request) {
-        ErrorContextRequest errorContext = request.errorContext();
-        LocalDateTime occurredAt = toLocalDateTime(errorContext.occurredAt());
-
-        validateDetailLength(request.feedback().detail());
-        validateNotDuplicated(userId, errorContext, occurredAt);
-        ErrorReport errorReport = saveErrorReport(toErrorReport(userId, errorContext, occurredAt, request.feedback()));
+    public ErrorReportResponse createErrorReport(
+            Long userId,
+            UUID idempotencyKey,
+            CreateErrorReportRequest request
+    ) {
+        validateDetailLength(request.detail());
+        validateNotDuplicated(userId, idempotencyKey);
+        ErrorReport errorReport = saveErrorReport(toErrorReport(userId, idempotencyKey, request));
 
         log.info("Error report created. userId={}, errorReportId={}", userId, errorReport.getId());
         return ErrorReportResponse.from(errorReport);
@@ -47,9 +44,8 @@ public class ErrorReportService {
         }
     }
 
-    private void validateNotDuplicated(Long userId, ErrorContextRequest errorContext, LocalDateTime occurredAt) {
-        boolean isDuplicated = errorReportRepository.existsByUserIdAndOccurrence(
-                userId, errorContext.errorCode(), errorContext.errorType(), errorContext.screenId(), occurredAt);
+    private void validateNotDuplicated(Long userId, UUID idempotencyKey) {
+        boolean isDuplicated = errorReportRepository.existsByUserIdAndIdempotencyKey(userId, idempotencyKey);
         if (isDuplicated) {
             throw new BusinessException(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_DUPLICATED);
         }
@@ -64,22 +60,12 @@ public class ErrorReportService {
         }
     }
 
-    // 클라이언트 오프셋 시각을 UTC가 아닌 서버 시간대의 LocalDateTime으로, 이중 변환 방지
-    private LocalDateTime toLocalDateTime(OffsetDateTime occurredAt) {
-        return occurredAt.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
-    }
-
-    private ErrorReport toErrorReport(Long userId, ErrorContextRequest errorContext, LocalDateTime occurredAt,
-                                      ErrorFeedbackRequest feedback) {
+    private ErrorReport toErrorReport(Long userId, UUID idempotencyKey, CreateErrorReportRequest request) {
         return new ErrorReport(
                 userId,
-                errorContext.errorCode(),
-                errorContext.errorType(),
-                errorContext.screenId(),
-                occurredAt,
-                errorContext.appVersion(),
-                feedback.problemType(),
-                feedback.detail()
+                idempotencyKey,
+                request.problemType(),
+                request.detail()
         );
     }
 }

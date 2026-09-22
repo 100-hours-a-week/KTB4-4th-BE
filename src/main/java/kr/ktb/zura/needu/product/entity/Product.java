@@ -47,9 +47,6 @@ public class Product {
     @Column(length = 2048)
     private String imageUrl;
 
-    @Column(length = 200)
-    private String sellerName;
-
     @Column(length = 2048)
     private String purchaseUrl;
 
@@ -68,14 +65,13 @@ public class Product {
     private LocalDateTime deletedAt;
 
     public Product(String externalId, String name, String category, String description, BigDecimal price,
-                   String imageUrl, String sellerName, String purchaseUrl) {
+                   String imageUrl, String purchaseUrl) {
         this.externalId = externalId;
         this.name = name;
         this.category = category;
         this.description = description;
         this.price = price;
         this.imageUrl = imageUrl;
-        this.sellerName = sellerName;
         this.purchaseUrl = purchaseUrl;
     }
 }

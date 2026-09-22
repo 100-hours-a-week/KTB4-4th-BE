@@ -136,7 +136,7 @@ class PersonalProductServiceTest {
     }
 
     private PersonalProduct createPersonalProduct(Long id, String score, long price) {
-        Product product = new Product(null, "상품" + id, null, null, BigDecimal.valueOf(price), null, null, null);
+        Product product = new Product(null, "상품" + id, null, null, BigDecimal.valueOf(price), null, null);
         PersonalProduct personalProduct = new PersonalProduct(USER_ID, product, new BigDecimal(score), null);
         // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.
         ReflectionTestUtils.setField(product, "id", id + 1000);

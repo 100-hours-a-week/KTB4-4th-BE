@@ -34,10 +34,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequestMapping("/api/v1/friends")
 public class FriendController {
 
-    private static final String FRIEND_FOUND_MESSAGE = "친구 정보를 조회했습니다.";
-    private static final String FRIENDS_FOUND_MESSAGE = "친구 목록 조회에 성공했습니다.";
-    private static final int MIN_PAGE_SIZE = 1;
-    private static final int MAX_PAGE_SIZE = 50;
     private static final String KAKAO_FRIEND_STATE = "kakaoFriendOAuthState";
     private static final String KAKAO_FRIEND_USER_ID = "kakaoFriendOAuthUserId";
     private static final String KAKAO_FRIEND_RETURN_URL = "kakaoFriendOAuthReturnUrl";
@@ -50,10 +46,10 @@ public class FriendController {
             @AuthenticationPrincipal Long userId,
             @RequestParam @Pattern(regexp = "birthday") String sort,
             @RequestParam(required = false) String cursor,
-            @RequestParam @Min(MIN_PAGE_SIZE) @Max(MAX_PAGE_SIZE) int size
+            @RequestParam @Min(FriendPageLimits.MIN_PAGE_SIZE) @Max(FriendPageLimits.MAX_PAGE_SIZE) int size
     ) {
         return ResponseEntity.ok(CursorApiResponse.of(
-                FRIENDS_FOUND_MESSAGE,
+                FriendResponseMessages.FRIENDS_FOUND,
                 friendService.findAllFriends(userId, cursor, size)
         ));
     }
@@ -63,7 +59,10 @@ public class FriendController {
             @AuthenticationPrincipal Long loginUserId,
             @PathVariable Long userId
     ) {
-        return ResponseEntity.ok(ApiResponse.of(FRIEND_FOUND_MESSAGE, friendService.findFriend(loginUserId, userId)));
+        return ResponseEntity.ok(ApiResponse.of(
+                FriendResponseMessages.FRIEND_FOUND,
+                friendService.findFriend(loginUserId, userId)
+        ));
     }
 
     @GetMapping("/kakao/authorize")

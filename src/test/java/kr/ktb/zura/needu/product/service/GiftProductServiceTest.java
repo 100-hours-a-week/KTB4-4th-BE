@@ -197,7 +197,7 @@ class GiftProductServiceTest {
     }
 
     private GiftProduct createGiftProduct(Long id, String score, long price) {
-        Product product = new Product(null, "상품" + id, "FASHION", null, BigDecimal.valueOf(price), null, null, null);
+        Product product = new Product(null, "상품" + id, "FASHION", null, BigDecimal.valueOf(price), null, null);
         GiftProduct giftProduct = new GiftProduct(
                 FRIEND_USER_ID, product, new BigDecimal(score), null, List.of("미니멀", "데일리"));
         // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.

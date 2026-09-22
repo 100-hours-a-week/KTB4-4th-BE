@@ -35,9 +35,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/ai/conversations")
 public class AiChatController {
 
-    private static final int MIN_PAGE_SIZE = 1;
-    private static final int MAX_PAGE_SIZE = 50;
-
     private final AiChatFacade aiChatFacade;
 
     @PostMapping
@@ -59,7 +56,7 @@ public class AiChatController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long conversationId,
             @RequestParam(required = false) String cursor,
-            @RequestParam @Min(MIN_PAGE_SIZE) @Max(MAX_PAGE_SIZE) int size
+            @RequestParam @Min(AiChatPageLimits.MIN_PAGE_SIZE) @Max(AiChatPageLimits.MAX_PAGE_SIZE) int size
     ) {
         return ResponseEntity.ok(CursorApiResponse.of(
                 AiChatResponseMessage.MESSAGES_FOUND.getMessage(),

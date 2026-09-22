@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.feedback.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.feedback.dto.response.ErrorReportResponse;
@@ -33,19 +34,11 @@ class ErrorReportControllerTest {
 
     private static final Long USER_ID = 1L;
     private static final String URL = "/api/v1/error-reports";
+    private static final UUID IDEMPOTENCY_KEY = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final String VALID_BODY = """
             {
-              "errorContext": {
-                "errorType": "NETWORK",
-                "errorCode": "NETWORK_DISCONNECTED",
-                "screenId": "NU-11",
-                "occurredAt": "2026-08-26T19:40:00+09:00",
-                "appVersion": "1.0.0"
-              },
-              "feedback": {
-                "problemType": "SCREEN_NOT_DISPLAYED",
-                "detail": "추천 목록이 열리지 않아요."
-              }
+              "problemType": "SCREEN_NOT_DISPLAYED",
+              "detail": "추천 목록이 열리지 않아요."
             }
             """;
 
@@ -57,7 +50,8 @@ class ErrorReportControllerTest {
 
     @Test
     void validRequest_createErrorReport_returnsCreatedWithErrorReportId() throws Exception {
-        given(errorReportService.createErrorReport(eq(USER_ID), any())).willReturn(new ErrorReportResponse(101L));
+        given(errorReportService.createErrorReport(eq(USER_ID), eq(IDEMPOTENCY_KEY), any()))
+                .willReturn(new ErrorReportResponse(101L));
 
         mockMvc.perform(postErrorReport(VALID_BODY))
                 .andExpect(status().isCreated())
@@ -66,27 +60,30 @@ class ErrorReportControllerTest {
     }
 
     @Test
-    void nestedObjectMissing_createErrorReport_returnsUnprocessableContent() throws Exception {
-        mockMvc.perform(postErrorReport("""
-                        {
-                          "errorContext": {
-                            "errorType": "NETWORK",
-                            "errorCode": "NETWORK_DISCONNECTED",
-                            "screenId": "NU-11",
-                            "occurredAt": "2026-08-26T19:40:00+09:00",
-                            "appVersion": "1.0.0"
-                          }
-                        }
-                        """))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+    void idempotencyKeyMissing_createErrorReport_returnsBadRequest() throws Exception {
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY)
+                        .with(authenticatedUser())
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
 
-        verify(errorReportService, never()).createErrorReport(anyLong(), any());
+        verify(errorReportService, never()).createErrorReport(anyLong(), any(), any());
+    }
+
+    @Test
+    void idempotencyKeyNotUuid_createErrorReport_returnsBadRequest() throws Exception {
+        mockMvc.perform(postErrorReport(VALID_BODY, "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+
+        verify(errorReportService, never()).createErrorReport(anyLong(), any(), any());
     }
 
     @Test
     void detailTooLarge_createErrorReport_returnsContentTooLarge() throws Exception {
-        given(errorReportService.createErrorReport(eq(USER_ID), any()))
+        given(errorReportService.createErrorReport(eq(USER_ID), eq(IDEMPOTENCY_KEY), any()))
                 .willThrow(new BusinessException(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_TOO_LARGE));
 
         mockMvc.perform(postErrorReport(VALID_BODY.replace("추천 목록이 열리지 않아요.", "가".repeat(501))))
@@ -98,12 +95,12 @@ class ErrorReportControllerTest {
     @Test
     void detailOver500CharactersWithOtherInvalidField_createErrorReport_returnsUnprocessableContent() throws Exception {
         String body = VALID_BODY.replace("추천 목록이 열리지 않아요.", "가".repeat(501))
-                .replace("\"screenId\": \"NU-11\",", "");
+                .replace("\"problemType\": \"SCREEN_NOT_DISPLAYED\",", "");
 
         mockMvc.perform(postErrorReport(body))
                 .andExpect(status().isUnprocessableContent());
 
-        verify(errorReportService, never()).createErrorReport(anyLong(), any());
+        verify(errorReportService, never()).createErrorReport(anyLong(), any(), any());
     }
 
     @Test
@@ -112,23 +109,15 @@ class ErrorReportControllerTest {
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
 
-        mockMvc.perform(postErrorReport(VALID_BODY.replace("\"screenId\": \"NU-11\",", "")))
+        mockMvc.perform(postErrorReport(VALID_BODY.replace("\"problemType\": \"SCREEN_NOT_DISPLAYED\",", "")))
                 .andExpect(status().isUnprocessableContent());
 
-        verify(errorReportService, never()).createErrorReport(anyLong(), any());
-    }
-
-    @Test
-    void malformedOccurredAt_createErrorReport_returnsBadRequest() throws Exception {
-        mockMvc.perform(postErrorReport(VALID_BODY.replace("2026-08-26T19:40:00+09:00", "2026/08/26 19:40")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
-                .andExpect(jsonPath("$.data").isEmpty());
+        verify(errorReportService, never()).createErrorReport(anyLong(), any(), any());
     }
 
     @Test
     void duplicatedErrorReport_createErrorReport_returnsConflict() throws Exception {
-        given(errorReportService.createErrorReport(eq(USER_ID), any()))
+        given(errorReportService.createErrorReport(eq(USER_ID), eq(IDEMPOTENCY_KEY), any()))
                 .willThrow(new BusinessException(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_DUPLICATED));
 
         mockMvc.perform(postErrorReport(VALID_BODY))
@@ -138,7 +127,12 @@ class ErrorReportControllerTest {
     }
 
     private static MockHttpServletRequestBuilder postErrorReport(String body) {
+        return postErrorReport(body, IDEMPOTENCY_KEY.toString());
+    }
+
+    private static MockHttpServletRequestBuilder postErrorReport(String body, String idempotencyKey) {
         return post(URL)
+                .header("Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .with(authenticatedUser())
