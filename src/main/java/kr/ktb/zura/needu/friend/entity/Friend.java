@@ -1,7 +1,12 @@
 package kr.ktb.zura.needu.friend.entity;
 
-import jakarta.persistence.*;
-import kr.ktb.zura.needu.user.entity.User;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -9,7 +14,8 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Getter
-@Table(name = "friends")
+@Table(name = "friends", uniqueConstraints =
+        @UniqueConstraint(name = "uk_friends_owner_friend", columnNames = {"owner_user_id", "friend_user_id"}))
 @NoArgsConstructor(access = PROTECTED)
 public class Friend {
 
@@ -18,20 +24,18 @@ public class Friend {
     @Column(nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "owner_user_id", nullable = false)
-    private User ownerUser;
+    @Column(name = "owner_user_id", nullable = false)
+    private Long ownerUserId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "friend_user_id", nullable = false)
-    private User friendUser;
+    @Column(name = "friend_user_id", nullable = false)
+    private Long friendUserId;
 
     @Column(name = "is_favorite", nullable = false)
     private boolean favorite = false;
 
-    public Friend(User ownerUser, User friendUser) {
-        this.ownerUser = ownerUser;
-        this.friendUser = friendUser;
+    public Friend(Long ownerUserId, Long friendUserId) {
+        this.ownerUserId = ownerUserId;
+        this.friendUserId = friendUserId;
     }
 
     public void markAsFavorite() {

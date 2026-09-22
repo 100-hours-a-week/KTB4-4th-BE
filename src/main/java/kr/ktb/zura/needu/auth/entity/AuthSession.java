@@ -1,8 +1,14 @@
 package kr.ktb.zura.needu.auth.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import kr.ktb.zura.needu.auth.type.RevokeReason;
-import kr.ktb.zura.needu.user.entity.User;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -23,9 +29,8 @@ public class AuthSession {
     @Column(nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Column(nullable = false, unique = true, length = 32)
     private byte[] refreshTokenHash;
@@ -57,15 +62,14 @@ public class AuthSession {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    public AuthSession(User user, byte[] refreshTokenHash, String deviceName, byte[] ipAddress, LocalDateTime refreshExpiresAt) {
-        this.user = user;
+    public AuthSession(Long userId, byte[] refreshTokenHash, LocalDateTime refreshExpiresAt) {
+        this.userId = userId;
         this.refreshTokenHash = refreshTokenHash;
-        this.deviceName = deviceName;
-        this.ipAddress = ipAddress;
         this.refreshExpiresAt = refreshExpiresAt;
     }
 
-    public void recordUse() {
+    public void rotateRefreshToken(byte[] refreshTokenHash) {
+        this.refreshTokenHash = refreshTokenHash;
         this.lastUsedAt = LocalDateTime.now();
     }
 
@@ -79,6 +83,6 @@ public class AuthSession {
     }
 
     public boolean isExpired() {
-        return this.refreshExpiresAt.isBefore(LocalDateTime.now());
+        return !this.refreshExpiresAt.isAfter(LocalDateTime.now());
     }
 }

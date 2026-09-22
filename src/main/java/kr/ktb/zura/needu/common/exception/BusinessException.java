@@ -9,11 +9,15 @@ public class BusinessException extends RuntimeException {
     private final Object data;
 
     public BusinessException(ErrorCode errorCode) {
-        this(errorCode, null);
+        this(errorCode, null, null);
     }
 
     public BusinessException(ErrorCode errorCode, Object data) {
-        super(errorCode.getMessage());
+        this(errorCode, data, null);
+    }
+
+    public BusinessException(ErrorCode errorCode, Object data, Throwable cause) {
+        super(errorCode.getMessage(), cause);
         this.errorCode = errorCode;
         this.data = data;
     }

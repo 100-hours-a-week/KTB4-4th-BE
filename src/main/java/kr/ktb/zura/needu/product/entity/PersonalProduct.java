@@ -14,7 +14,10 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "personal_products")
+@Table(
+        name = "personal_products",
+        indexes = @Index(name = "idx_personal_products_user_id_score_id", columnList = "user_id, score, id")
+)
 @NoArgsConstructor(access = PROTECTED)
 public class PersonalProduct {
 
@@ -42,4 +45,11 @@ public class PersonalProduct {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    public PersonalProduct(Long userId, Product product, BigDecimal score, String reason) {
+        this.userId = userId;
+        this.product = product;
+        this.score = score;
+        this.reason = reason;
+    }
 }

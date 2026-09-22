@@ -10,6 +10,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -24,7 +25,7 @@ public class User {
     @Column(nullable = false)
     private Long id;
 
-    @Column
+    @Column(unique = true)
     private Long externalId;
 
     @Column(nullable = false, length = 50)
@@ -41,17 +42,23 @@ public class User {
     private LocalDate birthDate;
 
     @Column(nullable = false)
-    private boolean onboardingCompleted = false;
+    private boolean onboardingCompleted = true; // V2 온보딩 추가 기준, true -> false 변경 필요
+
+    @Column(nullable = false)
+    private boolean tasteAnalysisCompleted = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private UserStatus status = UserStatus.ONBOARDING;
+    private UserStatus status = UserStatus.ACTIVE; // V2 온보딩 추가 기준, ACTIVE -> ONBOARDING 변경 필요
 
     @Column
     private LocalDateTime blockedAt;
 
     @Column
     private LocalDateTime lastLoginAt;
+
+    @Column
+    private LocalDateTime kakaoFriendSyncedAt;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -68,9 +75,8 @@ public class User {
         this.externalId = externalId;
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
-        this.gender = gender;
+        this.gender = gender == null ? Gender.NONE : gender;
         this.birthDate = birthDate;
-        this.onboardingCompleted = false;
     }
 
     public void completeOnboarding() {
@@ -78,8 +84,16 @@ public class User {
         this.status = UserStatus.ACTIVE;
     }
 
+    public void completeTasteAnalysis() {
+        this.tasteAnalysisCompleted = true;
+    }
+
     public void recordLogin() {
         this.lastLoginAt = LocalDateTime.now();
+    }
+
+    public void completeKakaoFriendSync() {
+        this.kakaoFriendSyncedAt = LocalDateTime.now(ZoneOffset.UTC);
     }
 
     public void block() {

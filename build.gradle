@@ -22,8 +22,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'org.springframework.boot:spring-boot-starter-restclient'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'com.mysql:mysql-connector-j'
     annotationProcessor 'org.projectlombok:lombok'
@@ -31,11 +34,39 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testRuntimeOnly 'com.h2database:h2'
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+def integrationTestPattern = '*IntegrationTest'
+
 tasks.named('test') {
     useJUnitPlatform()
+    filter {
+        excludeTestsMatching integrationTestPattern
+    }
+}
+
+// 실제 MySQL이 필요하므로 check/build에 연결하지 않는다. CI의 release-check에서만 실행한다.
+tasks.register('integrationTest', Test) {
+    group = 'verification'
+    description = '실제 MySQL에 연결해 통합 테스트를 실행한다.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching integrationTestPattern
+    }
+
+    systemProperty 'spring.profiles.active', 'integration'
+
+    shouldRunAfter tasks.named('test')
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'app.jar'
 }
