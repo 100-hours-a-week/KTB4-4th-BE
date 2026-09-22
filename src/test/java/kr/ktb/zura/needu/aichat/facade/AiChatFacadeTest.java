@@ -40,6 +40,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -285,8 +287,8 @@ class AiChatFacadeTest {
 
     @Test
     void inaccessibleConversation_sendMessage_doesNotHoldLock() {
-        given(aiChatRoomService.findActiveRoom(USER_ID, ROOM_ID))
-                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN));
+        willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN))
+                .given(aiChatRoomService).validateActiveRoom(USER_ID, ROOM_ID);
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -325,8 +327,8 @@ class AiChatFacadeTest {
 
     @Test
     void inaccessibleConversation_findAllMessages_doesNotReadMessages() {
-        given(aiChatRoomService.findActiveRoom(USER_ID, ROOM_ID))
-                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN));
+        willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN))
+                .given(aiChatRoomService).validateActiveRoom(USER_ID, ROOM_ID);
 
         assertThatThrownBy(() -> aiChatFacade.findAllMessages(USER_ID, ROOM_ID, null, 20))
                 .isInstanceOf(BusinessException.class)
@@ -362,8 +364,7 @@ class AiChatFacadeTest {
     }
 
     private void givenActiveRoom() {
-        given(aiChatRoomService.findActiveRoom(USER_ID, ROOM_ID))
-                .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE, LocalDateTime.now().plusMinutes(29)));
+        willDoNothing().given(aiChatRoomService).validateActiveRoom(USER_ID, ROOM_ID);
     }
 
     private static SendMessageRequest sendMessageRequest() {

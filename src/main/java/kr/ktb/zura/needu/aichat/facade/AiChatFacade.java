@@ -65,13 +65,13 @@ public class AiChatFacade {
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
             Long userId, Long conversationId, String cursor, int size) {
-        aiChatRoomService.findActiveRoom(userId, conversationId);
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
         return aiMessageService.findAllMessages(conversationId, cursor, size);
     }
 
     public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
-        aiChatRoomService.findActiveRoom(userId, conversationId);
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
         if (!aiConversationLock.tryLock(conversationId)) {
             log.info("AI message already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
@@ -170,7 +170,7 @@ public class AiChatFacade {
     }
 
     public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
-        aiChatRoomService.findActiveRoom(userId, conversationId);
+        aiChatRoomService.validateActiveRoom(userId, conversationId);
         return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
     }
 
