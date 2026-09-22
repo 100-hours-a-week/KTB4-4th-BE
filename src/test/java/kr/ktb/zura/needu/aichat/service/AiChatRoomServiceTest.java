@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // 유일 제약과 flush 순서가 핵심이라 실제 JPA(H2) 위에서 검증한다.
@@ -135,47 +136,46 @@ class AiChatRoomServiceTest {
     }
 
     @Test
-    void activeRoomOwnedByUser_findActiveRoom_returnsRoom() {
+    void activeRoomOwnedByUser_validateActiveRoom_completes() {
         AiChatRoom activeRoom = activateRoom(USER_ID);
 
-        AiChatRoom room = aiChatRoomService.findActiveRoom(USER_ID, activeRoom.getId());
-
-        assertThat(room.getId()).isEqualTo(activeRoom.getId());
+        assertThatCode(() -> aiChatRoomService.validateActiveRoom(USER_ID, activeRoom.getId()))
+                .doesNotThrowAnyException();
     }
 
     @Test
-    void unknownRoomId_findActiveRoom_throwsConversationNotFound() {
-        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, UNKNOWN_ROOM_ID))
+    void unknownRoomId_validateActiveRoom_throwsConversationNotFound() {
+        assertThatThrownBy(() -> aiChatRoomService.validateActiveRoom(USER_ID, UNKNOWN_ROOM_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
     }
 
     @Test
-    void roomOwnedByAnotherUser_findActiveRoom_throwsConversationForbidden() {
+    void roomOwnedByAnotherUser_validateActiveRoom_throwsConversationForbidden() {
         AiChatRoom activeRoom = activateRoom(OTHER_USER_ID);
 
-        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, activeRoom.getId()))
+        assertThatThrownBy(() -> aiChatRoomService.validateActiveRoom(USER_ID, activeRoom.getId()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
     }
 
     @Test
-    void pendingRoom_findActiveRoom_throwsConversationNotFound() {
+    void pendingRoom_validateActiveRoom_throwsConversationNotFound() {
         AiChatRoom pendingRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
 
-        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, pendingRoom.getId()))
+        assertThatThrownBy(() -> aiChatRoomService.validateActiveRoom(USER_ID, pendingRoom.getId()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
     }
 
     @Test
-    void purgeAtPassed_findActiveRoom_throwsConversationNotFound() {
+    void purgeAtPassed_validateActiveRoom_throwsConversationNotFound() {
         AiChatRoom activeRoom = activateRoom(USER_ID);
         jdbcTemplate.update("update ai_chat_rooms set purge_at = ? where id = ?",
                 LocalDateTime.now().minusMinutes(1), activeRoom.getId());
         entityManager.clear();
 
-        assertThatThrownBy(() -> aiChatRoomService.findActiveRoom(USER_ID, activeRoom.getId()))
+        assertThatThrownBy(() -> aiChatRoomService.validateActiveRoom(USER_ID, activeRoom.getId()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
     }

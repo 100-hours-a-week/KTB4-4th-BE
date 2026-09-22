@@ -77,9 +77,9 @@ public class AiChatRoomService {
         return room;
     }
 
-    // 메시지를 보낼 수 있는 상태(소유자 본인, ACTIVE, 만료 전)인지 확인한다
+    // 대화 작업이 가능한 상태(소유자 본인, ACTIVE, 만료 전)인지 확인한다
     @Transactional(readOnly = true)
-    public AiChatRoom findActiveRoom(Long userId, Long roomId) {
+    public void validateActiveRoom(Long userId, Long roomId) {
         AiChatRoom room = aiChatRoomRepository.findById(roomId)
                 .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND));
@@ -90,7 +90,6 @@ public class AiChatRoomService {
         if (!room.isActive() || room.isExpiredAt(LocalDateTime.now())) {
             throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
         }
-        return room;
     }
 
     @Transactional
