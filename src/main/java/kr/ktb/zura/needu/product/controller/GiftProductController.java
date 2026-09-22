@@ -22,10 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/users/{userId}/gift-recommendations")
 public class GiftProductController {
 
-    private static final String GIFT_PRODUCTS_FOUND_MESSAGE = "추천 상품을 조회했습니다.";
-    private static final int MIN_PAGE_SIZE = 1;
-    private static final int MAX_PAGE_SIZE = 50;
-
     private final GiftProductService giftProductService;
 
     @GetMapping
@@ -35,11 +31,11 @@ public class GiftProductController {
             @RequestParam @PositiveOrZero long minPrice,
             @RequestParam @PositiveOrZero long maxPrice,
             @RequestParam(required = false) String cursor,
-            @RequestParam @Min(MIN_PAGE_SIZE) @Max(MAX_PAGE_SIZE) int size
+            @RequestParam @Min(GiftProductPageLimits.MIN_PAGE_SIZE) @Max(GiftProductPageLimits.MAX_PAGE_SIZE) int size
     ) {
         GiftProductSearchCondition condition = new GiftProductSearchCondition(minPrice, maxPrice, cursor, size);
         return ResponseEntity.ok(CursorApiResponse.of(
-                GIFT_PRODUCTS_FOUND_MESSAGE,
+                ProductResponseMessages.GIFT_PRODUCTS_FOUND,
                 giftProductService.findAllGiftProducts(loginUserId, userId, condition)
         ));
     }
