@@ -1,7 +1,6 @@
 package kr.ktb.zura.needu.user.service;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -40,31 +39,29 @@ public class UserService {
     }
 
     public void validateAuthenticatableUser(Long userId) {
-        findAuthenticatableUser(userId);
+        validateLoginAvailableUser(findUser(userId));
     }
 
     public UserResponse findAuthenticatedUser(Long userId) {
-        return UserResponse.from(findAuthenticatableUser(userId));
+        User user = findUser(userId);
+        validateLoginAvailableUser(user);
+        return UserResponse.from(user);
+    }
+
+    public void validateActiveUser(Long userId) {
+        validateActiveUser(findUser(userId));
     }
 
     public UserSummaryResponse findUserSummary(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+        User user = findUser(userId);
         validateActiveUser(user);
-
         return UserSummaryResponse.from(user);
     }
 
     public Optional<UserDetailResponse> findUserById(Long userId) {
         return userRepository.findById(userId)
-                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .filter(User::isActive)
                 .map(UserDetailResponse::from);
-    }
-
-    public List<UserResponse> findAllUsers(Collection<Long> userIds) {
-        return userRepository.findAllById(userIds).stream()
-                .map(UserResponse::from)
-                .toList();
     }
 
     public Map<Long, Long> findUserIdsByExternalIds(Collection<Long> externalIds) {
@@ -73,12 +70,11 @@ public class UserService {
     }
 
     public boolean isKakaoFriendSynced(Long userId) {
-        return findUser(userId).getKakaoFriendSyncedAt() != null;
+        return findUser(userId).isKakaoFriendSynced();
     }
 
     public void validateKakaoIdentity(Long userId, Long kakaoUserId) {
-        User user = findUser(userId);
-        if (!user.getExternalId().equals(kakaoUserId)) {
+        if (!findUser(userId).hasExternalId(kakaoUserId)) {
             throw new BusinessException(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH);
         }
     }
@@ -86,6 +82,11 @@ public class UserService {
     @Transactional
     public void completeKakaoFriendSync(Long userId) {
         findUser(userId).completeKakaoFriendSync();
+    }
+
+    @Transactional
+    public void completeTasteAnalysis(Long userId) {
+        findUser(userId).completeTasteAnalysis();
     }
 
     private void validateLoginAvailableUser(User user) {
@@ -100,12 +101,6 @@ public class UserService {
     private User findUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-    }
-
-    private User findAuthenticatableUser(Long userId) {
-        User user = findUser(userId);
-        validateLoginAvailableUser(user);
-        return user;
     }
 
     private void validateActiveUser(User user) {

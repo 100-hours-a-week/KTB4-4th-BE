@@ -21,7 +21,7 @@ public class PersonalProductService {
     private final PersonalProductRepository personalProductRepository;
 
     public CursorPageResponse<PersonalProductResponse> findAllPersonalProducts(Long userId, String cursor, int size) {
-        userService.findUserSummary(userId);
+        userService.validateActiveUser(userId);
 
         // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회한다.
         List<PersonalProduct> personalProducts = findPersonalProducts(userId, cursor, Limit.of(size + 1));

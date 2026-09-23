@@ -1,4 +1,11 @@
 package kr.ktb.zura.needu.aichat.client.dto.response;
 
-public record AiServerStartSessionResponse(Long sessionId, String greeting, Integer maxTurns) {
+import java.time.LocalDateTime;
+
+public record AiServerStartSessionResponse(
+        Long sessionId,
+        String greeting,
+        LocalDateTime createdAt,
+        Integer maxTurns
+) {
 }

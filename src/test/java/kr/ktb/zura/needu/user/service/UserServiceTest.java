@@ -16,6 +16,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -125,6 +126,60 @@ class UserServiceTest {
     }
 
     @Test
+    void onboardingUser_validateActiveUser_throwsOnboardingRequired() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createOnboardingUser()));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.validateActiveUser(1L));
+
+        assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
+    void missingUser_validateActiveUser_throwsUserNotFound() {
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.validateActiveUser(1L));
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void activeUser_validateActiveUser_passes() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+
+        assertDoesNotThrow(() -> userService.validateActiveUser(1L));
+    }
+
+    @Test
+    void sameKakaoAccount_validateKakaoIdentity_passes() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+
+        assertDoesNotThrow(() -> userService.validateKakaoIdentity(1L, 42L));
+    }
+
+    @Test
+    void differentKakaoAccount_validateKakaoIdentity_throwsKakaoAccountMismatch() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.validateKakaoIdentity(1L, 99L));
+
+        assertEquals(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH, exception.getErrorCode());
+    }
+
+    @Test
+    void userWithoutExternalId_validateKakaoIdentity_throwsKakaoAccountMismatch() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(null, "니듀", null, Gender.NONE, null)));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.validateKakaoIdentity(1L, 99L));
+
+        assertEquals(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH, exception.getErrorCode());
+    }
+
+    @Test
     void authenticatedUser_findAuthenticatedUser_returnsSessionUser() {
         User user = new User(42L, "니듀", null, Gender.NONE, LocalDate.of(2000, 1, 1));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
@@ -148,6 +203,16 @@ class UserServiceTest {
         assertEquals(LocalDate.of(2000, 2, 29), response.birthDate());
         assertTrue(response.tasteAnalysisCompleted());
         verify(userRepository).findById(1L);
+    }
+
+    @Test
+    void existingUser_completeTasteAnalysis_marksCompleted() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.completeTasteAnalysis(1L);
+
+        assertTrue(user.isTasteAnalysisCompleted());
     }
 
     @Test

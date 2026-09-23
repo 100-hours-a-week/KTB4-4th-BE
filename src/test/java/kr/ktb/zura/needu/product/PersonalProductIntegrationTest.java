@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
+import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.type.Gender;
@@ -176,7 +177,8 @@ class PersonalProductIntegrationTest {
 
     private PersonalProduct savePersonalProduct(Long userId, String score, String name, String price) {
         Product product = new Product(
-                null, name, null, null, new BigDecimal(price), "https://image.test/product.png", null);
+                PlatformType.COUPANG, name, name, null, null, new BigDecimal(price),
+                "https://image.test/product.png", null, null);
         transactionTemplate.executeWithoutResult(status -> entityManager.persist(product));
         return personalProductRepository.save(new PersonalProduct(userId, product, new BigDecimal(score), null));
     }

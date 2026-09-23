@@ -11,6 +11,7 @@ import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
+import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -47,7 +49,6 @@ class PersonalProductServiceTest {
 
     @Test
     void moreItemsThanSize_findAllPersonalProducts_returnsHasNextWithLastItemCursor() {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         List<PersonalProduct> personalProducts = List.of(
                 createPersonalProduct(30L, "0.900000", 5200),
                 createPersonalProduct(20L, "0.800000", 3100),
@@ -67,7 +68,6 @@ class PersonalProductServiceTest {
 
     @Test
     void itemsNotExceedingSize_findAllPersonalProducts_returnsLastPage() {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         given(personalProductRepository.findAllByUserId(USER_ID, Limit.of(3)))
                 .willReturn(List.of(createPersonalProduct(30L, "0.900000", 5200)));
 
@@ -82,7 +82,6 @@ class PersonalProductServiceTest {
 
     @Test
     void cursorGiven_findAllPersonalProducts_findsItemsAfterCursor() {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         String cursor = new PersonalProductCursor(new BigDecimal("0.800000"), 20L).encode();
         given(personalProductRepository.findAllByUserIdAfterCursor(
                 USER_ID, new BigDecimal("0.800000"), 20L, Limit.of(3)))
@@ -98,7 +97,6 @@ class PersonalProductServiceTest {
 
     @Test
     void noPersonalProducts_findAllPersonalProducts_returnsEmptyItems() {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         given(personalProductRepository.findAllByUserId(USER_ID, Limit.of(21))).willReturn(List.of());
 
         CursorPageResponse<PersonalProductResponse> response =
@@ -111,7 +109,6 @@ class PersonalProductServiceTest {
 
     @Test
     void invalidCursor_findAllPersonalProducts_throwsInvalidRequest() {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
 
         assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, "invalid!!", 20))
                 .isInstanceOf(BusinessException.class)
@@ -122,7 +119,7 @@ class PersonalProductServiceTest {
 
     @Test
     void blockedUser_findAllPersonalProducts_throwsUserBlocked() {
-        given(userService.findUserSummary(USER_ID)).willThrow(new BusinessException(UserErrorCode.USER_BLOCKED));
+        willThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).given(userService).validateActiveUser(USER_ID);
 
         assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, null, 20))
                 .isInstanceOf(BusinessException.class)
@@ -131,12 +128,10 @@ class PersonalProductServiceTest {
         verifyNoInteractions(personalProductRepository);
     }
 
-    private UserSummaryResponse createUserSummary() {
-        return new UserSummaryResponse(USER_ID, "니듀", LocalDate.of(2000, 1, 1), true);
-    }
-
     private PersonalProduct createPersonalProduct(Long id, String score, long price) {
-        Product product = new Product(null, "상품" + id, null, null, BigDecimal.valueOf(price), null, null);
+        Product product = new Product(
+                PlatformType.COUPANG, String.valueOf(id), "상품" + id, null, null,
+                BigDecimal.valueOf(price), null, null, null);
         PersonalProduct personalProduct = new PersonalProduct(USER_ID, product, new BigDecimal(score), null);
         // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.
         ReflectionTestUtils.setField(product, "id", id + 1000);

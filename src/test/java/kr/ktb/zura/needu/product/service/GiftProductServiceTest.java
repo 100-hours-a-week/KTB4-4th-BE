@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
+import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -137,7 +139,6 @@ class GiftProductServiceTest {
 
     @Test
     void notFriend_findAllGiftProducts_throwsFriendNotFoundWithoutFindingProducts() {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         given(friendService.findFriend(USER_ID, FRIEND_USER_ID))
                 .willThrow(new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
 
@@ -173,7 +174,7 @@ class GiftProductServiceTest {
 
     @Test
     void blockedLoginUser_findAllGiftProducts_throwsUserBlocked() {
-        given(userService.findUserSummary(USER_ID)).willThrow(new BusinessException(UserErrorCode.USER_BLOCKED));
+        willThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).given(userService).validateActiveUser(USER_ID);
 
         assertThatThrownBy(() -> giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 20)))
                 .isInstanceOf(BusinessException.class)
@@ -183,7 +184,6 @@ class GiftProductServiceTest {
     }
 
     private void givenFriend(boolean tasteAnalysisCompleted) {
-        given(userService.findUserSummary(USER_ID)).willReturn(createUserSummary());
         given(friendService.findFriend(USER_ID, FRIEND_USER_ID)).willReturn(
                 new FriendDetailResponse(FRIEND_USER_ID, "친구", null, tasteAnalysisCompleted, null));
     }
@@ -192,12 +192,10 @@ class GiftProductServiceTest {
         return new GiftProductSearchCondition(30000L, 50000L, cursor, size);
     }
 
-    private UserSummaryResponse createUserSummary() {
-        return new UserSummaryResponse(USER_ID, "니듀", LocalDate.of(2000, 1, 1), true);
-    }
-
     private GiftProduct createGiftProduct(Long id, String score, long price) {
-        Product product = new Product(null, "상품" + id, "FASHION", null, BigDecimal.valueOf(price), null, null);
+        Product product = new Product(
+                PlatformType.COUPANG, String.valueOf(id), "상품" + id, "FASHION", null,
+                BigDecimal.valueOf(price), null, null, null);
         GiftProduct giftProduct = new GiftProduct(
                 FRIEND_USER_ID, product, new BigDecimal(score), null, List.of("미니멀", "데일리"));
         // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.

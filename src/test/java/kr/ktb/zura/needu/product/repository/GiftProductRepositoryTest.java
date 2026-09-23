@@ -6,6 +6,7 @@ import java.util.List;
 
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.Product;
+import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,7 +109,9 @@ class GiftProductRepositoryTest {
     }
 
     private Product saveProduct(String name, String price) {
-        return entityManager.persist(new Product(null, name, "LIVING", null, new BigDecimal(price), null, null));
+        return entityManager.persist(new Product(
+                PlatformType.COUPANG, name, name, "LIVING", null,
+                new BigDecimal(price), null, null, null));
     }
 
     private GiftProduct saveGiftProduct(Long userId, String score, Product product) {

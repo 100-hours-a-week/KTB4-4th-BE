@@ -5,7 +5,9 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
@@ -16,7 +18,7 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
-import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationResponse;
+import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -26,6 +28,8 @@ import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.product.service.ProductRecommendationService;
+import kr.ktb.zura.needu.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,17 +45,23 @@ public class AiChatFacade {
     private final AiConversationLock aiConversationLock;
     private final AiChatClient aiChatClient;
     private final Duration messageRetryAfter;
+    private final ProductRecommendationService productRecommendationService;
+    private final UserService userService;
 
     public AiChatFacade(AiChatRoomService aiChatRoomService,
                         AiMessageService aiMessageService,
                         AiConversationLock aiConversationLock,
                         AiChatClient aiChatClient,
+                        ProductRecommendationService productRecommendationService,
+                        UserService userService,
                         @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter) {
         this.aiChatRoomService = aiChatRoomService;
         this.aiMessageService = aiMessageService;
         this.aiConversationLock = aiConversationLock;
         this.aiChatClient = aiChatClient;
         this.messageRetryAfter = messageRetryAfter;
+        this.productRecommendationService = productRecommendationService;
+        this.userService = userService;
     }
 
     public AiConversationStartResult startOrResumeConversation(Long userId) {
@@ -93,12 +103,15 @@ public class AiChatFacade {
             return findSentReply(sentMessage.get());
         }
         AiMessage userMessage = createUserMessage(conversationId, request);
-        String reply = requestReply(userId, conversationId, request.content());
-        AiMessage aiMessage = aiMessageService.createReply(conversationId, userMessage.getId(), reply);
+        AiServerSendMessageResponse response = requestReply(userId, conversationId, request.content());
+        AiMessage aiMessage = aiMessageService.createReply(
+                conversationId, userMessage.getId(), toReply(response));
         aiChatRoomService.extendSession(conversationId);
+        boolean inputLocked = Boolean.TRUE.equals(response.inputLocked());
+        AnalysisResultResponse analysis = inputLocked ? requestAnalysis(userId, conversationId) : null;
         log.info("AI message replied. userId={}, conversationId={}, messageId={}",
                 userId, conversationId, aiMessage.getId());
-        return AiMessageResponse.from(aiMessage);
+        return AiMessageResponse.from(aiMessage, inputLocked, analysis);
     }
 
     // 같은 clientMessageId로 다시 들어온 요청 => AI를 다시 호출하지 않고 이미 저장한 답변을 그대로 반환한다
@@ -117,9 +130,11 @@ public class AiChatFacade {
         }
     }
 
-    private String requestReply(Long userId, Long conversationId, String content) {
+    private AiServerSendMessageResponse requestReply(Long userId, Long conversationId, String content) {
         try {
-            return toReply(aiChatClient.sendMessage(conversationId, content));
+            AiServerSendMessageResponse response = aiChatClient.sendMessage(userId, conversationId, content);
+            toReply(response);
+            return response;
         } catch (BusinessException e) {
             if (!(e.getErrorCode() instanceof AiChatErrorCode errorCode)) {
                 throw e;
@@ -137,6 +152,16 @@ public class AiChatFacade {
                 throw new TooManyRequestsException(messageRetryAfter.toSeconds());
             }
             throw e;
+        }
+    }
+
+    private AnalysisResultResponse requestAnalysis(Long userId, Long conversationId) {
+        try {
+            return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
+        } catch (BusinessException e) {
+            log.warn("AI analysis failed after message reply. userId={}, conversationId={}, code={}",
+                    userId, conversationId, e.getErrorCode().name());
+            return null;
         }
     }
 
@@ -186,20 +211,49 @@ public class AiChatFacade {
 
     public AnalysisResultResponse patchAnalyze(Long userId, Long conversationId, PatchAnalyzeMessageRequest request) {
         aiChatRoomService.validateActiveRoom(userId, conversationId);
-        return toAnalysisResult(aiChatClient.patchAnalyze(conversationId, new AiServerPatchAnalysisRequest()));
+        return toAnalysisResult(aiChatClient.patchAnalyze(conversationId,
+                new AiServerPatchAnalysisRequest(
+                        userId,
+                        request.summary(),
+                        new AiServerAnalysisKeywordsRequest(
+                                request.keywords().taste(), request.keywords().interest()))));
     }
 
-    public ProductRecommendationResponse confirmAnalysis(Long userId, Long conversationId) {
+    public ProductRecommendationStatusResponse confirmAnalysis(Long userId, Long conversationId) {
         aiChatRoomService.validateActiveRoom(userId, conversationId);
-        return ProductRecommendationResponse.from(aiChatClient.confirmAnalysis(conversationId));
+        AiServerCloseSessionResponse response = aiChatClient.confirmAnalysis(userId, conversationId);
+        validateRecommendations(response);
+        productRecommendationService.saveRecommendations(
+                userId,
+                response.recommendations().self(),
+                response.recommendations().gift(),
+                response.keywords().taste());
+        userService.completeTasteAnalysis(userId);
+        return ProductRecommendationStatusResponse.success();
+    }
+
+    private void validateRecommendations(AiServerCloseSessionResponse response) {
+        if (response.recommendations() == null
+                || response.recommendations().self() == null
+                || response.recommendations().self().items() == null
+                || response.recommendations().gift() == null
+                || response.recommendations().gift().items() == null
+                || response.recommendations().self().items().stream()
+                        .anyMatch(item -> item == null || item.score() == null)
+                || response.recommendations().gift().items().stream()
+                        .anyMatch(item -> item == null || item.score() == null)
+                || response.keywords() == null
+                || response.keywords().taste() == null) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+        }
     }
 
     private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {
-        if (response.summary() == null || response.summary().isBlank()
-                || response.keywords() == null
-                || response.keywords().taste() == null
-                || response.keywords().interest() == null
-                || response.correctionAvailable() == null) {
+        if (response.profile() == null
+                || response.profile().keywords() == null
+                || response.profile().keywords().taste() == null
+                || response.profile().keywords().interest() == null
+                || response.profile().correctionAvailable() == null) {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
         return AnalysisResultResponse.from(response);
