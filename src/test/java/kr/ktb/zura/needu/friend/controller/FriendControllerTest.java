@@ -4,8 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
-import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
@@ -48,8 +48,8 @@ class FriendControllerTest {
     void friendsExist_findAllFriends_returnsBirthdayPage() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(
                 FRIEND_USER_ID, "친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29), true);
-        given(friendService.findAllFriends(LOGIN_USER_ID, null, 20))
-                .willReturn(new CursorPageResponse<>(List.of(friend), "next", true));
+        given(friendService.findAllFriends(LOGIN_USER_ID, "birthday", null, 20))
+                .willReturn(new FriendListResponse(List.of(friend), true, "next", true));
 
         mockMvc.perform(get(LIST_URL)
                         .param("sort", "birthday")
@@ -61,15 +61,19 @@ class FriendControllerTest {
                 .andExpect(jsonPath("$.data.items[0].name").value("친구"))
                 .andExpect(jsonPath("$.data.items[0].birthDate").value("2000-02-29"))
                 .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(true))
                 .andExpect(jsonPath("$.hasNext").value(true))
                 .andExpect(jsonPath("$.nextCursor").value("next"));
     }
 
     @Test
-    void missingSort_findAllFriends_returnsBadRequest() throws Exception {
+    void missingSort_findAllFriends_returnsDefaultNamePage() throws Exception {
+        given(friendService.findAllFriends(LOGIN_USER_ID, null, null, 20))
+                .willReturn(new FriendListResponse(List.of(), false, null, false));
+
         mockMvc.perform(get(LIST_URL).param("size", "20").with(authenticatedUser()))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isEmpty());
     }
 
     @Test

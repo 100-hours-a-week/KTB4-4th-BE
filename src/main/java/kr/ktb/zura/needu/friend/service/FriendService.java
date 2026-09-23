@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
@@ -40,22 +41,48 @@ public class FriendService {
                 .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
     }
 
-    public CursorPageResponse<FriendSummaryResponse> findAllFriends(Long userId, String cursor, int size) {
-        userService.findUserSummary(userId);
+    public FriendListResponse findAllFriends(Long userId, String sort, String cursor, int size) {
+        userService.validateActiveUser(userId);
+        boolean isKakaoFriendSynced = userService.isKakaoFriendSynced(userId);
 
-        FriendCursor decodedCursor = cursor == null ? null : FriendCursor.decode(cursor);
-        LocalDate referenceDate = decodedCursor == null ? LocalDate.now(KOREA_ZONE) : decodedCursor.referenceDate();
-        int currentBirthdayKey = FriendCursor.birthdayKey(referenceDate);
+        boolean isBirthdaySort = "birthday".equals(sort);
         Limit limit = Limit.of(size + 1);
-        List<FriendSummaryResponse> friends = decodedCursor == null
-                ? friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(userId, currentBirthdayKey, limit)
-                : friendRepository.findAllByOwnerUserIdAfterBirthdayCursor(
-                        userId, currentBirthdayKey, decodedCursor.sortKey(), decodedCursor.userId(), limit);
+        FriendCursor birthdayCursor = isBirthdaySort && cursor != null ? FriendCursor.decode(cursor) : null;
+        LocalDate referenceDate = isBirthdaySort
+                ? birthdayCursor == null ? LocalDate.now(KOREA_ZONE) : birthdayCursor.referenceDate()
+                : null;
+        List<FriendSummaryResponse> friends = isBirthdaySort
+                ? findAllByBirthday(userId, birthdayCursor, referenceDate, limit)
+                : findAllByName(userId, cursor, limit);
 
         boolean hasNext = friends.size() > size;
         List<FriendSummaryResponse> pageItems = hasNext ? friends.subList(0, size) : friends;
-        String nextCursor = hasNext ? FriendCursor.from(referenceDate, pageItems.getLast()).encode() : null;
-        return new CursorPageResponse<>(pageItems, nextCursor, hasNext);
+        String nextCursor = hasNext
+                ? isBirthdaySort
+                        ? FriendCursor.from(referenceDate, pageItems.getLast()).encode()
+                        : FriendNameCursor.from(pageItems.getLast()).encode()
+                : null;
+        return FriendListResponse.from(
+                new CursorPageResponse<>(pageItems, nextCursor, hasNext), isKakaoFriendSynced);
+    }
+
+    private List<FriendSummaryResponse> findAllByBirthday(
+            Long userId, FriendCursor cursor, LocalDate referenceDate, Limit limit) {
+        int currentBirthdayKey = FriendCursor.birthdayKey(referenceDate);
+        if (cursor == null) {
+            return friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(userId, currentBirthdayKey, limit);
+        }
+        return friendRepository.findAllByOwnerUserIdAfterBirthdayCursor(
+                userId, currentBirthdayKey, cursor.sortKey(), cursor.userId(), limit);
+    }
+
+    private List<FriendSummaryResponse> findAllByName(Long userId, String cursor, Limit limit) {
+        if (cursor == null) {
+            return friendRepository.findAllByOwnerUserIdOrderByName(userId, limit);
+        }
+        FriendNameCursor decodedCursor = FriendNameCursor.decode(cursor);
+        return friendRepository.findAllByOwnerUserIdAfterNameCursor(
+                userId, decodedCursor.name(), decodedCursor.userId(), limit);
     }
 
     @Transactional

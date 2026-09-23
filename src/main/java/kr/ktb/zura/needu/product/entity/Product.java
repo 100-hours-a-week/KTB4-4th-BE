@@ -59,9 +59,6 @@ public class Product {
     @Column(length = 2048)
     private String imageUrl;
 
-    @Column(length = 200)
-    private String sellerName;
-
     @Column(length = 2048)
     private String purchaseUrl;
 
@@ -89,7 +86,6 @@ public class Product {
         this.description = description;
         this.price = price;
         this.imageUrl = imageUrl;
-        this.sellerName = sellerName;
         this.purchaseUrl = purchaseUrl;
     }
 }

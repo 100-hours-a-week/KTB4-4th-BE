@@ -45,6 +45,30 @@ class FriendRepositoryTest {
     }
 
     @Test
+    void namesExist_findAllByOwner_ordersByNameAndUsesUserIdAsTieBreaker() {
+        User first = saveUser("가나", null);
+        User second = saveUser("가나", LocalDate.of(2000, 1, 1));
+        User later = saveUser("다라", LocalDate.of(2000, 1, 2));
+        User otherOwnerFriend = saveUser("마바", LocalDate.of(2000, 1, 3));
+        friendRepository.saveAll(List.of(
+                new Friend(1L, later.getId()),
+                new Friend(1L, second.getId()),
+                new Friend(1L, first.getId()),
+                new Friend(2L, otherOwnerFriend.getId())
+        ));
+
+        List<FriendSummaryResponse> allFriends = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, Limit.of(10));
+        List<FriendSummaryResponse> friendsAfterCursor = friendRepository
+                .findAllByOwnerUserIdAfterNameCursor(1L, "가나", first.getId(), Limit.of(10));
+
+        assertThat(allFriends).extracting(FriendSummaryResponse::userId)
+                .containsExactly(first.getId(), second.getId(), later.getId());
+        assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId)
+                .containsExactly(second.getId(), later.getId());
+    }
+
+    @Test
     void yearEnd_findAllByOwner_ordersUpcomingBirthdaysAndExcludesMissingBirthday() {
         User today = saveUser("오늘", LocalDate.of(2000, 12, 30));
         User nextYear = saveUser("연초", LocalDate.of(2000, 1, 2));

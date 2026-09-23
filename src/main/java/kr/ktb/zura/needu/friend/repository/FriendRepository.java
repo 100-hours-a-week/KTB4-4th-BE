@@ -21,6 +21,35 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
             from Friend f
             join User u on u.id = f.friendUserId
             where f.ownerUserId = :ownerUserId
+            order by u.nickname asc, u.id asc
+            """)
+    List<FriendSummaryResponse> findAllByOwnerUserIdOrderByName(
+            @Param("ownerUserId") Long ownerUserId,
+            Limit limit
+    );
+
+    @Query("""
+            select new kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse(
+                u.id, u.nickname, u.profileImageUrl, u.birthDate, f.favorite)
+            from Friend f
+            join User u on u.id = f.friendUserId
+            where f.ownerUserId = :ownerUserId
+              and (u.nickname > :cursorName or (u.nickname = :cursorName and u.id > :cursorUserId))
+            order by u.nickname asc, u.id asc
+            """)
+    List<FriendSummaryResponse> findAllByOwnerUserIdAfterNameCursor(
+            @Param("ownerUserId") Long ownerUserId,
+            @Param("cursorName") String cursorName,
+            @Param("cursorUserId") Long cursorUserId,
+            Limit limit
+    );
+
+    @Query("""
+            select new kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse(
+                u.id, u.nickname, u.profileImageUrl, u.birthDate, f.favorite)
+            from Friend f
+            join User u on u.id = f.friendUserId
+            where f.ownerUserId = :ownerUserId
               and u.birthDate is not null
             order by
               case

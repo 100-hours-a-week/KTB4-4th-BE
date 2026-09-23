@@ -9,10 +9,13 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -21,8 +24,8 @@ import static lombok.AccessLevel.PROTECTED;
 @Table(
         name = "error_reports",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_error_reports_user_id_occurrence",
-                columnNames = {"user_id", "error_code", "error_type", "screen_id", "occurred_at"}
+                name = "uk_error_reports_user_id_idempotency_key",
+                columnNames = {"user_id", "idempotency_key"}
         )
 )
 @NoArgsConstructor(access = PROTECTED)
@@ -35,20 +38,9 @@ public class ErrorReport {
     @Column(nullable = false)
     private Long userId;
 
-    @Column(nullable = false, length = 50)
-    private String errorCode;
-
-    @Column(nullable = false, length = 30)
-    private String errorType;
-
-    @Column(nullable = false, length = 50)
-    private String screenId;
-
-    @Column(nullable = false)
-    private LocalDateTime occurredAt;
-
-    @Column(nullable = false, length = 30)
-    private String appVersion;
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 36, updatable = false)
+    private UUID idempotencyKey;
 
     @Column(nullable = false, length = 50)
     private String problemType;
@@ -60,14 +52,9 @@ public class ErrorReport {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public ErrorReport(Long userId, String errorCode, String errorType, String screenId, LocalDateTime occurredAt,
-                       String appVersion, String problemType, String detail) {
+    public ErrorReport(Long userId, UUID idempotencyKey, String problemType, String detail) {
         this.userId = userId;
-        this.errorCode = errorCode;
-        this.errorType = errorType;
-        this.screenId = screenId;
-        this.occurredAt = occurredAt;
-        this.appVersion = appVersion;
+        this.idempotencyKey = idempotencyKey;
         this.problemType = problemType;
         this.detail = detail;
     }

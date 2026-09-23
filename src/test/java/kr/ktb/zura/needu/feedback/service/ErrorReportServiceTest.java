@@ -1,14 +1,9 @@
 package kr.ktb.zura.needu.feedback.service;
 
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.util.UUID;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.feedback.dto.request.CreateErrorReportRequest;
-import kr.ktb.zura.needu.feedback.dto.request.ErrorContextRequest;
-import kr.ktb.zura.needu.feedback.dto.request.ErrorFeedbackRequest;
 import kr.ktb.zura.needu.feedback.dto.response.ErrorReportResponse;
 import kr.ktb.zura.needu.feedback.entity.ErrorReport;
 import kr.ktb.zura.needu.feedback.exception.FeedbackErrorCode;
@@ -34,9 +29,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class ErrorReportServiceTest {
 
     private static final Long USER_ID = 1L;
-    private static final OffsetDateTime OCCURRED_AT = OffsetDateTime.of(2026, 8, 26, 19, 40, 0, 0, ZoneOffset.ofHours(9));
-    private static final LocalDateTime LOCAL_OCCURRED_AT =
-            OCCURRED_AT.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+    private static final UUID IDEMPOTENCY_KEY = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     @Mock
     private ErrorReportRepository errorReportRepository;
@@ -54,27 +47,24 @@ class ErrorReportServiceTest {
             return errorReport;
         });
 
-        ErrorReportResponse response = errorReportService.createErrorReport(USER_ID, createRequest(OCCURRED_AT));
+        ErrorReportResponse response = errorReportService.createErrorReport(
+                USER_ID, IDEMPOTENCY_KEY, createRequest("추천 목록이 열리지 않아요."));
 
         assertThat(response.errorReportId()).isEqualTo(101L);
         ArgumentCaptor<ErrorReport> captor = ArgumentCaptor.forClass(ErrorReport.class);
         verify(errorReportRepository).saveAndFlush(captor.capture());
         ErrorReport saved = captor.getValue();
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
-        assertThat(saved.getErrorType()).isEqualTo("NETWORK");
-        assertThat(saved.getErrorCode()).isEqualTo("NETWORK_DISCONNECTED");
-        assertThat(saved.getScreenId()).isEqualTo("NU-11");
-        assertThat(saved.getOccurredAt()).isEqualTo(LOCAL_OCCURRED_AT);
-        assertThat(saved.getAppVersion()).isEqualTo("1.0.0");
+        assertThat(saved.getIdempotencyKey()).isEqualTo(IDEMPOTENCY_KEY);
         assertThat(saved.getProblemType()).isEqualTo("SCREEN_NOT_DISPLAYED");
         assertThat(saved.getDetail()).isEqualTo("추천 목록이 열리지 않아요.");
     }
 
     @Test
     void detailOver500Characters_createErrorReport_throwsTooLargeWithoutQueryingRepository() {
-        CreateErrorReportRequest request = createRequest(OCCURRED_AT, "가".repeat(501));
+        CreateErrorReportRequest request = createRequest("가".repeat(501));
 
-        assertThatThrownBy(() -> errorReportService.createErrorReport(USER_ID, request))
+        assertThatThrownBy(() -> errorReportService.createErrorReport(USER_ID, IDEMPOTENCY_KEY, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_TOO_LARGE);
@@ -86,27 +76,17 @@ class ErrorReportServiceTest {
         givenDuplicated(false);
         given(errorReportRepository.saveAndFlush(any(ErrorReport.class))).willAnswer(invocation -> invocation.getArgument(0));
 
-        errorReportService.createErrorReport(USER_ID, createRequest(OCCURRED_AT, "가".repeat(500)));
+        errorReportService.createErrorReport(USER_ID, IDEMPOTENCY_KEY, createRequest("가".repeat(500)));
 
         verify(errorReportRepository).saveAndFlush(any(ErrorReport.class));
     }
 
     @Test
-    void sameInstantWithDifferentOffset_createErrorReport_checksDuplicateAtSameLocalTime() {
-        givenDuplicated(true);
-        OffsetDateTime sameInstantInUtc = OCCURRED_AT.withOffsetSameInstant(ZoneOffset.UTC);
-
-        assertThatThrownBy(() -> errorReportService.createErrorReport(USER_ID, createRequest(sameInstantInUtc)))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_DUPLICATED);
-    }
-
-    @Test
-    void alreadySentErrorReport_createErrorReport_throwsDuplicatedWithoutSaving() {
+    void alreadyUsedIdempotencyKey_createErrorReport_throwsDuplicatedWithoutSaving() {
         givenDuplicated(true);
 
-        assertThatThrownBy(() -> errorReportService.createErrorReport(USER_ID, createRequest(OCCURRED_AT)))
+        assertThatThrownBy(() -> errorReportService.createErrorReport(
+                USER_ID, IDEMPOTENCY_KEY, createRequest("추천 목록이 열리지 않아요.")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_DUPLICATED);
@@ -117,28 +97,21 @@ class ErrorReportServiceTest {
     void concurrentDuplicateViolatesUniqueConstraint_createErrorReport_throwsDuplicated() {
         givenDuplicated(false);
         given(errorReportRepository.saveAndFlush(any(ErrorReport.class)))
-                .willThrow(new DataIntegrityViolationException("uk_error_reports_user_id_occurrence"));
+                .willThrow(new DataIntegrityViolationException("uk_error_reports_user_id_idempotency_key"));
 
-        assertThatThrownBy(() -> errorReportService.createErrorReport(USER_ID, createRequest(OCCURRED_AT)))
+        assertThatThrownBy(() -> errorReportService.createErrorReport(
+                USER_ID, IDEMPOTENCY_KEY, createRequest("추천 목록이 열리지 않아요.")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(FeedbackErrorCode.FEEDBACK_ERROR_REPORT_DUPLICATED);
     }
 
     private void givenDuplicated(boolean duplicated) {
-        given(errorReportRepository.existsByUserIdAndOccurrence(
-                USER_ID, "NETWORK_DISCONNECTED", "NETWORK", "NU-11", LOCAL_OCCURRED_AT))
+        given(errorReportRepository.existsByUserIdAndIdempotencyKey(USER_ID, IDEMPOTENCY_KEY))
                 .willReturn(duplicated);
     }
 
-    private CreateErrorReportRequest createRequest(OffsetDateTime occurredAt) {
-        return createRequest(occurredAt, "추천 목록이 열리지 않아요.");
-    }
-
-    private CreateErrorReportRequest createRequest(OffsetDateTime occurredAt, String detail) {
-        return new CreateErrorReportRequest(
-                new ErrorContextRequest("NETWORK", "NETWORK_DISCONNECTED", "NU-11", occurredAt, "1.0.0"),
-                new ErrorFeedbackRequest("SCREEN_NOT_DISPLAYED", detail)
-        );
+    private CreateErrorReportRequest createRequest(String detail) {
+        return new CreateErrorReportRequest("SCREEN_NOT_DISPLAYED", detail);
     }
 }

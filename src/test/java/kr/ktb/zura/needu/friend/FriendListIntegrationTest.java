@@ -68,7 +68,18 @@ class FriendListIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("친구 목록 조회에 성공했습니다."))
                 .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("두 번째"))
+                .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(false))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.nextCursor").isString());
+
+        owner.completeKakaoFriendSync();
+        userRepository.save(owner);
+
+        mockMvc.perform(validRequest().param("sort", "birthday").with(authenticatedUser(owner.getId())))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].name").value("첫 번째"))
+                .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(true))
                 .andExpect(jsonPath("$.hasNext").value(true))
                 .andExpect(jsonPath("$.nextCursor").isString());
     }
@@ -115,7 +126,7 @@ class FriendListIntegrationTest {
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder validRequest() {
-        return get(URL).param("sort", "birthday").param("size", "1");
+        return get(URL).param("size", "1");
     }
 
     private User saveUser(String name, LocalDate birthDate) {

@@ -11,6 +11,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Objects;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -104,5 +105,18 @@ public class User {
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
         this.deletedAt = LocalDateTime.now();
+    }
+
+    public boolean isActive() {
+        return status == UserStatus.ACTIVE;
+    }
+
+    public boolean isKakaoFriendSynced() {
+        return kakaoFriendSyncedAt != null;
+    }
+
+    // externalId는 nullable 컬럼이라 equals를 직접 호출하지 않는다.
+    public boolean hasExternalId(Long externalId) {
+        return Objects.equals(this.externalId, externalId);
     }
 }

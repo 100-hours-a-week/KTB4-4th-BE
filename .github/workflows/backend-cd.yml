@@ -1,0 +1,83 @@
+name: Backend CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "ECR image tag (Git SHA)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  deploy:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Validate Image Tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid image tag: $IMAGE_TAG"
+            echo "Image tag must be a 40-character Git SHA."
+            exit 1
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.NEEDU_CD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          INSTANCE_ID: ${{ vars.NEEDU_EC2_INSTANCE_ID }}
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy backend $IMAGE_TAG" \
+            --parameters "commands=[\"/home/ubuntu/needu/deploy-backend.sh $IMAGE_TAG\"]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text)
+
+            echo "Deployment status: $STATUS"
+
+            case "$STATUS" in
+              Success)
+                echo "Backend deployment succeeded."
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut)
+                echo "Backend deployment failed."
+                exit 1
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          echo "Backend deployment timed out."
+          exit 1
