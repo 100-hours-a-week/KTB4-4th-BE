@@ -18,8 +18,11 @@ import static lombok.AccessLevel.PROTECTED;
 @Getter
 @Entity
 @Table(
-        name = "gift_products",
-        indexes = @Index(name = "idx_gift_products_user_id_score_id", columnList = "user_id, score, id")
+        name = "gift_recommendations",
+        indexes = @Index(
+                name = "idx_gift_recommendations_user_id_score_id",
+                columnList = "user_id, score, id"
+        )
 )
 @NoArgsConstructor(access = PROTECTED)
 public class GiftProduct {

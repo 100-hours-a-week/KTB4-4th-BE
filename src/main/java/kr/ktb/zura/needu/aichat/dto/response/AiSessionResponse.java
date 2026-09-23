@@ -11,12 +11,8 @@ public record AiSessionResponse(
         Integer turn,
         Integer maxTurns,
         List<AiSessionMessageResponse> messages,
-        Integer itemCount,
         Boolean inputLocked,
-        Boolean analysisAvailable,
         Boolean canClose,
-        String completionReason,
-        String profileCompleteness,
         Instant lastActiveAt
 ) {
 
@@ -28,12 +24,8 @@ public record AiSessionResponse(
                 response.turn(),
                 response.maxTurns(),
                 response.messages().stream().map(AiSessionMessageResponse::from).toList(),
-                response.itemCount(),
                 response.inputLocked(),
-                response.analysisAvailable(),
                 response.canClose(),
-                response.completionReason(),
-                response.profileCompleteness(),
                 response.lastActiveAt()
         );
     }

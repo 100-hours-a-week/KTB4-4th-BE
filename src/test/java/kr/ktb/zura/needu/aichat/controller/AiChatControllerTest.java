@@ -8,6 +8,10 @@ import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
+import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
@@ -99,14 +103,33 @@ class AiChatControllerTest {
     @Test
     void validRequest_sendMessage_returnsOk() throws Exception {
         given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
-                .willReturn(new AiMessageResponse(201L, 202L, "러닝을 좋아하시는군요."));
+                .willReturn(new AiMessageResponse(
+                        201L,
+                        202L,
+                        "러닝을 좋아하시는군요.",
+                        true,
+                        new AnalysisResultResponse(
+                                "러닝을 즐깁니다.",
+                                new AnalysisKeywordsResponse(
+                                        List.of(new AnalysisKeywordResponse("러닝", 0.9)),
+                                        List.of(new AnalysisKeywordResponse("운동", 0.8))),
+                                true
+                        )
+                ));
 
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("메시지를 전송했습니다."))
                 .andExpect(jsonPath("$.data.userMessageId").value(201))
                 .andExpect(jsonPath("$.data.messageId").value(202))
-                .andExpect(jsonPath("$.data.content").value("러닝을 좋아하시는군요."));
+                .andExpect(jsonPath("$.data.content").value("러닝을 좋아하시는군요."))
+                .andExpect(jsonPath("$.data.inputLocked").value(true))
+                .andExpect(jsonPath("$.data.analysis.summary").value("러닝을 즐깁니다."))
+                .andExpect(jsonPath("$.data.analysis.keywords.taste[0].value").value("러닝"))
+                .andExpect(jsonPath("$.data.analysis.keywords.taste[0].score").value(0.9))
+                .andExpect(jsonPath("$.data.analysis.keywords.interest[0].value").value("운동"))
+                .andExpect(jsonPath("$.data.analysis.keywords.interest[0].score").value(0.8))
+                .andExpect(jsonPath("$.data.analysis.correctionAvailable").value(true));
     }
 
     @Test
@@ -278,6 +301,19 @@ class AiChatControllerTest {
     void unauthenticated_findAllMessages_returnsUnauthorized() throws Exception {
         mockMvc.perform(get(MESSAGES_URL + "?size=20"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void validRequest_confirmAnalysis_confirmsConversation() throws Exception {
+        given(aiChatFacade.confirmAnalysis(USER_ID, CONVERSATION_ID))
+                .willReturn(ProductRecommendationStatusResponse.success());
+
+        mockMvc.perform(post(URL + "/" + CONVERSATION_ID + "/confirm")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("취향 분석을 확정했습니다."))
+                .andExpect(jsonPath("$.data.isRecommendationCompleted").value(true));
     }
 
     private static MockHttpServletRequestBuilder getMessages(String query) {
