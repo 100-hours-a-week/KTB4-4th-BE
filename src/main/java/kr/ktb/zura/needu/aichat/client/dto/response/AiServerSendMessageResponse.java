@@ -1,10 +1,10 @@
 package kr.ktb.zura.needu.aichat.client.dto.response;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 public record AiServerSendMessageResponse(
         String reply,
-        LocalDateTime createdAt,
+        OffsetDateTime createdAt,
         Integer turn,
         Integer maxTurns,
         Boolean canClose,

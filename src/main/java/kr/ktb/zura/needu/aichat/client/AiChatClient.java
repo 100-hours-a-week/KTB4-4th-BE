@@ -2,12 +2,19 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerCloseSessionRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerStartSessionRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerErrorResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
@@ -35,13 +42,17 @@ public class AiChatClient {
     private final RestClient restClient;
     private final RestClient messageRestClient;
     private final String serviceToken;
+    private final boolean mockEnabled;
+    private final Map<Long, Integer> mockTurns = new ConcurrentHashMap<>();
 
     public AiChatClient(@Qualifier("aiChatRestClient") RestClient restClient,
                         @Qualifier("aiChatMessageRestClient") RestClient messageRestClient,
-                        @Value("${AI_SERVICE_TOKEN}") String serviceToken) {
+                        @Value("${AI_SERVICE_TOKEN:}") String serviceToken,
+                        @Value("${ai.server.mock-enabled:false}") boolean mockEnabled) {
         this.restClient = restClient;
         this.messageRestClient = messageRestClient;
         this.serviceToken = serviceToken;
+        this.mockEnabled = mockEnabled;
     }
 
     public AiServerHealthResponse checkHealth() {
@@ -56,16 +67,47 @@ public class AiChatClient {
     }
 
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
+        if (mockEnabled) {
+            mockTurns.put(conversationRoomId, 0);
+            return new AiServerStartSessionResponse(
+                    conversationRoomId,
+                    "안녕하세요! 요즘 어떻게 지내시는지 궁금해요.",
+                    OffsetDateTime.now(ZoneOffset.UTC),
+                    20);
+        }
         return request(AiChatEndpoint.START_SESSION, Map.of(),
                 new AiServerStartSessionRequest(userId, conversationRoomId), AiServerStartSessionResponse.class);
     }
 
     public AiServerSendMessageResponse sendMessage(Long userId, Long conversationRoomId, String message) {
+        if (mockEnabled) {
+            int turn = mockTurns.merge(conversationRoomId, 1, Integer::sum);
+            boolean inputLocked = turn >= 2;
+            return new AiServerSendMessageResponse(
+                    inputLocked
+                            ? "좋아요. 말씀해주신 내용을 바탕으로 취향을 분석해 볼게요."
+                            : "흥미롭네요. 그 활동에서 가장 좋아하는 점은 무엇인가요?",
+                    OffsetDateTime.now(ZoneOffset.UTC),
+                    turn,
+                    20,
+                    inputLocked,
+                    inputLocked,
+                    inputLocked ? 100 : 50);
+        }
         return request(AiChatEndpoint.SEND_MESSAGE, pathVariables(conversationRoomId),
                 new AiServerSendMessageRequest(userId, message), AiServerSendMessageResponse.class);
     }
 
     public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
+        if (mockEnabled) {
+            return new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
+                    10293L,
+                    "캠핑과 실용적인 장비를 좋아합니다.",
+                    new AiServerAnalysisKeywordsResponse(
+                            List.of(new AiServerAnalysisKeywordResponse("실용적인 장비", 0.92)),
+                            List.of(new AiServerAnalysisKeywordResponse("캠핑", 0.95))),
+                    true));
+        }
         return request(AiChatEndpoint.CREATE_ANALYSIS, pathVariables(conversationRoomId),
                 null, AiServerAnalysisResponse.class);
     }
@@ -94,6 +136,9 @@ public class AiChatClient {
                     .uri(endpoint.getUrl(), pathVariables);
 
             if (endpoint != AiChatEndpoint.CHECK_HEALTH) {
+                if (serviceToken.isBlank()) {
+                    throw new BusinessException(AiChatErrorCode.AICHAT_AUTHENTICATION_FAILED);
+                }
                 request.headers(headers -> headers.setBearerAuth(serviceToken));
             }
 

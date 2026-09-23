@@ -6,21 +6,14 @@ public record AiMessageResponse(
         Long userMessageId,
         Long messageId,
         String content,
-        boolean inputLocked,
+        Integer progress,
+        Boolean inputLocked,
         AnalysisResultResponse analysis
 ) {
 
-    public AiMessageResponse(Long userMessageId, Long messageId, String content) {
-        this(userMessageId, messageId, content, false, null);
-    }
-
     public static AiMessageResponse from(AiMessage reply) {
-        return new AiMessageResponse(reply.getReplyToMessageId(), reply.getId(), reply.getContent());
-    }
-
-    public static AiMessageResponse from(
-            AiMessage reply, boolean inputLocked, AnalysisResultResponse analysis) {
         return new AiMessageResponse(
-                reply.getReplyToMessageId(), reply.getId(), reply.getContent(), inputLocked, analysis);
+                reply.getReplyToMessageId(), reply.getId(), reply.getContent(),
+                reply.getProgress(), reply.getInputLocked(), null);
     }
 }

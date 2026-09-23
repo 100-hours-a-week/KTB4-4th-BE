@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.facade;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
@@ -14,6 +15,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiSessionResponse;
@@ -105,13 +107,11 @@ public class AiChatFacade {
         AiMessage userMessage = createUserMessage(conversationId, request);
         AiServerSendMessageResponse response = requestReply(userId, conversationId, request.content());
         AiMessage aiMessage = aiMessageService.createReply(
-                conversationId, userMessage.getId(), toReply(response));
+                conversationId, userMessage.getId(), response.reply(), response.progress(), response.inputLocked());
         aiChatRoomService.extendSession(conversationId);
-        boolean inputLocked = Boolean.TRUE.equals(response.inputLocked());
-        AnalysisResultResponse analysis = inputLocked ? requestAnalysis(userId, conversationId) : null;
         log.info("AI message replied. userId={}, conversationId={}, messageId={}",
                 userId, conversationId, aiMessage.getId());
-        return AiMessageResponse.from(aiMessage, inputLocked, analysis);
+        return AiMessageResponse.from(aiMessage);
     }
 
     // 같은 clientMessageId로 다시 들어온 요청 => AI를 다시 호출하지 않고 이미 저장한 답변을 그대로 반환한다
@@ -133,7 +133,7 @@ public class AiChatFacade {
     private AiServerSendMessageResponse requestReply(Long userId, Long conversationId, String content) {
         try {
             AiServerSendMessageResponse response = aiChatClient.sendMessage(userId, conversationId, content);
-            toReply(response);
+            validateReply(response);
             return response;
         } catch (BusinessException e) {
             if (!(e.getErrorCode() instanceof AiChatErrorCode errorCode)) {
@@ -155,21 +155,15 @@ public class AiChatFacade {
         }
     }
 
-    private AnalysisResultResponse requestAnalysis(Long userId, Long conversationId) {
-        try {
-            return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
-        } catch (BusinessException e) {
-            log.warn("AI analysis failed after message reply. userId={}, conversationId={}, code={}",
-                    userId, conversationId, e.getErrorCode().name());
-            return null;
-        }
-    }
-
-    private String toReply(AiServerSendMessageResponse response) {
-        if (response.reply() == null || response.reply().isBlank()) {
+    private void validateReply(AiServerSendMessageResponse response) {
+        if (response.reply() == null
+                || response.reply().isBlank()
+                || response.progress() == null
+                || response.progress() < 0
+                || response.progress() > 100
+                || response.inputLocked() == null) {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
-        return response.reply();
     }
 
     private AiConversationStartResult restartConversation(Long userId, Long expiredRoomId) {
@@ -250,12 +244,24 @@ public class AiChatFacade {
 
     private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {
         if (response.profile() == null
+                || response.profile().summary() == null
+                || response.profile().summary().isBlank()
                 || response.profile().keywords() == null
-                || response.profile().keywords().taste() == null
-                || response.profile().keywords().interest() == null
+                || hasInvalidKeyword(response.profile().keywords().taste())
+                || hasInvalidKeyword(response.profile().keywords().interest())
                 || response.profile().correctionAvailable() == null) {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
         return AnalysisResultResponse.from(response);
+    }
+
+    private boolean hasInvalidKeyword(List<AiServerAnalysisKeywordResponse> keywords) {
+        return keywords == null || keywords.stream().anyMatch(keyword -> keyword == null
+                || keyword.value() == null
+                || keyword.value().isBlank()
+                || keyword.score() == null
+                || !Double.isFinite(keyword.score())
+                || keyword.score() < 0
+                || keyword.score() > 1);
     }
 }

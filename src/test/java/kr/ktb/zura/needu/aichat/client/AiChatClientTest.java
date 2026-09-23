@@ -4,6 +4,7 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -55,7 +56,26 @@ class AiChatClientTest {
         // 메시지 전송은 read timeout이 다른 전용 RestClient를 쓰므로 대역도 따로 둔다
         RestClient.Builder messageBuilder = RestClient.builder().baseUrl("http://localhost:9000");
         messageServer = MockRestServiceServer.bindTo(messageBuilder).build();
-        client = new AiChatClient(builder.build(), messageBuilder.build(), "service-token");
+        client = new AiChatClient(builder.build(), messageBuilder.build(), "service-token", false);
+    }
+
+    @Test
+    void mockEnabled_returnsConversationFlowWithoutCallingAiServer() {
+        RestClient restClient = RestClient.builder().baseUrl("http://localhost:9000").build();
+        AiChatClient mockClient = new AiChatClient(restClient, restClient, "service-token", true);
+
+        AiServerStartSessionResponse session = mockClient.startSession(1L, 101L);
+        AiServerSendMessageResponse firstReply = mockClient.sendMessage(1L, 101L, "캠핑을 좋아해요");
+        AiServerSendMessageResponse secondReply = mockClient.sendMessage(1L, 101L, "장비를 고르는 게 좋아요");
+        AiServerAnalysisResponse analysis = mockClient.createAnalysis(101L);
+
+        assertEquals(101L, session.sessionId());
+        assertEquals(50, firstReply.progress());
+        assertEquals(false, firstReply.inputLocked());
+        assertEquals(100, secondReply.progress());
+        assertEquals(true, secondReply.inputLocked());
+        assertEquals("캠핑과 실용적인 장비를 좋아합니다.", analysis.profile().summary());
+        assertEquals(true, analysis.profile().correctionAvailable());
     }
 
     @Test
@@ -128,7 +148,7 @@ class AiChatClientTest {
                         {
                           "sessionId": 101,
                           "greeting": "안녕하세요",
-                          "createdAt": "2026-09-23T05:18:00",
+                          "createdAt": "2026-09-23T05:18:00+00:00",
                           "maxTurns": 20
                         }
                         """));
@@ -136,7 +156,7 @@ class AiChatClientTest {
         AiServerStartSessionResponse response = client.startSession(1L, 101L);
 
         assertEquals(new AiServerStartSessionResponse(
-                101L, "안녕하세요", LocalDateTime.of(2026, 9, 23, 5, 18), 20), response);
+                101L, "안녕하세요", OffsetDateTime.parse("2026-09-23T05:18:00+00:00"), 20), response);
         server.verify();
     }
 
@@ -151,7 +171,7 @@ class AiChatClientTest {
                 .andRespond(withSuccess("""
                         {
                           "reply": "캠핑 좋죠.",
-                          "createdAt": "2026-09-23T05:20:00",
+                          "createdAt": "2026-09-23T05:20:00+00:00",
                           "turn": 3,
                           "maxTurns": 20,
                           "canClose": false,
@@ -163,7 +183,7 @@ class AiChatClientTest {
         AiServerSendMessageResponse response = client.sendMessage(1L, 101L, "주말마다 캠핑 가요");
 
         assertEquals(new AiServerSendMessageResponse(
-                "캠핑 좋죠.", LocalDateTime.of(2026, 9, 23, 5, 20),
+                "캠핑 좋죠.", OffsetDateTime.parse("2026-09-23T05:20:00+00:00"),
                 3, 20, false, false, 15), response);
         messageServer.verify();
     }
