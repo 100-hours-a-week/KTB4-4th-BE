@@ -42,7 +42,7 @@ public class FriendService {
     }
 
     public FriendListResponse findAllFriends(Long userId, String sort, String cursor, int size) {
-        userService.findUserSummary(userId);
+        userService.validateActiveUser(userId);
         boolean isKakaoFriendSynced = userService.isKakaoFriendSynced(userId);
 
         boolean isBirthdaySort = "birthday".equals(sort);

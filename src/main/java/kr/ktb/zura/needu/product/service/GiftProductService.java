@@ -31,7 +31,7 @@ public class GiftProductService {
     public CursorPageResponse<GiftProductResponse> findAllGiftProducts(
             Long userId, Long friendUserId, GiftProductSearchCondition condition) {
         validatePriceRange(condition);
-        userService.findUserSummary(userId);
+        userService.validateActiveUser(userId);
         validateTasteAnalysisCompleted(friendService.findFriend(userId, friendUserId));
 
         int size = condition.size();
