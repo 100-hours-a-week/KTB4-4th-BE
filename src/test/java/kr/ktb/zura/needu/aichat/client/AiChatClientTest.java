@@ -56,7 +56,26 @@ class AiChatClientTest {
         // 메시지 전송은 read timeout이 다른 전용 RestClient를 쓰므로 대역도 따로 둔다
         RestClient.Builder messageBuilder = RestClient.builder().baseUrl("http://localhost:9000");
         messageServer = MockRestServiceServer.bindTo(messageBuilder).build();
-        client = new AiChatClient(builder.build(), messageBuilder.build(), "service-token");
+        client = new AiChatClient(builder.build(), messageBuilder.build(), "service-token", false);
+    }
+
+    @Test
+    void mockEnabled_returnsConversationFlowWithoutCallingAiServer() {
+        RestClient restClient = RestClient.builder().baseUrl("http://localhost:9000").build();
+        AiChatClient mockClient = new AiChatClient(restClient, restClient, "service-token", true);
+
+        AiServerStartSessionResponse session = mockClient.startSession(1L, 101L);
+        AiServerSendMessageResponse firstReply = mockClient.sendMessage(1L, 101L, "캠핑을 좋아해요");
+        AiServerSendMessageResponse secondReply = mockClient.sendMessage(1L, 101L, "장비를 고르는 게 좋아요");
+        AiServerAnalysisResponse analysis = mockClient.createAnalysis(101L);
+
+        assertEquals(101L, session.sessionId());
+        assertEquals(50, firstReply.progress());
+        assertEquals(false, firstReply.inputLocked());
+        assertEquals(100, secondReply.progress());
+        assertEquals(true, secondReply.inputLocked());
+        assertEquals("캠핑과 실용적인 장비를 좋아합니다.", analysis.profile().summary());
+        assertEquals(true, analysis.profile().correctionAvailable());
     }
 
     @Test
