@@ -84,6 +84,11 @@ public class UserService {
         findUser(userId).completeKakaoFriendSync();
     }
 
+    @Transactional
+    public void completeTasteAnalysis(Long userId) {
+        findUser(userId).completeTasteAnalysis();
+    }
+
     private void validateLoginAvailableUser(User user) {
         switch (user.getStatus()) {
             case ACTIVE, ONBOARDING -> {
