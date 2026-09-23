@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
@@ -40,8 +41,9 @@ public class FriendService {
                 .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
     }
 
-    public CursorPageResponse<FriendSummaryResponse> findAllFriends(Long userId, String sort, String cursor, int size) {
+    public FriendListResponse findAllFriends(Long userId, String sort, String cursor, int size) {
         userService.findUserSummary(userId);
+        boolean isKakaoFriendSynced = userService.isKakaoFriendSynced(userId);
 
         boolean isBirthdaySort = "birthday".equals(sort);
         Limit limit = Limit.of(size + 1);
@@ -60,7 +62,8 @@ public class FriendService {
                         ? FriendCursor.from(referenceDate, pageItems.getLast()).encode()
                         : FriendNameCursor.from(pageItems.getLast()).encode()
                 : null;
-        return new CursorPageResponse<>(pageItems, nextCursor, hasNext);
+        return FriendListResponse.from(
+                new CursorPageResponse<>(pageItems, nextCursor, hasNext), isKakaoFriendSynced);
     }
 
     private List<FriendSummaryResponse> findAllByBirthday(
