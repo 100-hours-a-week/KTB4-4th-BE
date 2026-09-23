@@ -8,9 +8,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,7 +23,13 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "products")
+@Table(
+        name = "products",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_products_platform_external_id",
+                columnNames = {"platform_type", "external_id"}
+        )
+)
 @NoArgsConstructor(access = PROTECTED)
 public class Product {
 
@@ -29,7 +37,11 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(length = 255)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private PlatformType platformType;
+
+    @Column(nullable = false, length = 255)
     private String externalId;
 
     @Column(nullable = false, length = 300)
@@ -67,8 +79,10 @@ public class Product {
 
     private LocalDateTime deletedAt;
 
-    public Product(String externalId, String name, String category, String description, BigDecimal price,
+    public Product(PlatformType platformType, String externalId, String name, String category,
+                   String description, BigDecimal price,
                    String imageUrl, String sellerName, String purchaseUrl) {
+        this.platformType = platformType;
         this.externalId = externalId;
         this.name = name;
         this.category = category;

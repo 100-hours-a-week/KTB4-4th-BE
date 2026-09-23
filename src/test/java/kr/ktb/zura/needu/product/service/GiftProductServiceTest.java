@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
+import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -197,7 +198,9 @@ class GiftProductServiceTest {
     }
 
     private GiftProduct createGiftProduct(Long id, String score, long price) {
-        Product product = new Product(null, "상품" + id, "FASHION", null, BigDecimal.valueOf(price), null, null, null);
+        Product product = new Product(
+                PlatformType.COUPANG, String.valueOf(id), "상품" + id, "FASHION", null,
+                BigDecimal.valueOf(price), null, null, null);
         GiftProduct giftProduct = new GiftProduct(
                 FRIEND_USER_ID, product, new BigDecimal(score), null, List.of("미니멀", "데일리"));
         // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.
