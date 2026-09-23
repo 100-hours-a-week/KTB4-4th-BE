@@ -3,13 +3,14 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.Map;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerCloseSessionRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerStartSessionRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerErrorResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
-import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationJobResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
@@ -59,9 +60,9 @@ public class AiChatClient {
                 new AiServerStartSessionRequest(userId, conversationRoomId), AiServerStartSessionResponse.class);
     }
 
-    public AiServerSendMessageResponse sendMessage(Long conversationRoomId, String message) {
+    public AiServerSendMessageResponse sendMessage(Long userId, Long conversationRoomId, String message) {
         return request(AiChatEndpoint.SEND_MESSAGE, pathVariables(conversationRoomId),
-                new AiServerSendMessageRequest(message), AiServerSendMessageResponse.class);
+                new AiServerSendMessageRequest(userId, message), AiServerSendMessageResponse.class);
     }
 
     public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
@@ -74,9 +75,10 @@ public class AiChatClient {
                 request, AiServerAnalysisResponse.class);
     }
 
-    public AiServerRecommendationJobResponse confirmAnalysis(Long conversationId) {
-        return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationId),
-                null, AiServerRecommendationJobResponse.class);
+    public AiServerCloseSessionResponse confirmAnalysis(
+            Long userId, Long conversationRoomId) {
+        return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationRoomId),
+                new AiServerCloseSessionRequest(userId), AiServerCloseSessionResponse.class);
     }
 
     private Map<String, Long> pathVariables(Long conversationRoomId) {
@@ -89,8 +91,11 @@ public class AiChatClient {
                           Class<T> responseType) {
         try {
             RestClient.RequestBodySpec request = clientFor(endpoint).method(endpoint.getHttpMethod())
-                    .uri(endpoint.getUrl(), pathVariables)
-                    .headers(headers -> headers.setBearerAuth(serviceToken));
+                    .uri(endpoint.getUrl(), pathVariables);
+
+            if (endpoint != AiChatEndpoint.CHECK_HEALTH) {
+                request.headers(headers -> headers.setBearerAuth(serviceToken));
+            }
 
             if (requestBody != null) {
                 request.body(requestBody);

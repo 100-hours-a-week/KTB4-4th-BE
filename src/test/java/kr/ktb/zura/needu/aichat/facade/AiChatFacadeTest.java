@@ -7,6 +7,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionKeywordsResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationsResponse;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
@@ -15,7 +22,9 @@ import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
+import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -27,6 +36,9 @@ import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.product.service.ProductRecommendationService;
+import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,6 +81,12 @@ class AiChatFacadeTest {
     @Mock
     private AiChatClient aiChatClient;
 
+    @Mock
+    private ProductRecommendationService productRecommendationService;
+
+    @Mock
+    private UserService userService;
+
     private AiConversationLock aiConversationLock;
     private AiChatFacade aiChatFacade;
 
@@ -76,7 +94,7 @@ class AiChatFacadeTest {
     void setUp() {
         aiConversationLock = new AiConversationLock();
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiChatClient, MESSAGE_RETRY_AFTER);
+                aiChatClient, productRecommendationService, userService, MESSAGE_RETRY_AFTER);
     }
 
     @Test
@@ -151,7 +169,7 @@ class AiChatFacadeTest {
     void aiResponseWithoutGreeting_startOrResumeConversation_throwsInvalidResponseAndDiscardsRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(aiChatClient.startSession(USER_ID, ROOM_ID))
-                .willReturn(new AiServerStartSessionResponse(ROOM_ID, null, 20));
+                .willReturn(new AiServerStartSessionResponse(ROOM_ID, null, null, 20));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
                 .isInstanceOf(BusinessException.class)
@@ -165,7 +183,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT))
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willReturn(sendMessageResponse(AI_CONTENT));
         given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
@@ -174,6 +192,45 @@ class AiChatFacadeTest {
 
         assertThat(response).isEqualTo(new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT));
         verify(aiChatRoomService).extendSession(ROOM_ID);
+    }
+
+    @Test
+    void inputLocked_sendMessage_returnsAnalysis() {
+        givenActiveRoom();
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(sendMessageResponse(AI_CONTENT, true));
+        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
+        given(aiChatClient.createAnalysis(ROOM_ID)).willReturn(analysisResponse(true));
+
+        AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        assertThat(response.inputLocked()).isTrue();
+        assertThat(response.analysis()).isEqualTo(AnalysisResultResponse.from(analysisResponse(true)));
+        verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        verify(aiChatClient).createAnalysis(ROOM_ID);
+    }
+
+    @Test
+    void analysisFailed_sendMessage_returnsReplyWithoutAnalysis() {
+        givenActiveRoom();
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(sendMessageResponse(AI_CONTENT, true));
+        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
+        given(aiChatClient.createAnalysis(ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
+
+        AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        assertThat(response.inputLocked()).isTrue();
+        assertThat(response.analysis()).isNull();
     }
 
     @Test
@@ -231,7 +288,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT))
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -247,7 +304,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT))
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -262,7 +319,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT))
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -277,7 +334,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT)).willReturn(sendMessageResponse(" "));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT)).willReturn(sendMessageResponse(" "));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -302,7 +359,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(ROOM_ID, USER_CONTENT))
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -346,8 +403,12 @@ class AiChatFacadeTest {
         assertThat(response).isEqualTo(new AnalysisResultResponse(
                 "캠핑과 핸드드립을 즐깁니다.",
                 new AnalysisKeywordsResponse(
-                        List.of("핸드드립", "가벼운 장비"),
-                        List.of("캠핑", "티타늄 머그컵")
+                        List.of(
+                                new AnalysisKeywordResponse("핸드드립", 0.92),
+                                new AnalysisKeywordResponse("가벼운 장비", 0.81)),
+                        List.of(
+                                new AnalysisKeywordResponse("캠핑", 0.95),
+                                new AnalysisKeywordResponse("티타늄 머그컵", 0.76))
                 ),
                 true
         ));
@@ -361,6 +422,32 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+    }
+
+    @Test
+    void successfulRecommendationJob_confirmAnalysis_returnsCompleted() {
+        givenActiveRoom();
+        AiServerRecommendationResult self = new AiServerRecommendationResult(List.of(
+                new AiServerRecommendedItem(
+                        PlatformType.COUPANG, "self-1", new java.math.BigDecimal("9.2"), "나를 위한 추천")));
+        AiServerRecommendationResult gift = new AiServerRecommendationResult(List.of(
+                new AiServerRecommendedItem(
+                        PlatformType.COUPANG, "gift-1", new java.math.BigDecimal("8.0"), "선물 추천")));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID))
+                .willReturn(new AiServerCloseSessionResponse(
+                        ROOM_ID,
+                        USER_ID,
+                        "캠핑을 즐깁니다.",
+                        new AiServerCloseSessionKeywordsResponse(List.of("실용적"), List.of("캠핑")),
+                        new AiServerRecommendationsResponse(self, gift)
+                ));
+
+        ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID);
+
+        assertThat(response.isRecommendationCompleted()).isTrue();
+        verify(productRecommendationService).saveRecommendations(
+                USER_ID, self, gift, List.of("실용적"));
+        verify(userService).completeTasteAnalysis(USER_ID);
     }
 
     private void givenActiveRoom() {
@@ -382,25 +469,29 @@ class AiChatFacadeTest {
     }
 
     private static AiServerStartSessionResponse startSessionResponse(Long roomId) {
-        return new AiServerStartSessionResponse(roomId, GREETING, 20);
+        return new AiServerStartSessionResponse(roomId, GREETING, null, 20);
     }
 
     private static AiServerAnalysisResponse analysisResponse(Boolean correctionAvailable) {
-        return new AiServerAnalysisResponse(
-                null,
+        return new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
+                USER_ID,
                 "캠핑과 핸드드립을 즐깁니다.",
                 new AiServerAnalysisKeywordsResponse(
-                        List.of("핸드드립", "가벼운 장비"),
-                        List.of("캠핑", "티타늄 머그컵")
-                ),
-                correctionAvailable,
-                "sufficient",
-                List.of()
-        );
+                        List.of(
+                                new AiServerAnalysisKeywordResponse("핸드드립", 0.92),
+                                new AiServerAnalysisKeywordResponse("가벼운 장비", 0.81)),
+                        List.of(
+                                new AiServerAnalysisKeywordResponse("캠핑", 0.95),
+                                new AiServerAnalysisKeywordResponse("티타늄 머그컵", 0.76))),
+                correctionAvailable));
     }
 
     private static AiServerSendMessageResponse sendMessageResponse(String reply) {
-        return new AiServerSendMessageResponse(reply, 1, 20, false, 1, false, null, null, false);
+        return sendMessageResponse(reply, false);
+    }
+
+    private static AiServerSendMessageResponse sendMessageResponse(String reply, boolean inputLocked) {
+        return new AiServerSendMessageResponse(reply, null, 1, 20, false, inputLocked, 5);
     }
 
     private static AiChatRoom room(Long id, AiChatRoomStatus status, LocalDateTime purgeAt) {

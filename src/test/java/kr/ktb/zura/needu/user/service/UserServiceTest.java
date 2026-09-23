@@ -206,6 +206,16 @@ class UserServiceTest {
     }
 
     @Test
+    void existingUser_completeTasteAnalysis_marksCompleted() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.completeTasteAnalysis(1L);
+
+        assertTrue(user.isTasteAnalysisCompleted());
+    }
+
+    @Test
     void missingUser_findUserById_returnsEmpty() {
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 

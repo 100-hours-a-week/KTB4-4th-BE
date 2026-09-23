@@ -10,9 +10,9 @@ public record AnalysisResultResponse(
 
     public static AnalysisResultResponse from(AiServerAnalysisResponse response) {
         return new AnalysisResultResponse(
-                response.summary(),
-                AnalysisKeywordsResponse.from(response.keywords()),
-                response.correctionAvailable()
+                response.profile().summary(),
+                AnalysisKeywordsResponse.from(response.profile().keywords()),
+                response.profile().correctionAvailable()
         );
     }
 }

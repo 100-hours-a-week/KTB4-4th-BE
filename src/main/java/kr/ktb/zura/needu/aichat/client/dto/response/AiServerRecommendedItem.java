@@ -1,20 +1,12 @@
 package kr.ktb.zura.needu.aichat.client.dto.response;
 
-import java.util.List;
+import java.math.BigDecimal;
+import kr.ktb.zura.needu.product.type.PlatformType;
 
 public record AiServerRecommendedItem(
-        Long productId,
-        String platform,
-        String title,
-        Integer price,
-        String imageUrl,
-        String productUrl,
-        Integer rank,
-        Double score,
-        String reason,
-        String category,
-        Integer priceBand,
-        List<AiServerMatchedSignal> matchedSignals,
-        AiServerRanking ranking
+        PlatformType platform,
+        String externalId,
+        BigDecimal score,
+        String reason
 ) {
 }

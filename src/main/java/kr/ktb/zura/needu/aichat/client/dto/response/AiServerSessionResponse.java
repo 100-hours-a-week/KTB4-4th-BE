@@ -10,12 +10,8 @@ public record AiServerSessionResponse(
         Integer turn,
         Integer maxTurns,
         List<AiServerSessionMessageResponse> messages,
-        Integer itemCount,
         Boolean inputLocked,
-        Boolean analysisAvailable,
         Boolean canClose,
-        String completionReason,
-        String profileCompleteness,
         Instant lastActiveAt
 ) {
 }
