@@ -44,13 +44,13 @@ public class FriendController {
     @GetMapping
     public ResponseEntity<CursorApiResponse<FriendSummaryResponse>> findAllFriends(
             @AuthenticationPrincipal Long userId,
-            @RequestParam @Pattern(regexp = "birthday") String sort,
+            @RequestParam(required = false) @Pattern(regexp = "birthday") String sort,
             @RequestParam(required = false) String cursor,
             @RequestParam @Min(FriendPageLimits.MIN_PAGE_SIZE) @Max(FriendPageLimits.MAX_PAGE_SIZE) int size
     ) {
         return ResponseEntity.ok(CursorApiResponse.of(
                 FriendResponseMessages.FRIENDS_FOUND,
-                friendService.findAllFriends(userId, cursor, size)
+                friendService.findAllFriends(userId, sort, cursor, size)
         ));
     }
 

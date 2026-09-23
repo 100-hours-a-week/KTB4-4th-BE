@@ -74,18 +74,19 @@ class FriendServiceTest {
     }
 
     @Test
-    void moreFriendsThanSize_findAllFriends_returnsPageAndCursor() {
-        FriendSummaryResponse first = friendSummary(2L, LocalDate.of(2000, 10, 1));
-        FriendSummaryResponse second = friendSummary(3L, LocalDate.of(2000, 10, 2));
-        FriendSummaryResponse extra = friendSummary(4L, LocalDate.of(2000, 10, 3));
-        when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
+    void missingSort_findAllFriends_returnsNamePageAndCursor() {
+        FriendSummaryResponse first = friendSummary(2L, "가나", LocalDate.of(2000, 10, 1));
+        FriendSummaryResponse second = friendSummary(3L, "다라", LocalDate.of(2000, 10, 2));
+        FriendSummaryResponse extra = friendSummary(4L, "마바", LocalDate.of(2000, 10, 3));
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, Limit.of(3)))
                 .thenReturn(List.of(first, second, extra));
 
-        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, null, 2);
+        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, null, null, 2);
 
         assertThat(response.items()).containsExactly(first, second);
         assertThat(response.hasNext()).isTrue();
-        assertThat(FriendCursor.decode(response.nextCursor()).userId()).isEqualTo(3L);
+        assertThat(FriendNameCursor.decode(response.nextCursor()))
+                .isEqualTo(new FriendNameCursor("다라", 3L));
         verify(userService).findUserSummary(1L);
     }
 
@@ -95,7 +96,7 @@ class FriendServiceTest {
         when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
                 .thenReturn(List.of(friend));
 
-        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, null, 2);
+        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, "birthday", null, 2);
 
         assertThat(response.items()).containsExactly(friend);
         assertThat(response.hasNext()).isFalse();
@@ -144,6 +145,10 @@ class FriendServiceTest {
     }
 
     private FriendSummaryResponse friendSummary(Long userId, LocalDate birthDate) {
-        return new FriendSummaryResponse(userId, "친구", null, birthDate, false);
+        return friendSummary(userId, "친구", birthDate);
+    }
+
+    private FriendSummaryResponse friendSummary(Long userId, String name, LocalDate birthDate) {
+        return new FriendSummaryResponse(userId, name, null, birthDate, false);
     }
 }
