@@ -5,8 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
-import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
@@ -80,10 +80,12 @@ class FriendServiceTest {
         FriendSummaryResponse extra = friendSummary(4L, "마바", LocalDate.of(2000, 10, 3));
         when(friendRepository.findAllByOwnerUserIdOrderByName(1L, Limit.of(3)))
                 .thenReturn(List.of(first, second, extra));
+        when(userService.isKakaoFriendSynced(1L)).thenReturn(true);
 
-        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, null, null, 2);
+        FriendListResponse response = friendService.findAllFriends(1L, null, null, 2);
 
         assertThat(response.items()).containsExactly(first, second);
+        assertThat(response.isKakaoFriendSynced()).isTrue();
         assertThat(response.hasNext()).isTrue();
         assertThat(FriendNameCursor.decode(response.nextCursor()))
                 .isEqualTo(new FriendNameCursor("다라", 3L));
@@ -96,7 +98,7 @@ class FriendServiceTest {
         when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
                 .thenReturn(List.of(friend));
 
-        CursorPageResponse<FriendSummaryResponse> response = friendService.findAllFriends(1L, "birthday", null, 2);
+        FriendListResponse response = friendService.findAllFriends(1L, "birthday", null, 2);
 
         assertThat(response.items()).containsExactly(friend);
         assertThat(response.hasNext()).isFalse();
