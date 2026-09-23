@@ -4,6 +4,7 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -128,7 +129,7 @@ class AiChatClientTest {
                         {
                           "sessionId": 101,
                           "greeting": "안녕하세요",
-                          "createdAt": "2026-09-23T05:18:00",
+                          "createdAt": "2026-09-23T05:18:00+00:00",
                           "maxTurns": 20
                         }
                         """));
@@ -136,7 +137,7 @@ class AiChatClientTest {
         AiServerStartSessionResponse response = client.startSession(1L, 101L);
 
         assertEquals(new AiServerStartSessionResponse(
-                101L, "안녕하세요", LocalDateTime.of(2026, 9, 23, 5, 18), 20), response);
+                101L, "안녕하세요", OffsetDateTime.parse("2026-09-23T05:18:00+00:00"), 20), response);
         server.verify();
     }
 
@@ -151,7 +152,7 @@ class AiChatClientTest {
                 .andRespond(withSuccess("""
                         {
                           "reply": "캠핑 좋죠.",
-                          "createdAt": "2026-09-23T05:20:00",
+                          "createdAt": "2026-09-23T05:20:00+00:00",
                           "turn": 3,
                           "maxTurns": 20,
                           "canClose": false,
@@ -163,7 +164,7 @@ class AiChatClientTest {
         AiServerSendMessageResponse response = client.sendMessage(1L, 101L, "주말마다 캠핑 가요");
 
         assertEquals(new AiServerSendMessageResponse(
-                "캠핑 좋죠.", LocalDateTime.of(2026, 9, 23, 5, 20),
+                "캠핑 좋죠.", OffsetDateTime.parse("2026-09-23T05:20:00+00:00"),
                 3, 20, false, false, 15), response);
         messageServer.verify();
     }

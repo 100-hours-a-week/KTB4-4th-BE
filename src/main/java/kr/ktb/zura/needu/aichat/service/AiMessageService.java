@@ -68,8 +68,10 @@ public class AiMessageService {
     }
 
     @Transactional
-    public AiMessage createReply(Long conversationId, Long userMessageId, String content) {
+    public AiMessage createReply(Long conversationId, Long userMessageId, String content,
+                                 int progress, boolean inputLocked) {
         AiChatRoom room = aiChatRoomRepository.getReferenceById(conversationId);
-        return aiMessageRepository.save(AiMessage.createReply(room, userMessageId, content));
+        return aiMessageRepository.save(
+                AiMessage.createReply(room, userMessageId, content, progress, inputLocked));
     }
 }

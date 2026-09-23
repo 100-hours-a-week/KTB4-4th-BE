@@ -1,11 +1,11 @@
 package kr.ktb.zura.needu.aichat.client.dto.response;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 public record AiServerStartSessionResponse(
         Long sessionId,
         String greeting,
-        LocalDateTime createdAt,
+        OffsetDateTime createdAt,
         Integer maxTurns
 ) {
 }

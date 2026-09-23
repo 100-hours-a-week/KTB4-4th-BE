@@ -90,18 +90,21 @@ class AiMessageServiceTest {
     void userMessage_createReply_savesAiMessageLinkedToUserMessage() {
         AiMessage userMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
 
-        AiMessage reply = aiMessageService.createReply(conversationId, userMessage.getId(), AI_CONTENT);
+        AiMessage reply = aiMessageService.createReply(
+                conversationId, userMessage.getId(), AI_CONTENT, 15, true);
         aiMessageRepository.flush();
         entityManager.clear();
 
         assertThat(reply.getSenderType()).isEqualTo(SenderType.AI);
         assertThat(reply.getClientMessageId()).isNull();
+        assertThat(reply.getProgress()).isEqualTo(15);
+        assertThat(reply.getInputLocked()).isTrue();
         // 메시지 순서는 id 오름차순으로 판단한다
         assertThat(reply.getId()).isGreaterThan(userMessage.getId());
-        assertThat(aiMessageService.findReply(userMessage.getId()))
-                .get()
-                .extracting(AiMessage::getContent)
-                .isEqualTo(AI_CONTENT);
+        AiMessage savedReply = aiMessageService.findReply(userMessage.getId()).orElseThrow();
+        assertThat(savedReply.getContent()).isEqualTo(AI_CONTENT);
+        assertThat(savedReply.getProgress()).isEqualTo(15);
+        assertThat(savedReply.getInputLocked()).isTrue();
     }
 
     @Test
@@ -185,7 +188,7 @@ class AiMessageServiceTest {
     @Test
     void messagesFromBothSenders_findAllMessages_returnsRoleAndContent() {
         AiMessage userMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
-        aiMessageService.createReply(conversationId, userMessage.getId(), AI_CONTENT);
+        aiMessageService.createReply(conversationId, userMessage.getId(), AI_CONTENT, 15, false);
         aiMessageRepository.flush();
         entityManager.clear();
 

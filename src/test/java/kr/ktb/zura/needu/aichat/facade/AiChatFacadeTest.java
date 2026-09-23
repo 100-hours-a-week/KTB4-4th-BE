@@ -50,6 +50,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
@@ -185,52 +187,34 @@ class AiChatFacadeTest {
                 .willReturn(message(USER_MESSAGE_ID, null));
         given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willReturn(sendMessageResponse(AI_CONTENT));
-        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
+        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
 
         AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
-        assertThat(response).isEqualTo(new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT));
+        assertThat(response).isEqualTo(
+                new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false, null));
         verify(aiChatRoomService).extendSession(ROOM_ID);
     }
 
     @Test
-    void inputLocked_sendMessage_returnsAnalysis() {
+    void inputLocked_sendMessage_returnsReplyWithoutRequestingAnalysis() {
         givenActiveRoom();
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
         given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
                 .willReturn(sendMessageResponse(AI_CONTENT, true));
-        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
-                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
-        given(aiChatClient.createAnalysis(ROOM_ID)).willReturn(analysisResponse(true));
+        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, true))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID, true));
 
         AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
         assertThat(response.inputLocked()).isTrue();
-        assertThat(response.analysis()).isEqualTo(AnalysisResultResponse.from(analysisResponse(true)));
-        verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
-        verify(aiChatClient).createAnalysis(ROOM_ID);
-    }
-
-    @Test
-    void analysisFailed_sendMessage_returnsReplyWithoutAnalysis() {
-        givenActiveRoom();
-        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
-        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
-                .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT, true));
-        given(aiMessageService.createReply(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT))
-                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
-        given(aiChatClient.createAnalysis(ROOM_ID))
-                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
-
-        AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
-
-        assertThat(response.inputLocked()).isTrue();
+        assertThat(response.progress()).isEqualTo(5);
         assertThat(response.analysis()).isNull();
+        verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        verify(aiChatClient, never()).createAnalysis(anyLong());
     }
 
     @Test
@@ -243,7 +227,8 @@ class AiChatFacadeTest {
 
         AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
-        assertThat(response).isEqualTo(new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT));
+        assertThat(response).isEqualTo(
+                new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false, null));
         verifyNoInteractions(aiChatClient);
         verify(aiMessageService, never()).createUserMessage(anyLong(), any(), any());
     }
@@ -295,7 +280,7 @@ class AiChatFacadeTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND);
         verify(aiChatRoomService).expireRoom(ROOM_ID);
-        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any());
+        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any(), anyInt(), anyBoolean());
     }
 
     @Test
@@ -310,7 +295,7 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(TooManyRequestsException.class);
         verify(aiChatRoomService, never()).expireRoom(anyLong());
-        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any());
+        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any(), anyInt(), anyBoolean());
     }
 
     @Test
@@ -339,7 +324,37 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
-        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any());
+        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any(), anyInt(), anyBoolean());
+    }
+
+    @Test
+    void aiResponseWithInvalidProgress_sendMessage_throwsInvalidResponse() {
+        givenActiveRoom();
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(new AiServerSendMessageResponse(AI_CONTENT, null, 1, 20, false, false, 101));
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any(), anyInt(), anyBoolean());
+    }
+
+    @Test
+    void aiResponseWithoutInputLocked_sendMessage_throwsInvalidResponse() {
+        givenActiveRoom();
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(new AiServerSendMessageResponse(AI_CONTENT, null, 1, 20, false, null, 5));
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+        verify(aiMessageService, never()).createReply(anyLong(), anyLong(), any(), anyInt(), anyBoolean());
     }
 
     @Test
@@ -425,6 +440,36 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void analysisWithBlankSummary_createAnalysis_throwsInvalidResponse() {
+        givenActiveRoom();
+        AiServerAnalysisResponse response = analysisResponse(true);
+        given(aiChatClient.createAnalysis(ROOM_ID)).willReturn(new AiServerAnalysisResponse(
+                new AiServerAnalysisProfileResponse(
+                        USER_ID, " ", response.profile().keywords(), true)));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+    }
+
+    @Test
+    void analysisWithInvalidKeywordScore_createAnalysis_throwsInvalidResponse() {
+        givenActiveRoom();
+        given(aiChatClient.createAnalysis(ROOM_ID)).willReturn(new AiServerAnalysisResponse(
+                new AiServerAnalysisProfileResponse(
+                        USER_ID,
+                        "캠핑을 즐깁니다.",
+                        new AiServerAnalysisKeywordsResponse(
+                                List.of(new AiServerAnalysisKeywordResponse("캠핑", 1.1)),
+                                List.of()),
+                        true)));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+    }
+
+    @Test
     void successfulRecommendationJob_confirmAnalysis_returnsCompleted() {
         givenActiveRoom();
         AiServerRecommendationResult self = new AiServerRecommendationResult(List.of(
@@ -459,10 +504,14 @@ class AiChatFacadeTest {
     }
 
     private static AiMessage message(Long id, Long replyToMessageId) {
+        return message(id, replyToMessageId, false);
+    }
+
+    private static AiMessage message(Long id, Long replyToMessageId, boolean inputLocked) {
         AiChatRoom room = room(ROOM_ID, AiChatRoomStatus.ACTIVE, null);
         AiMessage message = replyToMessageId == null
                 ? AiMessage.createUserMessage(room, CLIENT_MESSAGE_ID, USER_CONTENT)
-                : AiMessage.createReply(room, replyToMessageId, AI_CONTENT);
+                : AiMessage.createReply(room, replyToMessageId, AI_CONTENT, 5, inputLocked);
         // ID는 DB에서 결정되므로 단위 테스트에서만 직접 설정한다.
         ReflectionTestUtils.setField(message, "id", id);
         return message;

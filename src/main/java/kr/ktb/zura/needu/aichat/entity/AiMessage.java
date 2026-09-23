@@ -59,6 +59,10 @@ public class AiMessage {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    private Integer progress;
+
+    private Boolean inputLocked;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -66,23 +70,26 @@ public class AiMessage {
     private LocalDateTime deletedAt;
 
     private AiMessage(AiChatRoom aiChatRoom, SenderType senderType, UUID clientMessageId,
-                      Long replyToMessageId, String content) {
+                      Long replyToMessageId, String content, Integer progress, Boolean inputLocked) {
         this.aiChatRoom = aiChatRoom;
         this.senderType = senderType;
         this.clientMessageId = clientMessageId;
         this.replyToMessageId = replyToMessageId;
         this.content = content;
+        this.progress = progress;
+        this.inputLocked = inputLocked;
     }
 
     public static AiMessage createGreeting(AiChatRoom aiChatRoom, String content) {
-        return new AiMessage(aiChatRoom, SenderType.AI, null, null, content);
+        return new AiMessage(aiChatRoom, SenderType.AI, null, null, content, null, null);
     }
 
     public static AiMessage createUserMessage(AiChatRoom aiChatRoom, UUID clientMessageId, String content) {
-        return new AiMessage(aiChatRoom, SenderType.USER, clientMessageId, null, content);
+        return new AiMessage(aiChatRoom, SenderType.USER, clientMessageId, null, content, null, null);
     }
 
-    public static AiMessage createReply(AiChatRoom aiChatRoom, Long replyToMessageId, String content) {
-        return new AiMessage(aiChatRoom, SenderType.AI, null, replyToMessageId, content);
+    public static AiMessage createReply(AiChatRoom aiChatRoom, Long replyToMessageId, String content,
+                                        int progress, boolean inputLocked) {
+        return new AiMessage(aiChatRoom, SenderType.AI, null, replyToMessageId, content, progress, inputLocked);
     }
 }
