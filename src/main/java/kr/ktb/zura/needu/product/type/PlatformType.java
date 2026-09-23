@@ -5,7 +5,9 @@ import java.util.Locale;
 
 public enum PlatformType {
     COUPANG,
-    KAKAO;
+    KAKAO,
+    ELEVEN_STREET,
+    HOMEPLUS;
 
     @JsonCreator
     public static PlatformType from(String value) {
