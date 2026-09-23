@@ -9,9 +9,8 @@ import java.net.URI;
 import java.util.UUID;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
-import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
-import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendListApiResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
@@ -42,13 +41,13 @@ public class FriendController {
     private final KakaoFriendSyncService kakaoFriendSyncService;
 
     @GetMapping
-    public ResponseEntity<CursorApiResponse<FriendSummaryResponse>> findAllFriends(
+    public ResponseEntity<FriendListApiResponse> findAllFriends(
             @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) @Pattern(regexp = "birthday") String sort,
             @RequestParam(required = false) String cursor,
             @RequestParam @Min(FriendPageLimits.MIN_PAGE_SIZE) @Max(FriendPageLimits.MAX_PAGE_SIZE) int size
     ) {
-        return ResponseEntity.ok(CursorApiResponse.of(
+        return ResponseEntity.ok(FriendListApiResponse.of(
                 FriendResponseMessages.FRIENDS_FOUND,
                 friendService.findAllFriends(userId, sort, cursor, size)
         ));
