@@ -89,7 +89,7 @@ class FriendServiceTest {
         assertThat(response.hasNext()).isTrue();
         assertThat(FriendNameCursor.decode(response.nextCursor()))
                 .isEqualTo(new FriendNameCursor("다라", 3L));
-        verify(userService).findUserSummary(1L);
+        verify(userService).validateActiveUser(1L);
     }
 
     @Test
