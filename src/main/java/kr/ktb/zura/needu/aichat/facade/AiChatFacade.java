@@ -73,8 +73,9 @@ public class AiChatFacade {
         if (room.isPending()) {
             return startConversation(userId, room.getId());
         }
-        // AI 서버에 세션 조회 API가 없어 purgeAt으로 만료를 판단, 규칙보다 일찍 사라진 세션은 메시지 전송 시 발견
-        if (room.isActive() && room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
+        // AI 서버에 세션 조회 API가 없어 purgeAt으로 만료를 판단, 규칙보다 일찍 사라진 세션은 메시지 전송·분석 시 발견
+        // ANALYZING도 AI 세션이 만료되면 분석을 이어갈 수 없음 => 다른 대화 API처럼 만료로 보고 새 대화를 시작한다
+        if (room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             return restartConversation(userId, room.getId());
         }
         return AiConversationStartResult.resumed(
@@ -141,19 +142,22 @@ public class AiChatFacade {
             if (!(e.getErrorCode() instanceof AiChatErrorCode errorCode)) {
                 throw e;
             }
-            if (errorCode.isSessionGone()) {
-                // AI 세션이 만료 규칙보다 일찍 사라졌거나 이미 닫힘 => 방을 정리해 새 대화를 시작하게 한다
-                log.info("AI chat session gone. userId={}, conversationId={}, code={}",
-                        userId, conversationId, errorCode.name());
-                aiChatRoomService.expireRoom(conversationId);
-                throw e;
-            }
+            expireRoomIfSessionGone(userId, conversationId, e);
             if (errorCode == AiChatErrorCode.AICHAT_TURN_IN_PROGRESS) {
                 // AI 서버가 이전 메시지를 처리 중 => 대화방을 그대로 두고 재시도 시각만 알려준다
                 log.info("AI turn in progress. userId={}, conversationId={}", userId, conversationId);
                 throw new TooManyRequestsException(messageRetryAfter.toSeconds());
             }
             throw e;
+        }
+    }
+
+    // AI 세션이 만료 규칙보다 일찍 사라졌거나 이미 닫힘 => 방을 정리해 새 대화를 시작하게 한다
+    private void expireRoomIfSessionGone(Long userId, Long conversationId, BusinessException e) {
+        if (e.getErrorCode() instanceof AiChatErrorCode errorCode && errorCode.isSessionGone()) {
+            log.info("AI chat session gone. userId={}, conversationId={}, code={}",
+                    userId, conversationId, errorCode.name());
+            aiChatRoomService.expireRoom(conversationId);
         }
     }
 
@@ -209,23 +213,39 @@ public class AiChatFacade {
 
     public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
         aiChatRoomService.validateAnalyzableRoom(userId, conversationId);
-        return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
+        try {
+            return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
+        } catch (BusinessException e) {
+            expireRoomIfSessionGone(userId, conversationId, e);
+            throw e;
+        }
     }
 
     public AnalysisResultResponse patchAnalyze(Long userId, Long conversationId, PatchAnalyzeMessageRequest request) {
         aiChatRoomService.validateActiveRoom(userId, conversationId);
-        return toAnalysisResult(aiChatClient.patchAnalyze(conversationId,
-                new AiServerPatchAnalysisRequest(
-                        userId,
-                        request.summary(),
-                        new AiServerAnalysisKeywordsRequest(
-                                request.keywords().taste(), request.keywords().interest()))));
+        try {
+            return toAnalysisResult(aiChatClient.patchAnalyze(conversationId,
+                    new AiServerPatchAnalysisRequest(
+                            userId,
+                            request.summary(),
+                            new AiServerAnalysisKeywordsRequest(
+                                    request.keywords().taste(), request.keywords().interest()))));
+        } catch (BusinessException e) {
+            expireRoomIfSessionGone(userId, conversationId, e);
+            throw e;
+        }
     }
 
     public ProductRecommendationStatusResponse confirmAnalysis(Long userId, Long conversationId) {
         aiChatRoomService.validateActiveRoom(userId, conversationId);
         aiChatRoomService.startAnalysis(conversationId);
-        AiServerCloseSessionResponse response = aiChatClient.confirmAnalysis(userId, conversationId);
+        AiServerCloseSessionResponse response;
+        try {
+            response = aiChatClient.confirmAnalysis(userId, conversationId);
+        } catch (BusinessException e) {
+            expireRoomIfSessionGone(userId, conversationId, e);
+            throw e;
+        }
         validateCloseResponse(response);
         productRecommendationService.saveRecommendations(
                 userId,
