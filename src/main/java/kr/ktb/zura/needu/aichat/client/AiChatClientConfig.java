@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
@@ -9,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(name = "ai.server.mock-enabled", havingValue = "false", matchIfMissing = true)
 public class AiChatClientConfig {
 
     @Bean
