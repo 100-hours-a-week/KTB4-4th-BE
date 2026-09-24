@@ -35,6 +35,12 @@ public class AiMessageService {
     }
 
     @Transactional(readOnly = true)
+    public int findLatestProgress(Long conversationId) {
+        List<Integer> progresses = aiMessageRepository.findLatestProgress(conversationId, Limit.of(1));
+        return progresses.isEmpty() ? 0 : progresses.getFirst();
+    }
+
+    @Transactional(readOnly = true)
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(Long conversationId, String cursor, int size) {
         // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회
         List<AiMessage> messages = findLatestMessages(conversationId, cursor, Limit.of(size + 1));
