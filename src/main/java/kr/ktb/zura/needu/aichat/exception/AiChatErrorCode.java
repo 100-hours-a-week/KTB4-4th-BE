@@ -11,6 +11,8 @@ public enum AiChatErrorCode implements ErrorCode {
 
     AICHAT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 대화를 찾을 수 없습니다."),
     AICHAT_CONVERSATION_FORBIDDEN(HttpStatus.FORBIDDEN, "해당 AI 대화에 접근할 수 없습니다."),
+    AICHAT_INPUT_LOCKED(HttpStatus.CONFLICT, "AI 대화의 사용자 입력이 잠겨 있습니다."),
+    AICHAT_ANALYSIS_NOT_READY(HttpStatus.CONFLICT, "취향 분석을 생성할 수 없는 상태입니다."),
 
     // AI 서버 세션이 만료 규칙보다 일찍 사라졌거나 이미 닫힌 경우 => FE에는 대화가 없는 것과 같게 보인다
     AICHAT_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 대화를 찾을 수 없습니다."),

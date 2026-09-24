@@ -7,13 +7,12 @@ public record AiMessageResponse(
         Long messageId,
         String content,
         Integer progress,
-        Boolean inputLocked,
-        AnalysisResultResponse analysis
+        Boolean inputLocked
 ) {
 
     public static AiMessageResponse from(AiMessage reply) {
         return new AiMessageResponse(
                 reply.getReplyToMessageId(), reply.getId(), reply.getContent(),
-                reply.getProgress(), reply.getInputLocked(), null);
+                reply.getProgress(), reply.getInputLocked());
     }
 }

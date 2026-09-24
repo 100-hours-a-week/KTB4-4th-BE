@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
@@ -23,22 +24,13 @@ public class AiChatRoomService {
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiMessageRepository aiMessageRepository;
     private final Duration pendingTimeout;
-    private final Duration sessionIdleTimeout;
-    private final Duration sessionMaxDuration;
-    private final Duration sessionExpiryMargin;
 
     public AiChatRoomService(AiChatRoomRepository aiChatRoomRepository,
                              AiMessageRepository aiMessageRepository,
-                             @Value("${ai.chat.pending-timeout:1m}") Duration pendingTimeout,
-                             @Value("${ai.chat.session-idle-timeout:30m}") Duration sessionIdleTimeout,
-                             @Value("${ai.chat.session-max-duration:2h}") Duration sessionMaxDuration,
-                             @Value("${ai.chat.session-expiry-margin:1m}") Duration sessionExpiryMargin) {
+                             @Value("${ai.chat.pending-timeout:1m}") Duration pendingTimeout) {
         this.aiChatRoomRepository = aiChatRoomRepository;
         this.aiMessageRepository = aiMessageRepository;
         this.pendingTimeout = pendingTimeout;
-        this.sessionIdleTimeout = sessionIdleTimeout;
-        this.sessionMaxDuration = sessionMaxDuration;
-        this.sessionExpiryMargin = sessionExpiryMargin;
     }
 
     // 반환된 방이 PENDING => 이번 호출에서 새로 예약한 방
@@ -52,7 +44,7 @@ public class AiChatRoomService {
             return room;
         }
         // AI 호출 제한 시간보다 오래 PENDING => 이전 요청이 비정상 종료된 것으로 보고 정리
-        if (room.isReservedBefore(LocalDateTime.now().minus(pendingTimeout))) {
+        if (room.isReservedBefore(LocalDateTime.now(ZoneOffset.UTC).minus(pendingTimeout))) {
             log.info("Stale AI chat room discarded. userId={}, conversationId={}", userId, room.getId());
             discardAndFlush(room);
             return reserveRoom(userId);
@@ -70,16 +62,35 @@ public class AiChatRoomService {
     }
 
     @Transactional
-    public AiChatRoom activateRoom(Long roomId, String greeting) {
+    public AiChatRoom activateRoom(Long roomId, String greeting, LocalDateTime purgeAt) {
         AiChatRoom room = findRoom(roomId);
-        room.activate(calculatePurgeAt(room, LocalDateTime.now()));
+        room.activate(purgeAt);
         aiMessageRepository.save(AiMessage.createGreeting(room, greeting));
         return room;
     }
 
-    // 대화 작업이 가능한 상태(소유자 본인, ACTIVE, 만료 전)인지 확인한다
+    // 대화 작업이 가능한 상태(소유자 본인, ACTIVE/ANALYZING, 만료 전)인지 확인한다
     @Transactional(readOnly = true)
     public void validateActiveRoom(Long userId, Long roomId) {
+        findAccessibleRoom(userId, roomId);
+    }
+
+    @Transactional(readOnly = true)
+    public void validateMessageSendableRoom(Long userId, Long roomId) {
+        if (findAccessibleRoom(userId, roomId).isInputLocked()) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public void validateAnalyzableRoom(Long userId, Long roomId) {
+        AiChatRoom room = findAccessibleRoom(userId, roomId);
+        if (!room.isAnalyzing() || !room.isInputLocked()) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY);
+        }
+    }
+
+    private AiChatRoom findAccessibleRoom(Long userId, Long roomId) {
         AiChatRoom room = aiChatRoomRepository.findById(roomId)
                 .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND));
@@ -87,9 +98,11 @@ public class AiChatRoomService {
         if (!room.isOwnedBy(userId)) {
             throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
         }
-        if (!room.isActive() || room.isExpiredAt(LocalDateTime.now())) {
+        if ((!room.isActive() && !room.isAnalyzing())
+                || room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
         }
+        return room;
     }
 
     @Transactional
@@ -97,25 +110,19 @@ public class AiChatRoomService {
         findRoom(roomId).expire();
     }
 
-    // 마지막 활동 시각이 갱신됐으므로 만료 시각을 다시 계산한다
     @Transactional
-    public void extendSession(Long roomId) {
-        AiChatRoom room = findRoom(roomId);
-        room.extendPurgeAt(calculatePurgeAt(room, LocalDateTime.now()));
+    public void completeRoom(Long roomId) {
+        findRoom(roomId).complete();
+    }
+
+    @Transactional
+    public void startAnalysis(Long roomId) {
+        findRoom(roomId).startAnalysis();
     }
 
     @Transactional
     public void discardRoom(Long roomId) {
-        findRoom(roomId).discard(LocalDateTime.now());
-    }
-
-    // AI 명세의 만료 규칙(마지막 활동 후 30분, 시작 후 최대 2시간)으로 계산
-    // BE의 시각은 AI 서버의 세션 생성/갱신 시각보다 늦으므로 여유 시간을 빼 AI 세션보다 먼저 만료되게
-    private LocalDateTime calculatePurgeAt(AiChatRoom room, LocalDateTime lastActivityAt) {
-        LocalDateTime idleExpiresAt = lastActivityAt.plus(sessionIdleTimeout);
-        LocalDateTime maxExpiresAt = room.getCreatedAt().plus(sessionMaxDuration);
-        LocalDateTime expiresAt = idleExpiresAt.isBefore(maxExpiresAt) ? idleExpiresAt : maxExpiresAt;
-        return expiresAt.minus(sessionExpiryMargin);
+        findRoom(roomId).discard(LocalDateTime.now(ZoneOffset.UTC));
     }
 
     private AiChatRoom findRoom(Long roomId) {
@@ -124,7 +131,7 @@ public class AiChatRoomService {
     }
 
     private void discardAndFlush(AiChatRoom room) {
-        room.discard(LocalDateTime.now());
+        room.discard(LocalDateTime.now(ZoneOffset.UTC));
         aiChatRoomRepository.flush();
     }
 

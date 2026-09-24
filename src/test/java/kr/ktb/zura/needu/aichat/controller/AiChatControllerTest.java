@@ -38,6 +38,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -109,8 +110,7 @@ class AiChatControllerTest {
                         202L,
                         "러닝을 좋아하시는군요.",
                         15,
-                        true,
-                        null
+                        true
                 ));
 
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
@@ -121,7 +121,17 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.content").value("러닝을 좋아하시는군요."))
                 .andExpect(jsonPath("$.data.progress").value(15))
                 .andExpect(jsonPath("$.data.inputLocked").value(true))
-                .andExpect(jsonPath("$.data.analysis").isEmpty());
+                .andExpect(jsonPath("$.data.analysis").doesNotExist());
+    }
+
+    @Test
+    void inputLockedConversation_sendMessage_returnsConflict() throws Exception {
+        given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED));
+
+        mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("AI 대화의 사용자 입력이 잠겨 있습니다."));
     }
 
     @Test
@@ -215,6 +225,30 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.keywords.taste[0].value").value("핸드드립"))
                 .andExpect(jsonPath("$.data.keywords.interest[0].value").value("캠핑"))
                 .andExpect(jsonPath("$.data.correctionAvailable").value(true));
+    }
+
+    @Test
+    void blankSummary_patchAnalysis_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchAnalysis("""
+                {
+                  "summary": " ",
+                  "keywords": {"taste": ["실용적"], "interest": ["캠핑"]}
+                }
+                """))
+                .andExpect(status().isUnprocessableContent());
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
+    void blankKeyword_patchAnalysis_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchAnalysis("""
+                {
+                  "summary": "캠핑을 좋아합니다.",
+                  "keywords": {"taste": [" "], "interest": ["캠핑"]}
+                }
+                """))
+                .andExpect(status().isUnprocessableContent());
+        verifyNoInteractions(aiChatFacade);
     }
 
     @Test
@@ -341,6 +375,14 @@ class AiChatControllerTest {
 
     private static MockHttpServletRequestBuilder postMessage(String body) {
         return post(MESSAGES_URL)
+                .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+    }
+
+    private static MockHttpServletRequestBuilder patchAnalysis(String body) {
+        return patch(ANALYSIS_URL)
                 .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)

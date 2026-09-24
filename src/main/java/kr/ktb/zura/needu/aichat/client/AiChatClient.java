@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -16,15 +17,19 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordRespo
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerErrorResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
-import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.type.AiChatEndpoint;
 import kr.ktb.zura.needu.aichat.type.AiChatRequestField;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.product.type.PlatformType;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -38,12 +43,15 @@ import org.springframework.web.client.RestClientResponseException;
 public class AiChatClient {
 
     private static final String SESSION_CLOSED_CODE = "SESSION_CLOSED";
+    private static final String MOCK_SELF_PRODUCT_ID = "88213";
+    private static final String MOCK_GIFT_PRODUCT_ID = "88214";
 
     private final RestClient restClient;
     private final RestClient messageRestClient;
     private final String serviceToken;
     private final boolean mockEnabled;
     private final Map<Long, Integer> mockTurns = new ConcurrentHashMap<>();
+    private final Map<Long, AiServerAnalysisResponse> mockAnalyses = new ConcurrentHashMap<>();
 
     public AiChatClient(@Qualifier("aiChatRestClient") RestClient restClient,
                         @Qualifier("aiChatMessageRestClient") RestClient messageRestClient,
@@ -59,13 +67,6 @@ public class AiChatClient {
         return request(AiChatEndpoint.CHECK_HEALTH, Map.of(), null, AiServerHealthResponse.class);
     }
 
-    public AiServerSessionResponse getSession(Long userId, Long conversationRoomId) {
-        return request(AiChatEndpoint.GET_SESSION, Map.of(
-                AiChatRequestField.CONVERSATION_ROOM_ID.getFieldName(), conversationRoomId,
-                AiChatRequestField.USER_ID.getFieldName(), userId
-        ), null, AiServerSessionResponse.class);
-    }
-
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
         if (mockEnabled) {
             mockTurns.put(conversationRoomId, 0);
@@ -73,6 +74,7 @@ public class AiChatClient {
                     conversationRoomId,
                     "안녕하세요! 요즘 어떻게 지내시는지 궁금해요.",
                     OffsetDateTime.now(ZoneOffset.UTC),
+                    OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(30),
                     20);
         }
         return request(AiChatEndpoint.START_SESSION, Map.of(),
@@ -88,6 +90,7 @@ public class AiChatClient {
                             ? "좋아요. 말씀해주신 내용을 바탕으로 취향을 분석해 볼게요."
                             : "흥미롭네요. 그 활동에서 가장 좋아하는 점은 무엇인가요?",
                     OffsetDateTime.now(ZoneOffset.UTC),
+                    OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(30),
                     turn,
                     20,
                     inputLocked,
@@ -100,27 +103,84 @@ public class AiChatClient {
 
     public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
         if (mockEnabled) {
-            return new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
+            AiServerAnalysisResponse response = new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
                     10293L,
                     "캠핑과 실용적인 장비를 좋아합니다.",
                     new AiServerAnalysisKeywordsResponse(
                             List.of(new AiServerAnalysisKeywordResponse("실용적인 장비", 0.92)),
                             List.of(new AiServerAnalysisKeywordResponse("캠핑", 0.95))),
                     true));
+            mockAnalyses.put(conversationRoomId, response);
+            return response;
         }
         return request(AiChatEndpoint.CREATE_ANALYSIS, pathVariables(conversationRoomId),
                 null, AiServerAnalysisResponse.class);
     }
 
     public AiServerAnalysisResponse patchAnalyze(Long conversationId, AiServerPatchAnalysisRequest request) {
+        if (mockEnabled) {
+            AiServerAnalysisResponse response = new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
+                    request.userId(),
+                    request.summary(),
+                    new AiServerAnalysisKeywordsResponse(
+                            toMockKeywords(request.keywords().taste()),
+                            toMockKeywords(request.keywords().interest())),
+                    false));
+            mockAnalyses.put(conversationId, response);
+            return response;
+        }
         return request(AiChatEndpoint.PATCH_ANALYZE, pathVariables(conversationId),
                 request, AiServerAnalysisResponse.class);
     }
 
     public AiServerCloseSessionResponse confirmAnalysis(
             Long userId, Long conversationRoomId) {
+        if (mockEnabled) {
+            AiServerAnalysisProfileResponse profile = mockAnalyses.getOrDefault(
+                    conversationRoomId, createMockAnalysis(userId)).profile();
+            mockAnalyses.remove(conversationRoomId);
+            mockTurns.remove(conversationRoomId);
+            return new AiServerCloseSessionResponse(
+                    conversationRoomId,
+                    userId,
+                    profile.summary(),
+                    new AiServerCloseSessionKeywordsResponse(
+                            toKeywordValues(profile.keywords().taste()),
+                            toKeywordValues(profile.keywords().interest())),
+                    new AiServerRecommendationsResponse(
+                            new AiServerRecommendationResult(List.of(new AiServerRecommendedItem(
+                                    PlatformType.COUPANG,
+                                    MOCK_SELF_PRODUCT_ID,
+                                    new BigDecimal("9.2"),
+                                    "캠핑 취향과 잘 맞는 상품이에요."))),
+                            new AiServerRecommendationResult(List.of(new AiServerRecommendedItem(
+                                    PlatformType.COUPANG,
+                                    MOCK_GIFT_PRODUCT_ID,
+                                    new BigDecimal("8.0"),
+                                    "캠핑을 좋아하는 분에게 선물하기 좋은 상품이에요.")))));
+        }
         return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationRoomId),
                 new AiServerCloseSessionRequest(userId), AiServerCloseSessionResponse.class);
+    }
+
+    private AiServerAnalysisResponse createMockAnalysis(Long userId) {
+        return new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
+                userId,
+                "캠핑과 실용적인 장비를 좋아합니다.",
+                new AiServerAnalysisKeywordsResponse(
+                        List.of(new AiServerAnalysisKeywordResponse("실용적인 장비", 0.92)),
+                        List.of(new AiServerAnalysisKeywordResponse("캠핑", 0.95))),
+                true));
+    }
+
+    private List<AiServerAnalysisKeywordResponse> toMockKeywords(List<String> keywords) {
+        return keywords.stream()
+                .map(keyword -> new AiServerAnalysisKeywordResponse(keyword, 1.0))
+                .toList();
+    }
+
+    private List<String> toKeywordValues(List<AiServerAnalysisKeywordResponse> keywords) {
+        return keywords.stream().map(AiServerAnalysisKeywordResponse::value).toList();
     }
 
     private Map<String, Long> pathVariables(Long conversationRoomId) {

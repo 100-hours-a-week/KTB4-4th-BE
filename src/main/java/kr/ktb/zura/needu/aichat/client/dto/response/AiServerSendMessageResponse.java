@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 public record AiServerSendMessageResponse(
         String reply,
         OffsetDateTime createdAt,
+        OffsetDateTime expirationAt,
         Integer turn,
         Integer maxTurns,
         Boolean canClose,
