@@ -157,10 +157,29 @@ class AiChatFacadeTest {
     }
 
     @Test
-    void analyzingRoomPastPurgeAt_startOrResumeConversation_returnsResumedWithoutCallingAiServer() {
+    void analyzingRoomPastPurgeAt_startOrResumeConversation_expiresRoomAndCreatesNewConversation() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ANALYZING,
                         LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
+        given(aiChatRoomService.expireAndReserveRoom(USER_ID, ROOM_ID))
+                .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID)).willReturn(startSessionResponse(NEW_ROOM_ID));
+        given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
+                .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE,
+                        LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
+
+        AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
+
+        assertThat(result.isCreated()).isTrue();
+        assertThat(result.conversation().conversationId()).isEqualTo(NEW_ROOM_ID);
+        verify(aiChatRoomService).expireAndReserveRoom(USER_ID, ROOM_ID);
+    }
+
+    @Test
+    void analyzingRoomBeforePurgeAt_startOrResumeConversation_returnsResumedWithoutCallingAiServer() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.ANALYZING,
+                        LocalDateTime.now(ZoneOffset.UTC).plusMinutes(1)));
         given(aiMessageService.findLatestProgress(ROOM_ID)).willReturn(100);
 
         AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
@@ -474,6 +493,28 @@ class AiChatFacadeTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY);
         verifyNoInteractions(aiChatClient);
+    }
+
+    @Test
+    void aiSessionGone_createAnalysis_expiresRoomAndThrowsNotFound() {
+        given(aiChatClient.createAnalysis(ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND);
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+    }
+
+    @Test
+    void aiServerUnavailable_createAnalysis_keepsRoom() {
+        given(aiChatClient.createAnalysis(ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
     }
 
     @Test
