@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,7 +16,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// AI 호출 동안 트랜잭션을 유지하지 않도록 대화 메시지 저장만 짧은 트랜잭션으로 나눠 담당
+// AI 호출 뒤 답변 저장과 대화방 상태 갱신을 하나의 짧은 트랜잭션으로 처리
 @Service
 @RequiredArgsConstructor
 public class AiMessageService {
@@ -31,6 +32,12 @@ public class AiMessageService {
     @Transactional(readOnly = true)
     public Optional<AiMessage> findReply(Long userMessageId) {
         return aiMessageRepository.findByReplyToMessageId(userMessageId);
+    }
+
+    @Transactional(readOnly = true)
+    public int findLatestProgress(Long conversationId) {
+        List<Integer> progresses = aiMessageRepository.findLatestProgress(conversationId, Limit.of(1));
+        return progresses.isEmpty() ? 0 : progresses.getFirst();
     }
 
     @Transactional(readOnly = true)
@@ -68,8 +75,11 @@ public class AiMessageService {
     }
 
     @Transactional
-    public AiMessage createReply(Long conversationId, Long userMessageId, String content) {
+    public AiMessage createReplyAndUpdateRoom(Long conversationId, Long userMessageId, String content,
+                                              int progress, boolean inputLocked, LocalDateTime purgeAt) {
         AiChatRoom room = aiChatRoomRepository.getReferenceById(conversationId);
-        return aiMessageRepository.save(AiMessage.createReply(room, userMessageId, content));
+        room.updateSession(purgeAt, inputLocked);
+        return aiMessageRepository.save(
+                AiMessage.createReply(room, userMessageId, content, progress, inputLocked));
     }
 }

@@ -1,9 +1,11 @@
 package kr.ktb.zura.needu.aichat.dto.request;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record PatchAnalyzeMessageRequest(
-        String summary,
-        @NotNull AnalysisKeywordsRequest keywords
+        @NotBlank String summary,
+        @Valid @NotNull AnalysisKeywordsRequest keywords
 ) {
 }

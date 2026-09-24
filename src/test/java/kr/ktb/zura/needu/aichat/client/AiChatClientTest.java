@@ -2,8 +2,7 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
-import java.time.Instant;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -14,8 +13,6 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerHealthResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
-import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionMessageResponse;
-import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -46,7 +43,7 @@ class AiChatClientTest {
 
     private MockRestServiceServer server;
     private MockRestServiceServer messageServer;
-    private AiChatClient client;
+    private HttpAiChatClient client;
 
     @BeforeEach
     void setUp() {
@@ -55,7 +52,7 @@ class AiChatClientTest {
         // 메시지 전송은 read timeout이 다른 전용 RestClient를 쓰므로 대역도 따로 둔다
         RestClient.Builder messageBuilder = RestClient.builder().baseUrl("http://localhost:9000");
         messageServer = MockRestServiceServer.bindTo(messageBuilder).build();
-        client = new AiChatClient(builder.build(), messageBuilder.build(), "service-token");
+        client = new HttpAiChatClient(builder.build(), messageBuilder.build(), "service-token");
     }
 
     @Test
@@ -74,50 +71,6 @@ class AiChatClientTest {
     }
 
     @Test
-    void getSession_requestsSessionEndpoint() {
-        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101?userId=1"))
-                .andExpect(method(HttpMethod.GET))
-                .andExpect(header("Authorization", "Bearer service-token"))
-                .andExpect(content().string(""))
-                .andRespond(withSuccess("""
-                        {
-                          "sessionId": 101,
-                          "userId": 1,
-                          "status": "active",
-                          "turn": 1,
-                          "maxTurns": 20,
-                          "messages": [{
-                            "role": "assistant",
-                            "content": "안녕하세요",
-                            "createdAt": "2026-09-22T14:20:00"
-                          }],
-                          "inputLocked": false,
-                          "canClose": false,
-                          "lastActiveAt": "2026-09-22T05:20:00Z"
-                        }
-                        """, MediaType.APPLICATION_JSON));
-
-        AiServerSessionResponse response = client.getSession(1L, 101L);
-
-        assertEquals(new AiServerSessionResponse(
-                101L,
-                1L,
-                "active",
-                1,
-                20,
-                List.of(new AiServerSessionMessageResponse(
-                        "assistant",
-                        "안녕하세요",
-                        LocalDateTime.of(2026, 9, 22, 14, 20)
-                )),
-                false,
-                false,
-                Instant.parse("2026-09-22T05:20:00Z")
-        ), response);
-        server.verify();
-    }
-
-    @Test
     void startSession_requestsSessionEndpointAndParsesResponse() {
         server.expect(requestTo("http://localhost:9000/v1/chat/sessions"))
                 .andExpect(method(HttpMethod.POST))
@@ -126,9 +79,10 @@ class AiChatClientTest {
                         """))
                 .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON).body("""
                         {
-                          "sessionId": 101,
+                          "conversationRoomId": 101,
                           "greeting": "안녕하세요",
-                          "createdAt": "2026-09-23T05:18:00",
+                          "createdAt": "2026-09-23T05:18:00+00:00",
+                          "expirationAt": "2026-09-23T05:48:00+00:00",
                           "maxTurns": 20
                         }
                         """));
@@ -136,7 +90,9 @@ class AiChatClientTest {
         AiServerStartSessionResponse response = client.startSession(1L, 101L);
 
         assertEquals(new AiServerStartSessionResponse(
-                101L, "안녕하세요", LocalDateTime.of(2026, 9, 23, 5, 18), 20), response);
+                101L, "안녕하세요",
+                OffsetDateTime.parse("2026-09-23T05:18:00+00:00"),
+                OffsetDateTime.parse("2026-09-23T05:48:00+00:00"), 20), response);
         server.verify();
     }
 
@@ -151,7 +107,8 @@ class AiChatClientTest {
                 .andRespond(withSuccess("""
                         {
                           "reply": "캠핑 좋죠.",
-                          "createdAt": "2026-09-23T05:20:00",
+                          "createdAt": "2026-09-23T05:20:00+00:00",
+                          "expirationAt": "2026-09-23T05:50:00+00:00",
                           "turn": 3,
                           "maxTurns": 20,
                           "canClose": false,
@@ -163,7 +120,8 @@ class AiChatClientTest {
         AiServerSendMessageResponse response = client.sendMessage(1L, 101L, "주말마다 캠핑 가요");
 
         assertEquals(new AiServerSendMessageResponse(
-                "캠핑 좋죠.", LocalDateTime.of(2026, 9, 23, 5, 20),
+                "캠핑 좋죠.", OffsetDateTime.parse("2026-09-23T05:20:00+00:00"),
+                OffsetDateTime.parse("2026-09-23T05:50:00+00:00"),
                 3, 20, false, false, 15), response);
         messageServer.verify();
     }

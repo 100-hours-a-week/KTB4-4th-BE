@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -8,6 +9,7 @@ import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
+import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
@@ -31,6 +33,7 @@ class AiMessageServiceTest {
     private static final UUID CLIENT_MESSAGE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
     private static final String AI_CONTENT = "러닝을 좋아하시는군요.";
+    private static final LocalDateTime EXPIRATION_AT = LocalDateTime.of(2026, 9, 23, 5, 48);
 
     @Autowired
     private AiMessageService aiMessageService;
@@ -48,7 +51,9 @@ class AiMessageServiceTest {
 
     @BeforeEach
     void setUp() {
-        conversationId = aiChatRoomRepository.saveAndFlush(AiChatRoom.reserve(USER_ID)).getId();
+        AiChatRoom room = AiChatRoom.reserve(USER_ID);
+        room.activate(EXPIRATION_AT.minusMinutes(10));
+        conversationId = aiChatRoomRepository.saveAndFlush(room).getId();
     }
 
     @Test
@@ -87,21 +92,51 @@ class AiMessageServiceTest {
     }
 
     @Test
-    void userMessage_createReply_savesAiMessageLinkedToUserMessage() {
+    void userMessage_createReplyAndUpdateRoom_savesReplyAndUpdatesRoomTogether() {
         AiMessage userMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
 
-        AiMessage reply = aiMessageService.createReply(conversationId, userMessage.getId(), AI_CONTENT);
+        AiMessage reply = aiMessageService.createReplyAndUpdateRoom(
+                conversationId, userMessage.getId(), AI_CONTENT, 15, true, EXPIRATION_AT);
         aiMessageRepository.flush();
         entityManager.clear();
 
         assertThat(reply.getSenderType()).isEqualTo(SenderType.AI);
         assertThat(reply.getClientMessageId()).isNull();
+        assertThat(reply.getProgress()).isEqualTo(15);
+        assertThat(reply.getInputLocked()).isTrue();
         // 메시지 순서는 id 오름차순으로 판단한다
         assertThat(reply.getId()).isGreaterThan(userMessage.getId());
-        assertThat(aiMessageService.findReply(userMessage.getId()))
-                .get()
-                .extracting(AiMessage::getContent)
-                .isEqualTo(AI_CONTENT);
+        AiMessage savedReply = aiMessageService.findReply(userMessage.getId()).orElseThrow();
+        assertThat(savedReply.getContent()).isEqualTo(AI_CONTENT);
+        assertThat(savedReply.getProgress()).isEqualTo(15);
+        assertThat(savedReply.getInputLocked()).isTrue();
+        AiChatRoom updatedRoom = aiChatRoomRepository.findById(conversationId).orElseThrow();
+        assertThat(updatedRoom.getPurgeAt()).isEqualTo(EXPIRATION_AT);
+        assertThat(updatedRoom.isInputLocked()).isTrue();
+        assertThat(updatedRoom.getStatus()).isEqualTo(AiChatRoomStatus.ANALYZING);
+    }
+
+    @Test
+    void repliesSaved_findLatestProgress_returnsLatestReplyProgress() {
+        AiMessage firstUserMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
+        aiMessageService.createReplyAndUpdateRoom(
+                conversationId, firstUserMessage.getId(), AI_CONTENT, 15, false, EXPIRATION_AT);
+        AiMessage secondUserMessage = aiMessageService.createUserMessage(conversationId, UUID.randomUUID(), USER_CONTENT);
+        aiMessageService.createReplyAndUpdateRoom(
+                conversationId, secondUserMessage.getId(), AI_CONTENT, 40, false, EXPIRATION_AT);
+        aiMessageService.createUserMessage(conversationId, UUID.randomUUID(), USER_CONTENT);
+        aiMessageRepository.flush();
+        entityManager.clear();
+
+        assertThat(aiMessageService.findLatestProgress(conversationId)).isEqualTo(40);
+    }
+
+    @Test
+    void noReply_findLatestProgress_returnsZero() {
+        aiMessageRepository.saveAndFlush(
+                AiMessage.createGreeting(aiChatRoomRepository.getReferenceById(conversationId), AI_CONTENT));
+
+        assertThat(aiMessageService.findLatestProgress(conversationId)).isZero();
     }
 
     @Test
@@ -185,7 +220,8 @@ class AiMessageServiceTest {
     @Test
     void messagesFromBothSenders_findAllMessages_returnsRoleAndContent() {
         AiMessage userMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
-        aiMessageService.createReply(conversationId, userMessage.getId(), AI_CONTENT);
+        aiMessageService.createReplyAndUpdateRoom(
+                conversationId, userMessage.getId(), AI_CONTENT, 15, false, EXPIRATION_AT);
         aiMessageRepository.flush();
         entityManager.clear();
 

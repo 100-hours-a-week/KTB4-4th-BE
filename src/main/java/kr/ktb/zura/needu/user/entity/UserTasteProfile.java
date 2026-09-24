@@ -52,4 +52,10 @@ public class UserTasteProfile {
         this.user = user;
         this.onboardingTastes = onboardingTastes;
     }
+
+    public void updateAnalysis(String aiSummary, String recentTastes, String recentInterests) {
+        this.aiSummary = aiSummary;
+        this.recentTastes = recentTastes;
+        this.recentInterests = recentInterests;
+    }
 }

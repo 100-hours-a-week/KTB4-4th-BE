@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_rooms (
     active_user_id BIGINT      NULL,
     status         VARCHAR(20) NOT NULL COMMENT 'PENDING, ACTIVE, ANALYZING, COMPLETED, EXPIRED',
     purge_at       DATETIME(6) NULL COMMENT 'AI 세션 만료 예상 시각 = 대화 원문 삭제 예정 시각',
+    input_locked   TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '사용자 메시지 입력 잠금 여부',
     version        BIGINT      NOT NULL COMMENT '낙관적 락(@Version)',
     created_at     DATETIME(6) NOT NULL,
     updated_at     DATETIME(6) NOT NULL,
@@ -104,6 +105,19 @@ CREATE TABLE IF NOT EXISTS ai_chat_rooms (
     PRIMARY KEY (id),
     UNIQUE KEY uk_ai_chat_rooms_active_user_id (active_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_room_input_locked = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_chat_rooms ADD COLUMN input_locked TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''사용자 메시지 입력 잠금 여부''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_chat_rooms'
+      AND column_name = 'input_locked'
+);
+PREPARE add_room_input_locked_statement FROM @add_room_input_locked;
+EXECUTE add_room_input_locked_statement;
+DEALLOCATE PREPARE add_room_input_locked_statement;
 
 CREATE TABLE IF NOT EXISTS ai_messages (
     id                  BIGINT      NOT NULL AUTO_INCREMENT,
@@ -114,6 +128,8 @@ CREATE TABLE IF NOT EXISTS ai_messages (
     reply_to_message_id BIGINT      NULL,
     sender_type         VARCHAR(20) NOT NULL COMMENT 'USER, AI',
     content             TEXT        NOT NULL,
+    progress            INT         NULL COMMENT 'AI 답변 생성 진행률(0~100)',
+    input_locked        TINYINT(1)  NULL COMMENT 'AI 답변 이후 사용자 입력 잠금 여부',
     created_at          DATETIME(6) NOT NULL,
     deleted_at          DATETIME(6) NULL,
     PRIMARY KEY (id),
@@ -124,6 +140,33 @@ CREATE TABLE IF NOT EXISTS ai_messages (
     KEY idx_ai_messages_reply_to_message_id (reply_to_message_id),
     CONSTRAINT fk_ai_messages_room FOREIGN KEY (ai_chat_room_id) REFERENCES ai_chat_rooms (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 기존 테이블에도 메시지 응답 메타데이터 컬럼을 추가한다.
+SET @add_progress = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_messages ADD COLUMN progress INT NULL COMMENT ''AI 답변 생성 진행률(0~100)''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_messages'
+      AND column_name = 'progress'
+);
+PREPARE add_progress_statement FROM @add_progress;
+EXECUTE add_progress_statement;
+DEALLOCATE PREPARE add_progress_statement;
+
+SET @add_input_locked = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_messages ADD COLUMN input_locked TINYINT(1) NULL COMMENT ''AI 답변 이후 사용자 입력 잠금 여부''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_messages'
+      AND column_name = 'input_locked'
+);
+PREPARE add_input_locked_statement FROM @add_input_locked;
+EXECUTE add_input_locked_statement;
+DEALLOCATE PREPARE add_input_locked_statement;
 
 -- ---------------------------------------------------------------------------
 -- product

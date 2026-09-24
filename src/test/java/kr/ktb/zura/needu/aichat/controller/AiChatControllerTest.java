@@ -38,6 +38,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -49,6 +50,7 @@ class AiChatControllerTest {
     private static final Long CONVERSATION_ID = 101L;
     private static final String URL = "/api/v1/ai/conversations";
     private static final String MESSAGES_URL = URL + "/" + CONVERSATION_ID + "/messages";
+    private static final String ANALYSIS_URL = URL + "/" + CONVERSATION_ID + "/analysis";
     private static final UUID CLIENT_MESSAGE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
 
@@ -61,26 +63,28 @@ class AiChatControllerTest {
     @Test
     void newConversation_startOrResumeConversation_returnsCreated() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID)).willReturn(AiConversationStartResult.created(
-                new AiConversationResponse(101L, AiChatRoomStatus.ACTIVE)));
+                new AiConversationResponse(101L, AiChatRoomStatus.ACTIVE, 0)));
 
         mockMvc.perform(postConversation())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("AI 대화를 시작했습니다."))
                 .andExpect(jsonPath("$.data.conversationId").value(101))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.progress").value(0))
                 .andExpect(jsonPath("$.data.expiresAt").doesNotExist());
     }
 
     @Test
     void existingConversation_startOrResumeConversation_returnsOk() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID)).willReturn(AiConversationStartResult.resumed(
-                new AiConversationResponse(101L, AiChatRoomStatus.ANALYZING)));
+                new AiConversationResponse(101L, AiChatRoomStatus.ANALYZING, 100)));
 
         mockMvc.perform(postConversation())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("AI 대화를 조회했습니다."))
                 .andExpect(jsonPath("$.data.conversationId").value(101))
-                .andExpect(jsonPath("$.data.status").value("ANALYZING"));
+                .andExpect(jsonPath("$.data.status").value("ANALYZING"))
+                .andExpect(jsonPath("$.data.progress").value(100));
     }
 
     @Test
@@ -107,14 +111,8 @@ class AiChatControllerTest {
                         201L,
                         202L,
                         "러닝을 좋아하시는군요.",
-                        true,
-                        new AnalysisResultResponse(
-                                "러닝을 즐깁니다.",
-                                new AnalysisKeywordsResponse(
-                                        List.of(new AnalysisKeywordResponse("러닝", 0.9)),
-                                        List.of(new AnalysisKeywordResponse("운동", 0.8))),
-                                true
-                        )
+                        15,
+                        true
                 ));
 
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
@@ -123,13 +121,19 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.userMessageId").value(201))
                 .andExpect(jsonPath("$.data.messageId").value(202))
                 .andExpect(jsonPath("$.data.content").value("러닝을 좋아하시는군요."))
+                .andExpect(jsonPath("$.data.progress").value(15))
                 .andExpect(jsonPath("$.data.inputLocked").value(true))
-                .andExpect(jsonPath("$.data.analysis.summary").value("러닝을 즐깁니다."))
-                .andExpect(jsonPath("$.data.analysis.keywords.taste[0].value").value("러닝"))
-                .andExpect(jsonPath("$.data.analysis.keywords.taste[0].score").value(0.9))
-                .andExpect(jsonPath("$.data.analysis.keywords.interest[0].value").value("운동"))
-                .andExpect(jsonPath("$.data.analysis.keywords.interest[0].score").value(0.8))
-                .andExpect(jsonPath("$.data.analysis.correctionAvailable").value(true));
+                .andExpect(jsonPath("$.data.analysis").doesNotExist());
+    }
+
+    @Test
+    void inputLockedConversation_sendMessage_returnsConflict() throws Exception {
+        given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED));
+
+        mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("AI 대화의 사용자 입력이 잠겨 있습니다."));
     }
 
     @Test
@@ -203,6 +207,50 @@ class AiChatControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void validRequest_createAnalysis_returnsAnalysis() throws Exception {
+        given(aiChatFacade.createAnalysis(USER_ID, CONVERSATION_ID)).willReturn(new AnalysisResultResponse(
+                "캠핑과 핸드드립을 즐깁니다.",
+                new AnalysisKeywordsResponse(
+                        List.of(new AnalysisKeywordResponse("핸드드립", 0.92)),
+                        List.of(new AnalysisKeywordResponse("캠핑", 0.95))),
+                true));
+
+        mockMvc.perform(post(ANALYSIS_URL)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("취향 분석이 완료되었습니다."))
+                .andExpect(jsonPath("$.data.summary").value("캠핑과 핸드드립을 즐깁니다."))
+                .andExpect(jsonPath("$.data.keywords.taste[0].value").value("핸드드립"))
+                .andExpect(jsonPath("$.data.keywords.interest[0].value").value("캠핑"))
+                .andExpect(jsonPath("$.data.correctionAvailable").value(true));
+    }
+
+    @Test
+    void blankSummary_patchAnalysis_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchAnalysis("""
+                {
+                  "summary": " ",
+                  "keywords": {"taste": ["실용적"], "interest": ["캠핑"]}
+                }
+                """))
+                .andExpect(status().isUnprocessableContent());
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
+    void blankKeyword_patchAnalysis_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchAnalysis("""
+                {
+                  "summary": "캠핑을 좋아합니다.",
+                  "keywords": {"taste": [" "], "interest": ["캠핑"]}
+                }
+                """))
+                .andExpect(status().isUnprocessableContent());
+        verifyNoInteractions(aiChatFacade);
     }
 
     @Test
@@ -329,6 +377,14 @@ class AiChatControllerTest {
 
     private static MockHttpServletRequestBuilder postMessage(String body) {
         return post(MESSAGES_URL)
+                .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+    }
+
+    private static MockHttpServletRequestBuilder patchAnalysis(String body) {
+        return patch(ANALYSIS_URL)
                 .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
