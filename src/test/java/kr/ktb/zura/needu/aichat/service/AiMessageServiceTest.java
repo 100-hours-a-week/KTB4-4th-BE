@@ -117,6 +117,29 @@ class AiMessageServiceTest {
     }
 
     @Test
+    void repliesSaved_findLatestProgress_returnsLatestReplyProgress() {
+        AiMessage firstUserMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
+        aiMessageService.createReplyAndUpdateRoom(
+                conversationId, firstUserMessage.getId(), AI_CONTENT, 15, false, EXPIRATION_AT);
+        AiMessage secondUserMessage = aiMessageService.createUserMessage(conversationId, UUID.randomUUID(), USER_CONTENT);
+        aiMessageService.createReplyAndUpdateRoom(
+                conversationId, secondUserMessage.getId(), AI_CONTENT, 40, false, EXPIRATION_AT);
+        aiMessageService.createUserMessage(conversationId, UUID.randomUUID(), USER_CONTENT);
+        aiMessageRepository.flush();
+        entityManager.clear();
+
+        assertThat(aiMessageService.findLatestProgress(conversationId)).isEqualTo(40);
+    }
+
+    @Test
+    void noReply_findLatestProgress_returnsZero() {
+        aiMessageRepository.saveAndFlush(
+                AiMessage.createGreeting(aiChatRoomRepository.getReferenceById(conversationId), AI_CONTENT));
+
+        assertThat(aiMessageService.findLatestProgress(conversationId)).isZero();
+    }
+
+    @Test
     void noReplyYet_findReply_returnsEmpty() {
         AiMessage userMessage = aiMessageService.createUserMessage(conversationId, CLIENT_MESSAGE_ID, USER_CONTENT);
         entityManager.clear();

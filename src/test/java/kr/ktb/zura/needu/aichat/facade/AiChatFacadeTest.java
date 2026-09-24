@@ -119,6 +119,7 @@ class AiChatFacadeTest {
         assertThat(result.isCreated()).isTrue();
         assertThat(result.conversation().conversationId()).isEqualTo(ROOM_ID);
         assertThat(result.conversation().status()).isEqualTo(AiChatRoomStatus.ACTIVE);
+        assertThat(result.conversation().progress()).isZero();
     }
 
     @Test
@@ -126,11 +127,13 @@ class AiChatFacadeTest {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(10)));
+        given(aiMessageService.findLatestProgress(ROOM_ID)).willReturn(40);
 
         AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
 
         assertThat(result.isCreated()).isFalse();
         assertThat(result.conversation().conversationId()).isEqualTo(ROOM_ID);
+        assertThat(result.conversation().progress()).isEqualTo(40);
         verifyNoInteractions(aiChatClient);
     }
 
@@ -150,6 +153,7 @@ class AiChatFacadeTest {
 
         assertThat(result.isCreated()).isTrue();
         assertThat(result.conversation().conversationId()).isEqualTo(NEW_ROOM_ID);
+        assertThat(result.conversation().progress()).isZero();
     }
 
     @Test
@@ -157,11 +161,13 @@ class AiChatFacadeTest {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ANALYZING,
                         LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
+        given(aiMessageService.findLatestProgress(ROOM_ID)).willReturn(100);
 
         AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
 
         assertThat(result.isCreated()).isFalse();
         assertThat(result.conversation().status()).isEqualTo(AiChatRoomStatus.ANALYZING);
+        assertThat(result.conversation().progress()).isEqualTo(100);
         verifyNoInteractions(aiChatClient);
         verify(aiChatRoomService, never()).expireAndReserveRoom(anyLong(), anyLong());
     }

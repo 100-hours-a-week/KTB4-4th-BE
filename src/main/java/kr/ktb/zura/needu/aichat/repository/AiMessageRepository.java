@@ -16,6 +16,17 @@ public interface AiMessageRepository extends JpaRepository<AiMessage, Long> {
 
     Optional<AiMessage> findByReplyToMessageId(Long replyToMessageId);
 
+    // 진행률은 AI 답변에만 저장되므로 가장 최근 답변의 값이 대화방의 현재 진행률이다.
+    @Query("""
+            select m.progress
+            from AiMessage m
+            where m.aiChatRoom.id = :aiChatRoomId
+              and m.progress is not null
+              and m.deletedAt is null
+            order by m.id desc
+            """)
+    List<Integer> findLatestProgress(@Param("aiChatRoomId") Long aiChatRoomId, Limit limit);
+
     @Query("""
             select m
             from AiMessage m
