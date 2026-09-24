@@ -63,26 +63,28 @@ class AiChatControllerTest {
     @Test
     void newConversation_startOrResumeConversation_returnsCreated() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID)).willReturn(AiConversationStartResult.created(
-                new AiConversationResponse(101L, AiChatRoomStatus.ACTIVE)));
+                new AiConversationResponse(101L, AiChatRoomStatus.ACTIVE, 0)));
 
         mockMvc.perform(postConversation())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("AI 대화를 시작했습니다."))
                 .andExpect(jsonPath("$.data.conversationId").value(101))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.progress").value(0))
                 .andExpect(jsonPath("$.data.expiresAt").doesNotExist());
     }
 
     @Test
     void existingConversation_startOrResumeConversation_returnsOk() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID)).willReturn(AiConversationStartResult.resumed(
-                new AiConversationResponse(101L, AiChatRoomStatus.ANALYZING)));
+                new AiConversationResponse(101L, AiChatRoomStatus.ANALYZING, 100)));
 
         mockMvc.perform(postConversation())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("AI 대화를 조회했습니다."))
                 .andExpect(jsonPath("$.data.conversationId").value(101))
-                .andExpect(jsonPath("$.data.status").value("ANALYZING"));
+                .andExpect(jsonPath("$.data.status").value("ANALYZING"))
+                .andExpect(jsonPath("$.data.progress").value(100));
     }
 
     @Test

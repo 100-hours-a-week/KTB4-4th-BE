@@ -77,7 +77,8 @@ public class AiChatFacade {
         if (room.isActive() && room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             return restartConversation(userId, room.getId());
         }
-        return AiConversationStartResult.resumed(AiConversationResponse.from(room));
+        return AiConversationStartResult.resumed(
+                AiConversationResponse.from(room, aiMessageService.findLatestProgress(room.getId())));
     }
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
@@ -181,7 +182,7 @@ public class AiChatFacade {
             AiChatRoom room = aiChatRoomService.activateRoom(
                     roomId, session.greeting(), toPurgeAt(session.expirationAt()));
             log.info("AI conversation started. userId={}, conversationId={}", userId, roomId);
-            return AiConversationStartResult.created(AiConversationResponse.from(room));
+            return AiConversationStartResult.created(AiConversationResponse.from(room, 0));
         } catch (RuntimeException e) {
             // 실패한 방이 PENDING으로 남으면 재시도가 막히므로 즉시 정리
             aiChatRoomService.discardRoom(roomId);
