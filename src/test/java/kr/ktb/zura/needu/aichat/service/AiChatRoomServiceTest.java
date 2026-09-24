@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.aichat.service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -31,6 +32,7 @@ class AiChatRoomServiceTest {
     private static final Long OTHER_USER_ID = 2L;
     private static final Long UNKNOWN_ROOM_ID = 999L;
     private static final String GREETING = "안녕하세요";
+    private static final LocalDateTime PURGE_AT = LocalDateTime.now(ZoneOffset.UTC).plusHours(1);
 
     @Autowired
     private AiChatRoomService aiChatRoomService;
@@ -59,7 +61,7 @@ class AiChatRoomServiceTest {
     @Test
     void activeRoomExists_findOrReserveRoom_returnsExistingRoom() {
         AiChatRoom activeRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
-        aiChatRoomService.activateRoom(activeRoom.getId(), GREETING);
+        aiChatRoomService.activateRoom(activeRoom.getId(), GREETING, PURGE_AT);
 
         AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
 
@@ -81,7 +83,7 @@ class AiChatRoomServiceTest {
         AiChatRoom staleRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
         // created_at은 @CreationTimestamp로 채워지므로 오래된 예약을 만들기 위해 DB 값을 직접 바꾼다.
         jdbcTemplate.update("update ai_chat_rooms set created_at = ? where id = ?",
-                LocalDateTime.now().minusMinutes(5), staleRoom.getId());
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(5), staleRoom.getId());
         entityManager.clear();
 
         AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
@@ -95,7 +97,7 @@ class AiChatRoomServiceTest {
     @Test
     void activeRoom_expireAndReserveRoom_expiresOldRoomAndReservesNewRoom() {
         AiChatRoom oldRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
-        aiChatRoomService.activateRoom(oldRoom.getId(), GREETING);
+        aiChatRoomService.activateRoom(oldRoom.getId(), GREETING, PURGE_AT);
 
         AiChatRoom newRoom = aiChatRoomService.expireAndReserveRoom(USER_ID, oldRoom.getId());
 
@@ -106,33 +108,18 @@ class AiChatRoomServiceTest {
     }
 
     @Test
-    void reservedRoom_activateRoom_setsPurgeAtByIdleTimeoutAndSavesGreeting() {
+    void reservedRoom_activateRoom_setsExpirationAtAndSavesGreeting() {
         AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
-        LocalDateTime before = LocalDateTime.now();
 
-        AiChatRoom room = aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING);
+        AiChatRoom room = aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING, PURGE_AT);
 
-        // 기본 설정: 마지막 활동 후 30분 - 여유 1분
         assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.ACTIVE);
-        assertThat(room.getPurgeAt()).isBetween(before.plusMinutes(29), LocalDateTime.now().plusMinutes(29));
+        assertThat(room.getPurgeAt()).isEqualTo(PURGE_AT);
         List<AiMessage> messages = aiMessageRepository.findAll();
         assertThat(messages).singleElement().satisfies(message -> {
             assertThat(message.getSenderType()).isEqualTo(SenderType.AI);
             assertThat(message.getContent()).isEqualTo("안녕하세요");
         });
-    }
-
-    @Test
-    void roomNearMaxDuration_activateRoom_setsPurgeAtByMaxDuration() {
-        AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
-        LocalDateTime createdAt = LocalDateTime.now().minusMinutes(110).withNano(0);
-        jdbcTemplate.update("update ai_chat_rooms set created_at = ? where id = ?", createdAt, reservedRoom.getId());
-        entityManager.clear();
-
-        AiChatRoom room = aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING);
-
-        // 시작 후 2시간 - 여유 1분이 마지막 활동 후 30분보다 먼저 온다.
-        assertThat(room.getPurgeAt()).isEqualTo(createdAt.plusHours(2).minusMinutes(1));
     }
 
     @Test
@@ -172,7 +159,7 @@ class AiChatRoomServiceTest {
     void purgeAtPassed_validateActiveRoom_throwsConversationNotFound() {
         AiChatRoom activeRoom = activateRoom(USER_ID);
         jdbcTemplate.update("update ai_chat_rooms set purge_at = ? where id = ?",
-                LocalDateTime.now().minusMinutes(1), activeRoom.getId());
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1), activeRoom.getId());
         entityManager.clear();
 
         assertThatThrownBy(() -> aiChatRoomService.validateActiveRoom(USER_ID, activeRoom.getId()))
@@ -194,19 +181,44 @@ class AiChatRoomServiceTest {
     }
 
     @Test
-    void activeRoom_extendSession_movesPurgeAtForward() {
+    void inputUnlockedRoom_validateAnalyzableRoom_throwsAnalysisNotReady() {
         AiChatRoom activeRoom = activateRoom(USER_ID);
-        LocalDateTime purgeAt = LocalDateTime.now().minusMinutes(10);
-        jdbcTemplate.update("update ai_chat_rooms set purge_at = ? where id = ?", purgeAt, activeRoom.getId());
-        entityManager.clear();
 
-        aiChatRoomService.extendSession(activeRoom.getId());
+        assertThatThrownBy(() -> aiChatRoomService.validateAnalyzableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY);
+
+        aiChatRoomService.startAnalysis(activeRoom.getId());
+
+        assertThatThrownBy(() -> aiChatRoomService.validateAnalyzableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY);
+    }
+
+    @Test
+    void activeRoom_completeRoom_marksCompletedAndReleasesActiveUser() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+
+        aiChatRoomService.completeRoom(activeRoom.getId());
         aiChatRoomRepository.flush();
         entityManager.clear();
 
-        AiChatRoom extendedRoom = aiChatRoomRepository.findById(activeRoom.getId()).orElseThrow();
-        assertThat(extendedRoom.getPurgeAt()).isAfter(purgeAt);
-        assertThat(extendedRoom.getPurgeAt()).isAfter(LocalDateTime.now().plusMinutes(28));
+        AiChatRoom completedRoom = aiChatRoomRepository.findById(activeRoom.getId()).orElseThrow();
+        assertThat(completedRoom.getStatus()).isEqualTo(AiChatRoomStatus.COMPLETED);
+        assertThat(completedRoom.getActiveUserId()).isNull();
+    }
+
+    @Test
+    void activeRoom_startAnalysis_marksAnalyzing() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+
+        aiChatRoomService.startAnalysis(activeRoom.getId());
+        aiChatRoomRepository.flush();
+        entityManager.clear();
+
+        AiChatRoom analyzingRoom = aiChatRoomRepository.findById(activeRoom.getId()).orElseThrow();
+        assertThat(analyzingRoom.getStatus()).isEqualTo(AiChatRoomStatus.ANALYZING);
+        assertThat(analyzingRoom.getActiveUserId()).isEqualTo(USER_ID);
     }
 
     @Test
@@ -221,6 +233,6 @@ class AiChatRoomServiceTest {
 
     private AiChatRoom activateRoom(Long userId) {
         AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(userId);
-        return aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING);
+        return aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING, PURGE_AT);
     }
 }

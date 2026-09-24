@@ -1,12 +1,15 @@
 package kr.ktb.zura.needu.user.service;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.entity.User;
+import kr.ktb.zura.needu.user.entity.UserTasteProfile;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.repository.UserRepository;
+import kr.ktb.zura.needu.user.repository.UserTasteProfileRepository;
 import kr.ktb.zura.needu.user.type.Gender;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +18,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,12 +33,14 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
 
     private UserRepository userRepository;
+    private UserTasteProfileRepository userTasteProfileRepository;
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
-        userService = new UserService(userRepository);
+        userTasteProfileRepository = mock(UserTasteProfileRepository.class);
+        userService = new UserService(userRepository, userTasteProfileRepository, JsonMapper.builder().build());
     }
 
     @Test
@@ -206,13 +212,23 @@ class UserServiceTest {
     }
 
     @Test
-    void existingUser_completeTasteAnalysis_marksCompleted() {
+    void existingUser_completeTasteAnalysis_savesJsonProfileAndMarksCompleted() {
         User user = new User(42L, "니듀", null, Gender.NONE, null);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
 
-        userService.completeTasteAnalysis(1L);
+        userService.completeTasteAnalysis(
+                1L,
+                "캠핑과 핸드드립을 즐기는 분입니다.",
+                List.of("취향1", "취향2", "취향3"),
+                List.of("캠핑", "자전거타기", "여행"));
 
         assertTrue(user.isTasteAnalysisCompleted());
+        ArgumentCaptor<UserTasteProfile> profileCaptor = ArgumentCaptor.forClass(UserTasteProfile.class);
+        verify(userTasteProfileRepository).save(profileCaptor.capture());
+        assertEquals("캠핑과 핸드드립을 즐기는 분입니다.", profileCaptor.getValue().getAiSummary());
+        assertEquals("[\"취향1\",\"취향2\",\"취향3\"]", profileCaptor.getValue().getRecentTastes());
+        assertEquals("[\"캠핑\",\"자전거타기\",\"여행\"]", profileCaptor.getValue().getRecentInterests());
     }
 
     @Test

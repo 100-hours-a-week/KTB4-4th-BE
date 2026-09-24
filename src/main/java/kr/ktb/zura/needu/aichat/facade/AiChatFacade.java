@@ -2,6 +2,8 @@ package kr.ktb.zura.needu.aichat.facade;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,7 +20,6 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -73,7 +74,7 @@ public class AiChatFacade {
             return startConversation(userId, room.getId());
         }
         // AI 서버에 세션 조회 API가 없어 purgeAt으로 만료를 판단, 규칙보다 일찍 사라진 세션은 메시지 전송 시 발견
-        if (room.isActive() && room.isExpiredAt(LocalDateTime.now())) {
+        if (room.isActive() && room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             return restartConversation(userId, room.getId());
         }
         return AiConversationStartResult.resumed(AiConversationResponse.from(room));
@@ -87,7 +88,7 @@ public class AiChatFacade {
 
     public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
-        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        aiChatRoomService.validateMessageSendableRoom(userId, conversationId);
         if (!aiConversationLock.tryLock(conversationId)) {
             log.info("AI message already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
@@ -106,9 +107,9 @@ public class AiChatFacade {
         }
         AiMessage userMessage = createUserMessage(conversationId, request);
         AiServerSendMessageResponse response = requestReply(userId, conversationId, request.content());
-        AiMessage aiMessage = aiMessageService.createReply(
-                conversationId, userMessage.getId(), response.reply(), response.progress(), response.inputLocked());
-        aiChatRoomService.extendSession(conversationId);
+        AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
+                conversationId, userMessage.getId(), response.reply(), response.progress(),
+                response.inputLocked(), toPurgeAt(response.expirationAt()));
         log.info("AI message replied. userId={}, conversationId={}, messageId={}",
                 userId, conversationId, aiMessage.getId());
         return AiMessageResponse.from(aiMessage);
@@ -161,7 +162,8 @@ public class AiChatFacade {
                 || response.progress() == null
                 || response.progress() < 0
                 || response.progress() > 100
-                || response.inputLocked() == null) {
+                || response.inputLocked() == null
+                || response.expirationAt() == null) {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
     }
@@ -175,7 +177,9 @@ public class AiChatFacade {
     private AiConversationStartResult startConversation(Long userId, Long roomId) {
         try {
             AiServerStartSessionResponse session = aiChatClient.startSession(userId, roomId);
-            AiChatRoom room = aiChatRoomService.activateRoom(roomId, toGreeting(session));
+            validateStartSession(roomId, session);
+            AiChatRoom room = aiChatRoomService.activateRoom(
+                    roomId, session.greeting(), toPurgeAt(session.expirationAt()));
             log.info("AI conversation started. userId={}, conversationId={}", userId, roomId);
             return AiConversationStartResult.created(AiConversationResponse.from(room));
         } catch (RuntimeException e) {
@@ -185,21 +189,25 @@ public class AiChatFacade {
         }
     }
 
-    private String toGreeting(AiServerStartSessionResponse session) {
-        if (session.greeting() == null || session.greeting().isBlank()) {
+    private void validateStartSession(Long roomId, AiServerStartSessionResponse session) {
+        if (!roomId.equals(session.conversationRoomId())
+                || session.greeting() == null
+                || session.greeting().isBlank()
+                || session.expirationAt() == null) {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
-        return session.greeting();
     }
 
-
-    public AiSessionResponse getSession(Long userId, Long conversationId) {
-        aiChatRoomService.validateActiveRoom(userId, conversationId);
-        return AiSessionResponse.from(aiChatClient.getSession(userId, conversationId));
+    private LocalDateTime toPurgeAt(OffsetDateTime expirationAt) {
+        if (expirationAt == null) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+        }
+        return expirationAt.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
     }
+
 
     public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
-        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        aiChatRoomService.validateAnalyzableRoom(userId, conversationId);
         return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
     }
 
@@ -215,18 +223,21 @@ public class AiChatFacade {
 
     public ProductRecommendationStatusResponse confirmAnalysis(Long userId, Long conversationId) {
         aiChatRoomService.validateActiveRoom(userId, conversationId);
+        aiChatRoomService.startAnalysis(conversationId);
         AiServerCloseSessionResponse response = aiChatClient.confirmAnalysis(userId, conversationId);
-        validateRecommendations(response);
+        validateCloseResponse(response);
         productRecommendationService.saveRecommendations(
                 userId,
                 response.recommendations().self(),
                 response.recommendations().gift(),
                 response.keywords().taste());
-        userService.completeTasteAnalysis(userId);
+        userService.completeTasteAnalysis(
+                userId, response.summary(), response.keywords().taste(), response.keywords().interest());
+        aiChatRoomService.completeRoom(conversationId);
         return ProductRecommendationStatusResponse.success();
     }
 
-    private void validateRecommendations(AiServerCloseSessionResponse response) {
+    private void validateCloseResponse(AiServerCloseSessionResponse response) {
         if (response.recommendations() == null
                 || response.recommendations().self() == null
                 || response.recommendations().self().items() == null
@@ -236,10 +247,19 @@ public class AiChatFacade {
                         .anyMatch(item -> item == null || item.score() == null)
                 || response.recommendations().gift().items().stream()
                         .anyMatch(item -> item == null || item.score() == null)
+                || response.summary() == null
+                || response.summary().isBlank()
                 || response.keywords() == null
-                || response.keywords().taste() == null) {
+                || hasInvalidFinalKeywords(response.keywords().taste())
+                || hasInvalidFinalKeywords(response.keywords().interest())) {
             throw new BusinessException(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         }
+    }
+
+    private boolean hasInvalidFinalKeywords(List<String> keywords) {
+        return keywords == null
+                || keywords.size() > 3
+                || keywords.stream().anyMatch(keyword -> keyword == null || keyword.isBlank());
     }
 
     private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {

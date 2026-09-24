@@ -49,6 +49,9 @@ public class AiChatRoom {
     // AI 세션 만료 예상 시각이자 대화방과 대화 원문이 함께 삭제될 예정 시각
     private LocalDateTime purgeAt;
 
+    @Column(nullable = false)
+    private boolean inputLocked;
+
     @Version
     private Long version;
 
@@ -75,6 +78,7 @@ public class AiChatRoom {
     public void activate(LocalDateTime purgeAt) {
         this.status = AiChatRoomStatus.ACTIVE;
         this.purgeAt = purgeAt;
+        this.inputLocked = false;
     }
 
     public void expire() {
@@ -82,9 +86,21 @@ public class AiChatRoom {
         this.activeUserId = null;
     }
 
-    // 마지막 활동 시각을 반영해 만료(=삭제 예정) 시각을 미룬다
-    public void extendPurgeAt(LocalDateTime purgeAt) {
+    public void complete() {
+        this.status = AiChatRoomStatus.COMPLETED;
+        this.activeUserId = null;
+    }
+
+    public void startAnalysis() {
+        this.status = AiChatRoomStatus.ANALYZING;
+    }
+
+    public void updateSession(LocalDateTime purgeAt, boolean inputLocked) {
         this.purgeAt = purgeAt;
+        this.inputLocked = inputLocked;
+        if (inputLocked) {
+            startAnalysis();
+        }
     }
 
     public void discard(LocalDateTime deletedAt) {
@@ -106,6 +122,10 @@ public class AiChatRoom {
 
     public boolean isActive() {
         return status == AiChatRoomStatus.ACTIVE;
+    }
+
+    public boolean isAnalyzing() {
+        return status == AiChatRoomStatus.ANALYZING;
     }
 
     public boolean isExpiredAt(LocalDateTime now) {

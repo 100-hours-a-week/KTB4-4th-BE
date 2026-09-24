@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.user.service;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -9,13 +10,17 @@ import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.entity.User;
+import kr.ktb.zura.needu.user.entity.UserTasteProfile;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.repository.UserRepository;
+import kr.ktb.zura.needu.user.repository.UserTasteProfileRepository;
 import kr.ktb.zura.needu.user.type.Gender;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +31,8 @@ public class UserService {
     private static final int MAX_NICKNAME_LENGTH = 50;
 
     private final UserRepository userRepository;
+    private final UserTasteProfileRepository userTasteProfileRepository;
+    private final JsonMapper jsonMapper;
 
     @Transactional
     public UserResponse findOrCreateKakaoUser(Long kakaoId, String nickname, String profileImageUrl) {
@@ -85,8 +92,22 @@ public class UserService {
     }
 
     @Transactional
-    public void completeTasteAnalysis(Long userId) {
-        findUser(userId).completeTasteAnalysis();
+    public void completeTasteAnalysis(
+            Long userId, String summary, List<String> tastes, List<String> interests) {
+        User user = findUser(userId);
+        UserTasteProfile profile = userTasteProfileRepository.findById(userId)
+                .orElseGet(() -> new UserTasteProfile(user, Map.of()));
+        profile.updateAnalysis(summary, toJson(tastes), toJson(interests));
+        userTasteProfileRepository.save(profile);
+        user.completeTasteAnalysis();
+    }
+
+    private String toJson(List<String> values) {
+        try {
+            return jsonMapper.writeValueAsString(values);
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Failed to serialize taste analysis keywords.", e);
+        }
     }
 
     private void validateLoginAvailableUser(User user) {

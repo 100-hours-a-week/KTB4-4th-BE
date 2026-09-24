@@ -10,7 +10,6 @@ import kr.ktb.zura.needu.aichat.dto.response.AiChatResponseMessage;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
@@ -100,15 +99,6 @@ public class AiChatController {
     ) {
         ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(userId, conversationId);
         return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_COMPLETED.getMessage(), response));
-    }
-
-    @PostMapping("/{conversationId}/session")
-    public ResponseEntity<ApiResponse<AiSessionResponse>> getSession(
-            @PathVariable Long conversationId,
-            @AuthenticationPrincipal Long userId
-    ) {
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_FOUND.getMessage(),
-                aiChatFacade.getSession(userId, conversationId)));
     }
 
 

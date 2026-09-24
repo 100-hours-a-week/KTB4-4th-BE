@@ -1,5 +1,8 @@
 package kr.ktb.zura.needu.aichat.type;
 
+import lombok.Getter;
+
+@Getter
 public enum AiChatRequestField {
     CONVERSATION_ROOM_ID("conversationRoomId"),
     USER_ID("userId");
@@ -10,7 +13,4 @@ public enum AiChatRequestField {
         this.fieldName = fieldName;
     }
 
-    public String getFieldName() {
-        return fieldName;
-    }
 }
