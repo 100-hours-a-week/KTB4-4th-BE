@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.client;
 
+import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -37,8 +38,10 @@ public class AiChatClientConfig {
     private RestClient build(RestClient.Builder builder, String baseUrl,
                              Duration connectTimeout, Duration readTimeout) {
         return builder
-                .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(
-                        HttpClientSettings.defaults().withTimeouts(connectTimeout, readTimeout)))
+                .requestFactory(ClientHttpRequestFactoryBuilder.jdk()
+                        .withHttpClientCustomizer(client -> client.version(HttpClient.Version.HTTP_1_1))
+                        .build(
+                                HttpClientSettings.defaults().withTimeouts(connectTimeout, readTimeout)))
                 .baseUrl(baseUrl)
                 .build();
     }
