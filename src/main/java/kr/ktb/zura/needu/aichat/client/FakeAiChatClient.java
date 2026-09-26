@@ -12,7 +12,6 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordRespo
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
-import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
@@ -91,9 +90,7 @@ public class FakeAiChatClient implements AiChatClient {
                 conversationRoomId,
                 userId,
                 profile.summary(),
-                new AiServerCloseSessionKeywordsResponse(
-                        toKeywordValues(profile.keywords().taste()),
-                        toKeywordValues(profile.keywords().interest())),
+                profile.keywords(),
                 new AiServerRecommendationsResponse(
                         new AiServerRecommendationResult(List.of(new AiServerRecommendedItem(
                                 PlatformType.COUPANG,
@@ -123,7 +120,4 @@ public class FakeAiChatClient implements AiChatClient {
                 .toList();
     }
 
-    private List<String> toKeywordValues(List<AiServerAnalysisKeywordResponse> keywords) {
-        return keywords.stream().map(AiServerAnalysisKeywordResponse::value).toList();
-    }
 }
