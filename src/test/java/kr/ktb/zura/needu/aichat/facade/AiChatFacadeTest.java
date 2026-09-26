@@ -12,7 +12,6 @@ import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
-import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationsResponse;
@@ -584,7 +583,7 @@ class AiChatFacadeTest {
                         ROOM_ID,
                         USER_ID,
                         "캠핑을 즐깁니다.",
-                        new AiServerCloseSessionKeywordsResponse(tastes, interests),
+                        keywords(tastes, interests),
                         new AiServerRecommendationsResponse(self, gift)
                 ));
 
@@ -609,7 +608,7 @@ class AiChatFacadeTest {
                         ROOM_ID,
                         USER_ID,
                         "캠핑을 즐깁니다.",
-                        new AiServerCloseSessionKeywordsResponse(
+                        keywords(
                                 List.of("취향1", "취향2", "취향3", "취향4"),
                                 List.of("캠핑", "자전거타기", "여행")),
                         new AiServerRecommendationsResponse(recommendations, recommendations)
@@ -634,7 +633,7 @@ class AiChatFacadeTest {
                         ROOM_ID,
                         USER_ID,
                         "캠핑을 즐깁니다.",
-                        new AiServerCloseSessionKeywordsResponse(tastes, interests),
+                        keywords(tastes, interests),
                         new AiServerRecommendationsResponse(self, gift)
                 ));
         willThrow(new RuntimeException("save failed")).given(productRecommendationService)
@@ -681,6 +680,12 @@ class AiChatFacadeTest {
                                 new AiServerAnalysisKeywordResponse("캠핑", 0.95),
                                 new AiServerAnalysisKeywordResponse("티타늄 머그컵", 0.76))),
                 correctionAvailable));
+    }
+
+    private static AiServerAnalysisKeywordsResponse keywords(List<String> tastes, List<String> interests) {
+        return new AiServerAnalysisKeywordsResponse(
+                tastes.stream().map(value -> new AiServerAnalysisKeywordResponse(value, 1.0)).toList(),
+                interests.stream().map(value -> new AiServerAnalysisKeywordResponse(value, 1.0)).toList());
     }
 
     private static AiServerSendMessageResponse sendMessageResponse(String reply) {

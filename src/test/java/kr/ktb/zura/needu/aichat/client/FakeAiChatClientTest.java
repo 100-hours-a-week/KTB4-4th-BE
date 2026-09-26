@@ -5,6 +5,7 @@ import java.util.List;
 
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
@@ -40,8 +41,10 @@ class FakeAiChatClientTest {
         assertEquals("주말마다 자연에서 쉬는 것을 좋아합니다.", patchedAnalysis.profile().summary());
         assertEquals(false, patchedAnalysis.profile().correctionAvailable());
         assertEquals("주말마다 자연에서 쉬는 것을 좋아합니다.", closedSession.summary());
-        assertEquals(List.of("가벼운 장비"), closedSession.keywords().taste());
-        assertEquals(List.of("자연"), closedSession.keywords().interest());
+        assertEquals(List.of(new AiServerAnalysisKeywordResponse("가벼운 장비", 1.0)),
+                closedSession.keywords().taste());
+        assertEquals(List.of(new AiServerAnalysisKeywordResponse("자연", 1.0)),
+                closedSession.keywords().interest());
         assertEquals("88213", closedSession.recommendations().self().items().getFirst().externalId());
         assertEquals(new BigDecimal("9.2"), closedSession.recommendations().self().items().getFirst().score());
         assertEquals("88214", closedSession.recommendations().gift().items().getFirst().externalId());

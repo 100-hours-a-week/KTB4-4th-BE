@@ -218,7 +218,10 @@ class AiChatClientTest {
                           "conversationId": 101,
                           "userId": 10293,
                           "summary": "캠핑을 즐깁니다.",
-                          "keywords": {"taste": [], "interest": ["캠핑"]},
+                          "keywords": {
+                            "taste": [{"value": "실용성", "score": 0.8}],
+                            "interest": [{"value": "캠핑", "score": 0.9}]
+                          },
                           "recommendations": {
                             "generatedAt": "2026-09-23T07:10:00+00:00",
                             "self": {
@@ -250,6 +253,8 @@ class AiChatClientTest {
         assertEquals(new java.math.BigDecimal("9.2"),
                 response.recommendations().self().items().getFirst().score());
         assertEquals("88214", response.recommendations().gift().items().getFirst().externalId());
+        assertEquals(new AiServerAnalysisKeywordResponse("실용성", 0.8),
+                response.keywords().taste().getFirst());
         server.verify();
     }
 
