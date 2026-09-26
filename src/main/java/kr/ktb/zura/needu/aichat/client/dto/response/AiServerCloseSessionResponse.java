@@ -4,7 +4,7 @@ public record AiServerCloseSessionResponse(
         Long conversationId,
         Long userId,
         String summary,
-        AiServerCloseSessionKeywordsResponse keywords,
+        AiServerAnalysisKeywordsResponse keywords,
         AiServerRecommendationsResponse recommendations
 ) {
 }

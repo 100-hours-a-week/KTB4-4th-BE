@@ -247,13 +247,15 @@ public class AiChatFacade {
             throw e;
         }
         validateCloseResponse(response);
+        List<String> tastes = toKeywordValues(response.keywords().taste());
+        List<String> interests = toKeywordValues(response.keywords().interest());
         productRecommendationService.saveRecommendations(
                 userId,
                 response.recommendations().self(),
                 response.recommendations().gift(),
-                response.keywords().taste());
+                tastes);
         userService.completeTasteAnalysis(
-                userId, response.summary(), response.keywords().taste(), response.keywords().interest());
+                userId, response.summary(), tastes, interests);
         aiChatRoomService.completeRoom(conversationId);
         return ProductRecommendationStatusResponse.success();
     }
@@ -277,10 +279,12 @@ public class AiChatFacade {
         }
     }
 
-    private boolean hasInvalidFinalKeywords(List<String> keywords) {
-        return keywords == null
-                || keywords.size() > 3
-                || keywords.stream().anyMatch(keyword -> keyword == null || keyword.isBlank());
+    private boolean hasInvalidFinalKeywords(List<AiServerAnalysisKeywordResponse> keywords) {
+        return keywords == null || keywords.size() > 3 || hasInvalidKeyword(keywords);
+    }
+
+    private List<String> toKeywordValues(List<AiServerAnalysisKeywordResponse> keywords) {
+        return keywords.stream().map(AiServerAnalysisKeywordResponse::value).toList();
     }
 
     private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {
