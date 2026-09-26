@@ -62,4 +62,8 @@ public class GiftProduct {
         this.reason = reason;
         this.tasteKeywords = tasteKeywords;
     }
+
+    public void updateScore(BigDecimal score) {
+        this.score = score;
+    }
 }

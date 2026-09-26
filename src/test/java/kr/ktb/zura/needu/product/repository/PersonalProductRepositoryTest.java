@@ -121,6 +121,21 @@ class PersonalProductRepositoryTest {
         assertThat(result.getProduct().getName()).isEqualTo("램프");
     }
 
+    @Test
+    void productIdsGiven_findAllByUserIdAndProductIdIn_returnsOnlyOwnItemsForThoseProducts() {
+        Product lamp = saveProduct("램프");
+        Product mug = saveProduct("머그컵");
+        PersonalProduct ownLamp = savePersonalProduct(USER_ID, "0.100000", lamp);
+        savePersonalProduct(USER_ID, "0.200000", mug);
+        savePersonalProduct(OTHER_USER_ID, "0.300000", lamp);
+        entityManager.clear();
+
+        List<PersonalProduct> result =
+                personalProductRepository.findAllByUserIdAndProductIdIn(USER_ID, List.of(lamp.getId()));
+
+        assertThat(result).extracting(PersonalProduct::getId).containsExactly(ownLamp.getId());
+    }
+
     private Product saveProduct(String name) {
         return saveProduct(name, "40000.00");
     }
