@@ -20,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
@@ -85,7 +86,7 @@ class PersonalProductIntegrationTest {
         PersonalProduct mug = savePersonalProduct(user.getId(), "0.700000", "머그컵", "15000.00");
         savePersonalProduct(otherUser.getId(), "0.990000", "다른 사용자 상품", "1000.00");
 
-        String firstPage = mockMvc.perform(get(URL).param("size", "2").with(authenticatedUser(user.getId())))
+        String firstPage = mockMvc.perform(personalProductsRequest(user.getId()).param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("개인 추천 상품 목록을 조회했습니다."))
                 .andExpect(jsonPath("$.data.items.length()").value(2))
@@ -99,7 +100,7 @@ class PersonalProductIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String nextCursor = jsonMapper.readTree(firstPage).get("nextCursor").asString();
 
-        mockMvc.perform(get(URL).param("cursor", nextCursor).param("size", "2").with(authenticatedUser(user.getId())))
+        mockMvc.perform(personalProductsRequest(user.getId()).param("cursor", nextCursor).param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].recommendationId").value(mug.getId()))
@@ -111,7 +112,7 @@ class PersonalProductIntegrationTest {
     void noPersonalProducts_findAllPersonalProducts_returnsEmptyItems() throws Exception {
         User user = userRepository.save(createUser());
 
-        mockMvc.perform(get(URL).with(authenticatedUser(user.getId())))
+        mockMvc.perform(personalProductsRequest(user.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isEmpty())
                 .andExpect(jsonPath("$.nextCursor").isEmpty())
@@ -122,7 +123,7 @@ class PersonalProductIntegrationTest {
     void invalidCursor_findAllPersonalProducts_returnsBadRequest() throws Exception {
         User user = userRepository.save(createUser());
 
-        mockMvc.perform(get(URL).param("cursor", "invalid!!").with(authenticatedUser(user.getId())))
+        mockMvc.perform(personalProductsRequest(user.getId()).param("cursor", "invalid!!"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
                 .andExpect(jsonPath("$.data").isEmpty());
@@ -132,7 +133,7 @@ class PersonalProductIntegrationTest {
     void sizeOutOfRange_findAllPersonalProducts_returnsUnprocessableContent() throws Exception {
         User user = userRepository.save(createUser());
 
-        mockMvc.perform(get(URL).param("size", "51").with(authenticatedUser(user.getId())))
+        mockMvc.perform(personalProductsRequest(user.getId()).param("size", "51"))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
@@ -144,7 +145,7 @@ class PersonalProductIntegrationTest {
         user.block();
         userRepository.save(user);
 
-        mockMvc.perform(get(URL).with(authenticatedUser(user.getId())))
+        mockMvc.perform(personalProductsRequest(user.getId()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("이용이 제한된 계정입니다."));
     }
@@ -155,11 +156,11 @@ class PersonalProductIntegrationTest {
         User otherUser = userRepository.save(createUser());
 
         for (int i = 0; i < RATE_LIMIT; i++) {
-            mockMvc.perform(get(URL).with(authenticatedUser(user.getId())))
+            mockMvc.perform(personalProductsRequest(user.getId()))
                     .andExpect(status().isOk());
         }
 
-        String response = mockMvc.perform(get(URL).with(authenticatedUser(user.getId())))
+        String response = mockMvc.perform(personalProductsRequest(user.getId()))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists("Retry-After"))
                 .andExpect(jsonPath("$.message").value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."))
@@ -167,7 +168,7 @@ class PersonalProductIntegrationTest {
         JsonNode retryAfterSeconds = jsonMapper.readTree(response).get("data").get("retryAfterSeconds");
         assertThat(retryAfterSeconds.asLong()).isBetween(1L, 60L);
 
-        mockMvc.perform(get(URL).with(authenticatedUser(otherUser.getId())))
+        mockMvc.perform(personalProductsRequest(otherUser.getId()))
                 .andExpect(status().isOk());
     }
 
@@ -181,6 +182,13 @@ class PersonalProductIntegrationTest {
                 "https://image.test/product.png", null, null);
         transactionTemplate.executeWithoutResult(status -> entityManager.persist(product));
         return personalProductRepository.save(new PersonalProduct(userId, product, new BigDecimal(score), null));
+    }
+
+    private MockHttpServletRequestBuilder personalProductsRequest(Long userId) {
+        return get(URL)
+                .param("minPrice", "0")
+                .param("maxPrice", "100000")
+                .with(authenticatedUser(userId));
     }
 
     private RequestPostProcessor authenticatedUser(Long userId) {
