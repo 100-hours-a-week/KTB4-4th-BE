@@ -39,7 +39,9 @@ class RateLimitFilterTest {
                 POLICY_NAME, new RateLimitProperties.Policy(HttpMethod.GET, PATH, LIMIT, WINDOW, MAXIMUM_SIZE)
         ));
         rateLimitFilter = new RateLimitFilter(
-                properties, new ErrorResponseWriter(JsonMapper.builder().build()), nanoTime::get);
+                properties,
+                new CaffeineRateLimitCounter(properties, nanoTime::get),
+                new ErrorResponseWriter(JsonMapper.builder().build()));
     }
 
     @AfterEach
