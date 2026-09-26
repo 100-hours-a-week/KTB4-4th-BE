@@ -25,8 +25,8 @@ public class PersonalProductController {
     @GetMapping
     public ResponseEntity<CursorApiResponse<PersonalProductResponse>> findAllPersonalProducts(
             @AuthenticationPrincipal Long userId,
-            @RequestParam @PositiveOrZero long minPrice,
-            @RequestParam @PositiveOrZero long maxPrice,
+            @RequestParam(defaultValue = "0") @PositiveOrZero long minPrice,
+            @RequestParam(defaultValue = "99999999") @PositiveOrZero long maxPrice,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = PersonalProductPageLimits.DEFAULT_PAGE_SIZE)
             @Min(PersonalProductPageLimits.MIN_PAGE_SIZE) @Max(PersonalProductPageLimits.MAX_PAGE_SIZE) int size
