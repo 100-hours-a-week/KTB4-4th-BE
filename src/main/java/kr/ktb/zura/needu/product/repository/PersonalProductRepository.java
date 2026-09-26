@@ -18,9 +18,15 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
             where pp.userId = :userId
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
+              and p.price between :minPrice and :maxPrice
             order by pp.score desc, pp.id desc
             """)
-    List<PersonalProduct> findAllByUserId(@Param("userId") Long userId, Limit limit);
+    List<PersonalProduct> findAllByUserIdAndPriceRange(
+            @Param("userId") Long userId,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            Limit limit
+    );
 
     @Query("""
             select pp
@@ -30,10 +36,13 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and (pp.score < :score or (pp.score = :score and pp.id < :id))
+              and p.price between :minPrice and :maxPrice
             order by pp.score desc, pp.id desc
             """)
-    List<PersonalProduct> findAllByUserIdAfterCursor(
+    List<PersonalProduct> findAllByUserIdAndPriceRangeAfterCursor(
             @Param("userId") Long userId,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
             @Param("score") BigDecimal score,
             @Param("id") Long id,
             Limit limit

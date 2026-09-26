@@ -1,18 +1,17 @@
 package kr.ktb.zura.needu.product.service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.type.PlatformType;
-import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -37,6 +36,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class PersonalProductServiceTest {
 
     private static final Long USER_ID = 1L;
+    private static final BigDecimal MIN_PRICE = BigDecimal.valueOf(1000L);
+    private static final BigDecimal MAX_PRICE = BigDecimal.valueOf(10000L);
 
     @Mock
     private UserService userService;
@@ -54,10 +55,11 @@ class PersonalProductServiceTest {
                 createPersonalProduct(20L, "0.800000", 3100),
                 createPersonalProduct(10L, "0.700000", 1000)
         );
-        given(personalProductRepository.findAllByUserId(USER_ID, Limit.of(3))).willReturn(personalProducts);
+        given(personalProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3))).willReturn(personalProducts);
 
         CursorPageResponse<PersonalProductResponse> response =
-                personalProductService.findAllPersonalProducts(USER_ID, null, 2);
+                personalProductService.findAllPersonalProducts(USER_ID, condition(null, 2));
 
         assertThat(response.items()).extracting(PersonalProductResponse::recommendationId).containsExactly(30L, 20L);
         assertThat(response.hasNext()).isTrue();
@@ -68,11 +70,11 @@ class PersonalProductServiceTest {
 
     @Test
     void itemsNotExceedingSize_findAllPersonalProducts_returnsLastPage() {
-        given(personalProductRepository.findAllByUserId(USER_ID, Limit.of(3)))
+        given(personalProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
                 .willReturn(List.of(createPersonalProduct(30L, "0.900000", 5200)));
 
         CursorPageResponse<PersonalProductResponse> response =
-                personalProductService.findAllPersonalProducts(USER_ID, null, 2);
+                personalProductService.findAllPersonalProducts(USER_ID, condition(null, 2));
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().price()).isEqualTo(5200L);
@@ -83,24 +85,25 @@ class PersonalProductServiceTest {
     @Test
     void cursorGiven_findAllPersonalProducts_findsItemsAfterCursor() {
         String cursor = new PersonalProductCursor(new BigDecimal("0.800000"), 20L).encode();
-        given(personalProductRepository.findAllByUserIdAfterCursor(
-                USER_ID, new BigDecimal("0.800000"), 20L, Limit.of(3)))
+        given(personalProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.800000"), 20L, Limit.of(3)))
                 .willReturn(List.of(createPersonalProduct(10L, "0.700000", 1000)));
 
         CursorPageResponse<PersonalProductResponse> response =
-                personalProductService.findAllPersonalProducts(USER_ID, cursor, 2);
+                personalProductService.findAllPersonalProducts(USER_ID, condition(cursor, 2));
 
         assertThat(response.items()).extracting(PersonalProductResponse::recommendationId).containsExactly(10L);
         assertThat(response.hasNext()).isFalse();
-        verify(personalProductRepository, never()).findAllByUserId(anyLong(), any());
+        verify(personalProductRepository, never()).findAllByUserIdAndPriceRange(anyLong(), any(), any(), any());
     }
 
     @Test
     void noPersonalProducts_findAllPersonalProducts_returnsEmptyItems() {
-        given(personalProductRepository.findAllByUserId(USER_ID, Limit.of(21))).willReturn(List.of());
+        given(personalProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(21))).willReturn(List.of());
 
         CursorPageResponse<PersonalProductResponse> response =
-                personalProductService.findAllPersonalProducts(USER_ID, null, 20);
+                personalProductService.findAllPersonalProducts(USER_ID, condition(null, 20));
 
         assertThat(response.items()).isEmpty();
         assertThat(response.hasNext()).isFalse();
@@ -108,9 +111,20 @@ class PersonalProductServiceTest {
     }
 
     @Test
+    void minPriceGreaterThanMaxPrice_findAllPersonalProducts_throwsInvalidInput() {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(50000L, 30000L, null, 20);
+
+        assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, condition))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
+        verifyNoInteractions(userService, personalProductRepository);
+    }
+
+    @Test
     void invalidCursor_findAllPersonalProducts_throwsInvalidRequest() {
 
-        assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, "invalid!!", 20))
+        assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, condition("invalid!!", 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.COMMON_INVALID_REQUEST);
@@ -121,11 +135,15 @@ class PersonalProductServiceTest {
     void blockedUser_findAllPersonalProducts_throwsUserBlocked() {
         willThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).given(userService).validateActiveUser(USER_ID);
 
-        assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, null, 20))
+        assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, condition(null, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(UserErrorCode.USER_BLOCKED);
         verifyNoInteractions(personalProductRepository);
+    }
+
+    private PersonalProductSearchCondition condition(String cursor, int size) {
+        return new PersonalProductSearchCondition(MIN_PRICE.longValue(), MAX_PRICE.longValue(), cursor, size);
     }
 
     private PersonalProduct createPersonalProduct(Long id, String score, long price) {
