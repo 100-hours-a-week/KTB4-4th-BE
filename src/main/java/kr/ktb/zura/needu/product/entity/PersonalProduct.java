@@ -55,4 +55,8 @@ public class PersonalProduct {
         this.score = score;
         this.reason = reason;
     }
+
+    public void updateScore(BigDecimal score) {
+        this.score = score;
+    }
 }

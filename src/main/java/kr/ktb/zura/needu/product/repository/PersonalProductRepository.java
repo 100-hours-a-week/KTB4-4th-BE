@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.product.repository;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
@@ -47,4 +48,6 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
             @Param("id") Long id,
             Limit limit
     );
+
+    List<PersonalProduct> findAllByUserIdAndProductIdIn(Long userId, Collection<Long> productIds);
 }
