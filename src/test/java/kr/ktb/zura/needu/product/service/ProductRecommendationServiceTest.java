@@ -21,9 +21,12 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,6 +35,8 @@ import static org.mockito.Mockito.verify;
 class ProductRecommendationServiceTest {
 
     private static final Long USER_ID = 1L;
+
+    private long nextProductId = 1L;
 
     @Mock
     private ProductRepository productRepository;
@@ -99,6 +104,65 @@ class ProductRecommendationServiceTest {
         verify(giftProductRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void personalProductAlreadyRecommended_saveRecommendations_updatesScoreWithoutNewRow() {
+        Product selfProduct = product("self-1");
+        givenProduct("self-1", selfProduct);
+        PersonalProduct existing = new PersonalProduct(USER_ID, selfProduct, new BigDecimal("1.0"), "이전 추천");
+        given(personalProductRepository.findAllByUserIdAndProductIdIn(eq(USER_ID), anyCollection()))
+                .willReturn(List.of(existing));
+
+        productRecommendationService.saveRecommendations(
+                USER_ID, recommendations(item("self-1", "새 추천")), recommendations(), List.of());
+
+        verify(personalProductRepository).saveAll(personalProductsCaptor.capture());
+        assertThat(personalProductsCaptor.getValue()).isEmpty();
+        assertThat(existing.getScore()).isEqualTo(new BigDecimal("9.2"));
+        assertThat(existing.getReason()).isEqualTo("이전 추천");
+    }
+
+    @Test
+    void giftProductAlreadyRecommended_saveRecommendations_updatesScoreAndSavesOnlyNewProducts() {
+        Product existingGiftProduct = product("self-1");
+        Product newGiftProduct = product("gift-1");
+        givenProduct("self-1", existingGiftProduct);
+        givenProduct("gift-1", newGiftProduct);
+        GiftProduct existing = new GiftProduct(
+                USER_ID, existingGiftProduct, new BigDecimal("1.0"), "이전 추천", List.of("독서"));
+        given(giftProductRepository.findAllByUserIdAndProductIdIn(eq(USER_ID), anyCollection()))
+                .willReturn(List.of(existing));
+
+        productRecommendationService.saveRecommendations(
+                USER_ID,
+                recommendations(),
+                recommendations(item("self-1", "새 추천"), item("gift-1", "선물 추천")),
+                List.of("캠핑"));
+
+        verify(giftProductRepository).saveAll(giftProductsCaptor.capture());
+        assertThat(giftProductsCaptor.getValue())
+                .extracting(GiftProduct::getProduct)
+                .containsExactly(newGiftProduct);
+        assertThat(existing.getScore()).isEqualTo(new BigDecimal("9.2"));
+        assertThat(existing.getTasteKeywords()).containsExactly("독서");
+    }
+
+    @Test
+    void sameProductTwiceInResponse_saveRecommendations_savesOneRowWithLastScore() {
+        Product selfProduct = product("self-1");
+        givenProduct("self-1", selfProduct);
+        AiServerRecommendedItem first = item("self-1", "첫 번째");
+        AiServerRecommendedItem second =
+                new AiServerRecommendedItem(PlatformType.COUPANG, "self-1", new BigDecimal("3.1"), "두 번째");
+
+        productRecommendationService.saveRecommendations(
+                USER_ID, recommendations(first, second), recommendations(), List.of());
+
+        verify(personalProductRepository).saveAll(personalProductsCaptor.capture());
+        assertThat(personalProductsCaptor.getValue()).singleElement()
+                .extracting(PersonalProduct::getScore)
+                .isEqualTo(new BigDecimal("3.1"));
+    }
+
     private void givenProduct(String externalId, Product product) {
         given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, externalId))
                 .willReturn(Optional.of(product));
@@ -114,8 +178,10 @@ class ProductRecommendationServiceTest {
     }
 
     private Product product(String externalId) {
-        return new Product(
+        Product product = new Product(
                 PlatformType.COUPANG, externalId, "상품", null, null,
                 BigDecimal.ONE, null, null, null);
+        ReflectionTestUtils.setField(product, "id", nextProductId++);
+        return product;
     }
 }
