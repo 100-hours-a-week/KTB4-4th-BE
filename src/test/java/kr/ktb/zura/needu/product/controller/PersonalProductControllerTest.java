@@ -79,6 +79,18 @@ class PersonalProductControllerTest {
     }
 
     @Test
+    void priceRangeOmitted_findAllPersonalProducts_usesDefaults() throws Exception {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, 20);
+        given(personalProductService.findAllPersonalProducts(USER_ID, condition))
+                .willReturn(new CursorPageResponse<>(List.of(), null, false));
+
+        mockMvc.perform(get(URL).with(authenticatedUser()))
+                .andExpect(status().isOk());
+
+        verify(personalProductService).findAllPersonalProducts(USER_ID, condition);
+    }
+
+    @Test
     void invalidInput_findAllPersonalProducts_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(get(URL)
                         .param("minPrice", "-1")
