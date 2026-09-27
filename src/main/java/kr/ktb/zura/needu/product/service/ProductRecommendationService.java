@@ -4,22 +4,23 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
-import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
-import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 // 재분석으로 이미 추천된 상품이 다시 오면 행을 추가하지 않고 적합도(score)만 갱신한다
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductRecommendationService {
@@ -35,7 +36,6 @@ public class ProductRecommendationService {
             AiServerRecommendationResult gift,
             List<String> tasteKeywords
     ) {
-        // 없는 상품이 하나라도 있으면 어느 쪽도 저장하지 않도록 상품 조회를 먼저 끝낸다
         List<RecommendedProduct> personalProducts = toRecommendedProducts(self);
         List<RecommendedProduct> giftProducts = toRecommendedProducts(gift);
         savePersonalProducts(userId, personalProducts);
@@ -83,7 +83,8 @@ public class ProductRecommendationService {
 
     private List<RecommendedProduct> toRecommendedProducts(AiServerRecommendationResult recommendation) {
         return recommendation.items().stream()
-                .map(item -> new RecommendedProduct(findProduct(item), item.score(), item.reason()))
+                .flatMap(item -> findProduct(item).stream()
+                        .map(product -> new RecommendedProduct(product, item.score(), item.reason())))
                 .toList();
     }
 
@@ -94,9 +95,15 @@ public class ProductRecommendationService {
                 .toList();
     }
 
-    private Product findProduct(AiServerRecommendedItem item) {
-        return productRepository.findByPlatformTypeAndExternalId(item.platform(), item.externalId())
-                .orElseThrow(() -> new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    // AI 세션을 닫은 뒤 호출되므로 상품 하나 때문에 분석 결과 전체를 잃지 않도록 카탈로그에 없는 상품만 건너뛴다
+    private Optional<Product> findProduct(AiServerRecommendedItem item) {
+        Optional<Product> product =
+                productRepository.findByPlatformTypeAndExternalId(item.platform(), item.externalId());
+        if (product.isEmpty()) {
+            log.warn("Recommended product not found. platform={}, externalId={}",
+                    item.platform(), item.externalId());
+        }
+        return product;
     }
 
     private record RecommendedProduct(Product product, BigDecimal score, String reason) {

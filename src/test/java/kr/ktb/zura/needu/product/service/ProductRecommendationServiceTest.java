@@ -5,11 +5,9 @@ import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
-import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
-import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.ProductRepository;
@@ -24,11 +22,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -86,22 +82,28 @@ class ProductRecommendationServiceTest {
     }
 
     @Test
-    void unknownProduct_saveRecommendations_doesNotSavePartialRecommendations() {
+    void unknownProduct_saveRecommendations_skipsOnlyUnknownProduct() {
         Product selfProduct = product("self-1");
+        Product giftProduct = product("gift-1");
         givenProduct("self-1", selfProduct);
-        given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, "gift-1"))
+        givenProduct("gift-1", giftProduct);
+        given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, "unknown"))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> productRecommendationService.saveRecommendations(
+        productRecommendationService.saveRecommendations(
                 USER_ID,
-                recommendations(item("self-1", "나를 위한 추천")),
-                recommendations(item("gift-1", "선물 추천")),
-                List.of()))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND);
-        verify(personalProductRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
-        verify(giftProductRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+                recommendations(item("unknown", "없는 상품"), item("self-1", "나를 위한 추천")),
+                recommendations(item("gift-1", "선물 추천"), item("unknown", "없는 상품")),
+                List.of());
+
+        verify(personalProductRepository).saveAll(personalProductsCaptor.capture());
+        verify(giftProductRepository).saveAll(giftProductsCaptor.capture());
+        assertThat(personalProductsCaptor.getValue())
+                .extracting(PersonalProduct::getProduct)
+                .containsExactly(selfProduct);
+        assertThat(giftProductsCaptor.getValue())
+                .extracting(GiftProduct::getProduct)
+                .containsExactly(giftProduct);
     }
 
     @Test

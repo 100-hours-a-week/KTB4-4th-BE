@@ -25,14 +25,13 @@ import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
+import kr.ktb.zura.needu.aichat.service.AiAnalysisConfirmService;
 import kr.ktb.zura.needu.aichat.service.AiChatRoomService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
-import kr.ktb.zura.needu.product.service.ProductRecommendationService;
-import kr.ktb.zura.needu.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,24 +46,21 @@ public class AiChatFacade {
     private final AiMessageService aiMessageService;
     private final AiConversationLock aiConversationLock;
     private final AiChatClient aiChatClient;
+    private final AiAnalysisConfirmService aiAnalysisConfirmService;
     private final Duration messageRetryAfter;
-    private final ProductRecommendationService productRecommendationService;
-    private final UserService userService;
 
     public AiChatFacade(AiChatRoomService aiChatRoomService,
                         AiMessageService aiMessageService,
                         AiConversationLock aiConversationLock,
                         AiChatClient aiChatClient,
-                        ProductRecommendationService productRecommendationService,
-                        UserService userService,
+                        AiAnalysisConfirmService aiAnalysisConfirmService,
                         @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter) {
         this.aiChatRoomService = aiChatRoomService;
         this.aiMessageService = aiMessageService;
         this.aiConversationLock = aiConversationLock;
         this.aiChatClient = aiChatClient;
+        this.aiAnalysisConfirmService = aiAnalysisConfirmService;
         this.messageRetryAfter = messageRetryAfter;
-        this.productRecommendationService = productRecommendationService;
-        this.userService = userService;
     }
 
     public AiConversationStartResult startOrResumeConversation(Long userId) {
@@ -238,6 +234,19 @@ public class AiChatFacade {
 
     public ProductRecommendationStatusResponse confirmAnalysis(Long userId, Long conversationId) {
         aiChatRoomService.validateActiveRoom(userId, conversationId);
+        // AI 세션 종료는 되돌릴 수 없으므로 같은 대화방의 확정 요청이 겹쳐 AI를 두 번 호출하지 않게 막는다
+        if (!aiConversationLock.tryLock(conversationId)) {
+            log.info("AI analysis confirm already in progress. userId={}, conversationId={}", userId, conversationId);
+            throw new TooManyRequestsException(messageRetryAfter.toSeconds());
+        }
+        try {
+            return closeSessionAndSaveAnalysis(userId, conversationId);
+        } finally {
+            aiConversationLock.unlock(conversationId);
+        }
+    }
+
+    private ProductRecommendationStatusResponse closeSessionAndSaveAnalysis(Long userId, Long conversationId) {
         aiChatRoomService.startAnalysis(conversationId);
         AiServerCloseSessionResponse response;
         try {
@@ -246,18 +255,25 @@ public class AiChatFacade {
             expireRoomIfSessionGone(userId, conversationId, e);
             throw e;
         }
-        validateCloseResponse(response);
-        List<String> tastes = toKeywordValues(response.keywords().taste());
-        List<String> interests = toKeywordValues(response.keywords().interest());
-        productRecommendationService.saveRecommendations(
-                userId,
-                response.recommendations().self(),
-                response.recommendations().gift(),
-                tastes);
-        userService.completeTasteAnalysis(
-                userId, response.summary(), tastes, interests);
-        aiChatRoomService.completeRoom(conversationId);
+        try {
+            validateCloseResponse(response);
+            aiAnalysisConfirmService.saveConfirmedAnalysis(userId, conversationId, response);
+        } catch (RuntimeException e) {
+            expireClosedRoom(userId, conversationId, e);
+            throw e;
+        }
         return ProductRecommendationStatusResponse.success();
+    }
+
+    // AI 세션은 이미 닫혀 같은 대화방으로는 다시 확정할 수 없다 => ANALYZING에 묶이지 않도록 만료해 새 대화를 시작하게 한다
+    private void expireClosedRoom(Long userId, Long conversationId, RuntimeException cause) {
+        log.warn("AI analysis result not saved after session closed. userId={}, conversationId={}",
+                userId, conversationId);
+        try {
+            aiChatRoomService.expireRoom(conversationId);
+        } catch (RuntimeException expireFailure) {
+            cause.addSuppressed(expireFailure);
+        }
     }
 
     private void validateCloseResponse(AiServerCloseSessionResponse response) {
@@ -281,10 +297,6 @@ public class AiChatFacade {
 
     private boolean hasInvalidFinalKeywords(List<AiServerAnalysisKeywordResponse> keywords) {
         return keywords == null || keywords.size() > 3 || hasInvalidKeyword(keywords);
-    }
-
-    private List<String> toKeywordValues(List<AiServerAnalysisKeywordResponse> keywords) {
-        return keywords.stream().map(AiServerAnalysisKeywordResponse::value).toList();
     }
 
     private AnalysisResultResponse toAnalysisResult(AiServerAnalysisResponse response) {
