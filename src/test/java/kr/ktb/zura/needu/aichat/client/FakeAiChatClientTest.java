@@ -45,9 +45,9 @@ class FakeAiChatClientTest {
                 closedSession.keywords().taste());
         assertEquals(List.of(new AiServerAnalysisKeywordResponse("자연", 1.0)),
                 closedSession.keywords().interest());
-        assertEquals("88213", closedSession.recommendations().self().items().getFirst().externalId());
+        assertEquals("8255331367", closedSession.recommendations().self().items().getFirst().externalId());
         assertEquals(new BigDecimal("9.2"), closedSession.recommendations().self().items().getFirst().score());
-        assertEquals("88214", closedSession.recommendations().gift().items().getFirst().externalId());
+        assertEquals("6927419268", closedSession.recommendations().gift().items().getFirst().externalId());
         assertEquals(new BigDecimal("8.0"), closedSession.recommendations().gift().items().getFirst().score());
     }
 }
