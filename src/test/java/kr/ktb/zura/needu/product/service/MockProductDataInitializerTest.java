@@ -24,9 +24,9 @@ class MockProductDataInitializerTest {
 
     @Test
     void missingMockProducts_run_savesProductsUsedByConfirmResponse() {
-        given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, "88213"))
+        given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, "8255331367"))
                 .willReturn(Optional.empty());
-        given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, "88214"))
+        given(productRepository.findByPlatformTypeAndExternalId(PlatformType.COUPANG, "6927419268"))
                 .willReturn(Optional.empty());
         MockProductDataInitializer initializer = new MockProductDataInitializer(productRepository);
 
@@ -36,6 +36,6 @@ class MockProductDataInitializerTest {
         verify(productRepository, times(2)).save(products.capture());
         assertThat(products.getAllValues())
                 .extracting(Product::getExternalId)
-                .containsExactly("88213", "88214");
+                .containsExactly("8255331367", "6927419268");
     }
 }

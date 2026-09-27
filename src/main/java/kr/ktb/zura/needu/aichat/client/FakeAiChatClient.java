@@ -26,8 +26,8 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "ai.server.mock-enabled", havingValue = "true")
 public class FakeAiChatClient implements AiChatClient {
 
-    private static final String MOCK_SELF_PRODUCT_ID = "88213";
-    private static final String MOCK_GIFT_PRODUCT_ID = "88214";
+    private static final String MOCK_SELF_PRODUCT_ID = "8255331367";
+    private static final String MOCK_GIFT_PRODUCT_ID = "6927419268";
 
     private final Map<Long, Integer> mockTurns = new ConcurrentHashMap<>();
     private final Map<Long, AiServerAnalysisResponse> mockAnalyses = new ConcurrentHashMap<>();
