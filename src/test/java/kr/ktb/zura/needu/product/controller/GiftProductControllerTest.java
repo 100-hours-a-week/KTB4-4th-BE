@@ -38,7 +38,8 @@ class GiftProductControllerTest {
     private static final GiftProductSearchCondition FIRST_PAGE_CONDITION =
             new GiftProductSearchCondition(30000L, 50000L, null, 20);
     private static final GiftProductResponse CROSS_BAG = new GiftProductResponse(
-            101L, 1001L, "https://example.com/products/1001.jpg", "FASHION", "미니 크로스백", 49000L,
+            101L, 1001L, "https://example.com/products/1001.jpg", "https://example.com/products/1001",
+            "FASHION", "미니 크로스백", 49000L,
             List.of("미니멀", "데일리"), "데일리룩을 즐겨 입어요.");
 
     @Autowired
@@ -59,6 +60,8 @@ class GiftProductControllerTest {
                 .andExpect(jsonPath("$.data.items[0].productId").value(1001))
                 .andExpect(jsonPath("$.data.items[0].productImageUrl")
                         .value("https://example.com/products/1001.jpg"))
+                .andExpect(jsonPath("$.data.items[0].purchaseUrl")
+                        .value("https://example.com/products/1001"))
                 .andExpect(jsonPath("$.data.items[0].category").value("FASHION"))
                 .andExpect(jsonPath("$.data.items[0].name").value("미니 크로스백"))
                 .andExpect(jsonPath("$.data.items[0].price").value(49000))

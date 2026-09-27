@@ -35,7 +35,15 @@ class PersonalProductControllerTest {
     private static final PersonalProductSearchCondition FIRST_PAGE_CONDITION =
             new PersonalProductSearchCondition(30000L, 60000L, null, 20);
     private static final PersonalProductResponse LAMP =
-            new PersonalProductResponse(5001L, 1001L, "미니멀 테이블 램프", "https://image.test/lamp.png", 52000L);
+            new PersonalProductResponse(
+                    5001L,
+                    1001L,
+                    "미니멀 테이블 램프",
+                    "https://image.test/lamp.png",
+                    "https://shop.test/lamp",
+                    "LIVING",
+                    52000L,
+                    "미니멀한 취향과 잘 맞아요.");
 
     @Autowired
     private MockMvc mockMvc;
@@ -54,8 +62,11 @@ class PersonalProductControllerTest {
                 .andExpect(jsonPath("$.data.items[0].recommendationId").value(5001))
                 .andExpect(jsonPath("$.data.items[0].productId").value(1001))
                 .andExpect(jsonPath("$.data.items[0].name").value("미니멀 테이블 램프"))
-                .andExpect(jsonPath("$.data.items[0].imageUrl").value("https://image.test/lamp.png"))
+                .andExpect(jsonPath("$.data.items[0].productImageUrl").value("https://image.test/lamp.png"))
+                .andExpect(jsonPath("$.data.items[0].purchaseUrl").value("https://shop.test/lamp"))
+                .andExpect(jsonPath("$.data.items[0].category").value("LIVING"))
                 .andExpect(jsonPath("$.data.items[0].price").value(52000))
+                .andExpect(jsonPath("$.data.items[0].reason").value("미니멀한 취향과 잘 맞아요."))
                 .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
                 .andExpect(jsonPath("$.hasNext").value(true));
     }
