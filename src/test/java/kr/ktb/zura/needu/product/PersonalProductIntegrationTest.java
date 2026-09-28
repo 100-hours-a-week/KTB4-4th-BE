@@ -93,7 +93,7 @@ class PersonalProductIntegrationTest {
                 .andExpect(jsonPath("$.data.items[0].recommendationId").value(lamp.getId()))
                 .andExpect(jsonPath("$.data.items[0].productId").value(lamp.getProduct().getId()))
                 .andExpect(jsonPath("$.data.items[0].name").value("미니멀 테이블 램프"))
-                .andExpect(jsonPath("$.data.items[0].imageUrl").value("https://image.test/product.png"))
+                .andExpect(jsonPath("$.data.items[0].productImageUrl").value("https://image.test/product.png"))
                 .andExpect(jsonPath("$.data.items[0].price").value(52000))
                 .andExpect(jsonPath("$.data.items[1].recommendationId").value(chair.getId()))
                 .andExpect(jsonPath("$.hasNext").value(true))
