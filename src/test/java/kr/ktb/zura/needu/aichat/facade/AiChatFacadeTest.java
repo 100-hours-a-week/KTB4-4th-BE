@@ -28,6 +28,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
+import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -498,6 +499,21 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND);
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+    }
+
+    @Test
+    void profileTooSparse_createAnalysis_expiresRoomAndThrowsRestartRequired() {
+        given(aiChatClient.createAnalysis(ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> {
+                    BusinessException businessException = (BusinessException) exception;
+                    assertThat(businessException.getErrorCode()).isEqualTo(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE);
+                    assertThat(businessException.getData()).isEqualTo(new RestartRequiredResponse(true));
+                });
         verify(aiChatRoomService).expireRoom(ROOM_ID);
     }
 

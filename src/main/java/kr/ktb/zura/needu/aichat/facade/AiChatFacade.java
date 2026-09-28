@@ -22,6 +22,7 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
+import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -213,8 +214,19 @@ public class AiChatFacade {
             return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
         } catch (BusinessException e) {
             expireRoomIfSessionGone(userId, conversationId, e);
+            if (e.getErrorCode() == AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE) {
+                throw expireSparseRoom(userId, conversationId, e);
+            }
             throw e;
         }
+    }
+
+    // AI 세션은 입력이 잠긴 채 분석도 거절해 다시 요청해도 결과가 같다 => ANALYZING에 묶이지 않도록 만료해 새 대화를 시작하게 한다
+    private BusinessException expireSparseRoom(Long userId, Long conversationId, BusinessException cause) {
+        log.info("AI analysis rejected for sparse profile. userId={}, conversationId={}", userId, conversationId);
+        aiChatRoomService.expireRoom(conversationId);
+        return new BusinessException(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE,
+                new RestartRequiredResponse(true), cause);
     }
 
     public AnalysisResultResponse patchAnalyze(Long userId, Long conversationId, PatchAnalyzeMessageRequest request) {
