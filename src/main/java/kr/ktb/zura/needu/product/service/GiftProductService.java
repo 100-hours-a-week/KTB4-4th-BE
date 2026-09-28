@@ -5,11 +5,12 @@ import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
+import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
@@ -28,7 +29,7 @@ public class GiftProductService {
     private final FriendService friendService;
     private final GiftProductRepository giftProductRepository;
 
-    public CursorPageResponse<GiftProductResponse> findAllGiftProducts(
+    public ProductCursorPageResponse<GiftProductResponse> findAllGiftProducts(
             Long userId, Long friendUserId, GiftProductSearchCondition condition) {
         validatePriceRange(condition);
         userService.validateActiveUser(userId);
@@ -41,8 +42,9 @@ public class GiftProductService {
         List<GiftProduct> pageItems = hasNext ? giftProducts.subList(0, size) : giftProducts;
 
         String nextCursor = hasNext ? GiftProductCursor.from(pageItems.getLast()).encode() : null;
-        return new CursorPageResponse<>(
+        return new ProductCursorPageResponse<>(
                 pageItems.stream().map(GiftProductResponse::from).toList(),
+                PriceRangeResponse.from(giftProductRepository.findPriceRangeByUserId(friendUserId)),
                 nextCursor,
                 hasNext
         );

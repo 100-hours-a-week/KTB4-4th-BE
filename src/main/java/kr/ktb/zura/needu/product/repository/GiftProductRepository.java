@@ -13,6 +13,16 @@ import org.springframework.data.repository.query.Param;
 public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> {
 
     @Query("""
+            select new kr.ktb.zura.needu.product.repository.ProductPriceRange(min(p.price), max(p.price))
+            from GiftProduct gp
+            join gp.product p
+            where gp.userId = :userId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            """)
+    ProductPriceRange findPriceRangeByUserId(@Param("userId") Long userId);
+
+    @Query("""
             select gp
             from GiftProduct gp
             join fetch gp.product p
