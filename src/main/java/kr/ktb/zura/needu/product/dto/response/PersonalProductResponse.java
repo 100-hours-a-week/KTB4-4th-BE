@@ -5,7 +5,16 @@ import java.math.BigDecimal;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 
-public record PersonalProductResponse(Long recommendationId, Long productId, String name, String imageUrl, Long price) {
+public record PersonalProductResponse(
+        Long recommendationId,
+        Long productId,
+        String name,
+        String productImageUrl,
+        String purchaseUrl,
+        String category,
+        Long price,
+        BigDecimal score,
+        String reason) {
 
     public static PersonalProductResponse from(PersonalProduct personalProduct) {
         Product product = personalProduct.getProduct();
@@ -14,7 +23,11 @@ public record PersonalProductResponse(Long recommendationId, Long productId, Str
                 product.getId(),
                 product.getName(),
                 product.getImageUrl(),
-                toPrice(product.getPrice())
+                product.getPurchaseUrl(),
+                product.getCategory(),
+                toPrice(product.getPrice()),
+                personalProduct.getScore(),
+                personalProduct.getReason()
         );
     }
 

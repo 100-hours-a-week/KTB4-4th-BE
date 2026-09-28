@@ -75,6 +75,23 @@ class PersonalProductRepositoryTest {
     }
 
     @Test
+    void productsFound_findPriceRangeByUserId_returnsOwnActiveProductRange() {
+        savePersonalProduct(USER_ID, "0.100000", saveProduct("최저가", "10000.00"));
+        savePersonalProduct(USER_ID, "0.200000", saveProduct("최고가", "90000.00"));
+        savePersonalProduct(OTHER_USER_ID, "0.300000", saveProduct("다른 사용자", "1000.00"));
+        Product soldOut = saveProduct("품절", "100000.00");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        savePersonalProduct(USER_ID, "0.400000", soldOut);
+        entityManager.flush();
+        entityManager.clear();
+
+        ProductPriceRange result = personalProductRepository.findPriceRangeByUserId(USER_ID);
+
+        assertThat(result.minPrice()).isEqualByComparingTo("10000.00");
+        assertThat(result.maxPrice()).isEqualByComparingTo("90000.00");
+    }
+
+    @Test
     void inactiveOrDeletedProduct_findAllByUserIdAndPriceRange_excludesItem() {
         PersonalProduct active = savePersonalProduct(USER_ID, "0.100000", saveProduct("판매 중"));
         Product soldOut = saveProduct("품절");
@@ -119,6 +136,21 @@ class PersonalProductRepositoryTest {
         assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
                 .isLoaded(result, "product")).isTrue();
         assertThat(result.getProduct().getName()).isEqualTo("램프");
+    }
+
+    @Test
+    void productIdsGiven_findAllByUserIdAndProductIdIn_returnsOnlyOwnItemsForThoseProducts() {
+        Product lamp = saveProduct("램프");
+        Product mug = saveProduct("머그컵");
+        PersonalProduct ownLamp = savePersonalProduct(USER_ID, "0.100000", lamp);
+        savePersonalProduct(USER_ID, "0.200000", mug);
+        savePersonalProduct(OTHER_USER_ID, "0.300000", lamp);
+        entityManager.clear();
+
+        List<PersonalProduct> result =
+                personalProductRepository.findAllByUserIdAndProductIdIn(USER_ID, List.of(lamp.getId()));
+
+        assertThat(result).extracting(PersonalProduct::getId).containsExactly(ownLamp.getId());
     }
 
     private Product saveProduct(String name) {

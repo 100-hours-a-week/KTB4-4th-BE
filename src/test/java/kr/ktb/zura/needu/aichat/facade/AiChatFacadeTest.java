@@ -31,6 +31,7 @@ import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
+import kr.ktb.zura.needu.aichat.service.AiAnalysisConfirmService;
 import kr.ktb.zura.needu.aichat.service.AiChatRoomService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
@@ -39,9 +40,7 @@ import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
-import kr.ktb.zura.needu.product.service.ProductRecommendationService;
 import kr.ktb.zura.needu.product.type.PlatformType;
-import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -90,10 +89,7 @@ class AiChatFacadeTest {
     private AiChatClient aiChatClient;
 
     @Mock
-    private ProductRecommendationService productRecommendationService;
-
-    @Mock
-    private UserService userService;
+    private AiAnalysisConfirmService aiAnalysisConfirmService;
 
     private AiConversationLock aiConversationLock;
     private AiChatFacade aiChatFacade;
@@ -102,7 +98,7 @@ class AiChatFacadeTest {
     void setUp() {
         aiConversationLock = new AiConversationLock();
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiChatClient, productRecommendationService, userService, MESSAGE_RETRY_AFTER);
+                aiChatClient, aiAnalysisConfirmService, MESSAGE_RETRY_AFTER);
     }
 
     @Test
@@ -565,85 +561,101 @@ class AiChatFacadeTest {
         assertThat(response.summary()).isEqualTo("캠핑과 핸드드립을 즐깁니다.");
         verify(aiChatRoomService).validateActiveRoom(USER_ID, ROOM_ID);
         verify(aiChatClient).patchAnalyze(eq(ROOM_ID), any());
-        verifyNoInteractions(aiMessageService, productRecommendationService, userService);
+        verifyNoInteractions(aiMessageService, aiAnalysisConfirmService);
     }
 
     @Test
     void successfulRecommendationJob_confirmAnalysis_returnsCompleted() {
+        AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of(), List.of("캠핑"));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeResponse);
+
+        ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID);
+
+        assertThat(response.isRecommendationCompleted()).isTrue();
+        var order = inOrder(aiChatRoomService, aiChatClient, aiAnalysisConfirmService);
+        order.verify(aiChatRoomService).startAnalysis(ROOM_ID);
+        order.verify(aiChatClient).confirmAnalysis(USER_ID, ROOM_ID);
+        order.verify(aiAnalysisConfirmService).saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
+    }
+
+    @Test
+    void finalKeywordCountOverThree_confirmAnalysis_expiresRoomWithoutSavingResult() {
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeSessionResponse(
+                List.of("취향1", "취향2", "취향3", "취향4"),
+                List.of("캠핑", "자전거타기", "여행")));
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
+
+        verifyNoInteractions(aiAnalysisConfirmService);
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+    }
+
+    @Test
+    void resultSaveFailsAfterSessionClosed_confirmAnalysis_expiresRoom() {
+        AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of("실용적"), List.of("캠핑"));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeResponse);
+        willThrow(new RuntimeException("save failed")).given(aiAnalysisConfirmService)
+                .saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("save failed");
+
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+        assertThat(aiConversationLock.tryLock(ROOM_ID)).isTrue();
+    }
+
+    @Test
+    void roomExpireAlsoFails_confirmAnalysis_throwsOriginalFailure() {
+        AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of("실용적"), List.of("캠핑"));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeResponse);
+        willThrow(new RuntimeException("save failed")).given(aiAnalysisConfirmService)
+                .saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
+        willThrow(new RuntimeException("expire failed")).given(aiChatRoomService).expireRoom(ROOM_ID);
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .hasMessage("save failed")
+                .satisfies(e -> assertThat(e.getSuppressed())
+                        .singleElement().extracting(Throwable::getMessage).isEqualTo("expire failed"));
+    }
+
+    @Test
+    void aiServerUnavailable_confirmAnalysis_keepsRoomForRetry() {
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
+        verifyNoInteractions(aiAnalysisConfirmService);
+    }
+
+    @Test
+    void confirmAlreadyInProgress_confirmAnalysis_throwsTooManyRequestsWithoutClosingSession() {
+        aiConversationLock.tryLock(ROOM_ID);
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(TooManyRequestsException.class);
+
+        verify(aiChatRoomService, never()).startAnalysis(anyLong());
+        verifyNoInteractions(aiChatClient, aiAnalysisConfirmService);
+    }
+
+    private static AiServerCloseSessionResponse closeSessionResponse(List<String> tastes, List<String> interests) {
         AiServerRecommendationResult self = new AiServerRecommendationResult(List.of(
                 new AiServerRecommendedItem(
                         PlatformType.COUPANG, "self-1", new java.math.BigDecimal("9.2"), "나를 위한 추천")));
         AiServerRecommendationResult gift = new AiServerRecommendationResult(List.of(
                 new AiServerRecommendedItem(
                         PlatformType.COUPANG, "gift-1", new java.math.BigDecimal("8.0"), "선물 추천")));
-        List<String> tastes = List.of();
-        List<String> interests = List.of("캠핑");
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID))
-                .willReturn(new AiServerCloseSessionResponse(
-                        ROOM_ID,
-                        USER_ID,
-                        "캠핑을 즐깁니다.",
-                        keywords(tastes, interests),
-                        new AiServerRecommendationsResponse(self, gift)
-                ));
-
-        ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID);
-
-        assertThat(response.isRecommendationCompleted()).isTrue();
-        var order = inOrder(aiChatRoomService, aiChatClient);
-        order.verify(aiChatRoomService).startAnalysis(ROOM_ID);
-        order.verify(aiChatClient).confirmAnalysis(USER_ID, ROOM_ID);
-        order.verify(aiChatRoomService).completeRoom(ROOM_ID);
-        verify(productRecommendationService).saveRecommendations(
-                USER_ID, self, gift, tastes);
-        verify(userService).completeTasteAnalysis(
-                USER_ID, "캠핑을 즐깁니다.", tastes, interests);
-    }
-
-    @Test
-    void finalKeywordCountOverThree_confirmAnalysis_doesNotSaveResult() {
-        AiServerRecommendationResult recommendations = new AiServerRecommendationResult(List.of());
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID))
-                .willReturn(new AiServerCloseSessionResponse(
-                        ROOM_ID,
-                        USER_ID,
-                        "캠핑을 즐깁니다.",
-                        keywords(
-                                List.of("취향1", "취향2", "취향3", "취향4"),
-                                List.of("캠핑", "자전거타기", "여행")),
-                        new AiServerRecommendationsResponse(recommendations, recommendations)
-                ));
-
-        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
-
-        verifyNoInteractions(productRecommendationService, userService);
-        verify(aiChatRoomService, never()).completeRoom(ROOM_ID);
-    }
-
-    @Test
-    void recommendationSaveFails_confirmAnalysis_doesNotCompleteRoom() {
-        AiServerRecommendationResult self = new AiServerRecommendationResult(List.of());
-        AiServerRecommendationResult gift = new AiServerRecommendationResult(List.of());
-        List<String> tastes = List.of("실용적", "가벼운 장비", "핸드드립");
-        List<String> interests = List.of("캠핑", "자전거타기", "여행");
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID))
-                .willReturn(new AiServerCloseSessionResponse(
-                        ROOM_ID,
-                        USER_ID,
-                        "캠핑을 즐깁니다.",
-                        keywords(tastes, interests),
-                        new AiServerRecommendationsResponse(self, gift)
-                ));
-        willThrow(new RuntimeException("save failed")).given(productRecommendationService)
-                .saveRecommendations(USER_ID, self, gift, tastes);
-
-        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
-                .isInstanceOf(RuntimeException.class);
-
-        verify(userService, never()).completeTasteAnalysis(anyLong(), any(), any(), any());
-        verify(aiChatRoomService, never()).completeRoom(ROOM_ID);
+        return new AiServerCloseSessionResponse(
+                ROOM_ID, USER_ID, "캠핑을 즐깁니다.", keywords(tastes, interests),
+                new AiServerRecommendationsResponse(self, gift));
     }
 
     private static SendMessageRequest sendMessageRequest() {

@@ -4,9 +4,9 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 
-import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductCursorApiResponse;
 import kr.ktb.zura.needu.product.service.GiftProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,16 +25,16 @@ public class GiftProductController {
     private final GiftProductService giftProductService;
 
     @GetMapping
-    public ResponseEntity<CursorApiResponse<GiftProductResponse>> findAllGiftProducts(
+    public ResponseEntity<ProductCursorApiResponse<GiftProductResponse>> findAllGiftProducts(
             @AuthenticationPrincipal Long loginUserId,
             @PathVariable Long userId,
-            @RequestParam @PositiveOrZero long minPrice,
-            @RequestParam @PositiveOrZero long maxPrice,
+            @RequestParam(defaultValue = "0") @PositiveOrZero long minPrice,
+            @RequestParam(defaultValue = "99999999") @PositiveOrZero long maxPrice,
             @RequestParam(required = false) String cursor,
             @RequestParam @Min(GiftProductPageLimits.MIN_PAGE_SIZE) @Max(GiftProductPageLimits.MAX_PAGE_SIZE) int size
     ) {
         GiftProductSearchCondition condition = new GiftProductSearchCondition(minPrice, maxPrice, cursor, size);
-        return ResponseEntity.ok(CursorApiResponse.of(
+        return ResponseEntity.ok(ProductCursorApiResponse.of(
                 ProductResponseMessages.GIFT_PRODUCTS_FOUND,
                 giftProductService.findAllGiftProducts(loginUserId, userId, condition)
         ));

@@ -10,9 +10,11 @@ public record GiftProductResponse(
         Long recommendationId,
         Long productId,
         String productImageUrl,
+        String purchaseUrl,
         String category,
         String name,
         Long price,
+        BigDecimal score,
         List<String> matchingKeywords,
         String reason
 ) {
@@ -23,9 +25,11 @@ public record GiftProductResponse(
                 giftProduct.getId(),
                 product.getId(),
                 product.getImageUrl(),
+                product.getPurchaseUrl(),
                 product.getCategory(),
                 product.getName(),
                 toPrice(product.getPrice()),
+                giftProduct.getScore(),
                 toMatchingKeywords(giftProduct.getTasteKeywords()),
                 giftProduct.getReason()
         );

@@ -1,13 +1,15 @@
 package kr.ktb.zura.needu.product.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
+import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.service.GiftProductService;
 import org.junit.jupiter.api.Test;
@@ -38,7 +40,9 @@ class GiftProductControllerTest {
     private static final GiftProductSearchCondition FIRST_PAGE_CONDITION =
             new GiftProductSearchCondition(30000L, 50000L, null, 20);
     private static final GiftProductResponse CROSS_BAG = new GiftProductResponse(
-            101L, 1001L, "https://example.com/products/1001.jpg", "FASHION", "미니 크로스백", 49000L,
+            101L, 1001L, "https://example.com/products/1001.jpg", "https://example.com/products/1001",
+            "FASHION", "미니 크로스백", 49000L,
+            new BigDecimal("0.900000"),
             List.of("미니멀", "데일리"), "데일리룩을 즐겨 입어요.");
 
     @Autowired
@@ -50,7 +54,8 @@ class GiftProductControllerTest {
     @Test
     void giftProductsExist_findAllGiftProducts_returnsItemsWithTopLevelCursor() throws Exception {
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, FIRST_PAGE_CONDITION))
-                .willReturn(new CursorPageResponse<>(List.of(CROSS_BAG), "next-cursor", true));
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(CROSS_BAG), new PriceRangeResponse(15000L, 230000L), "next-cursor", true));
 
         mockMvc.perform(firstPageRequest())
                 .andExpect(status().isOk())
@@ -59,12 +64,17 @@ class GiftProductControllerTest {
                 .andExpect(jsonPath("$.data.items[0].productId").value(1001))
                 .andExpect(jsonPath("$.data.items[0].productImageUrl")
                         .value("https://example.com/products/1001.jpg"))
+                .andExpect(jsonPath("$.data.items[0].purchaseUrl")
+                        .value("https://example.com/products/1001"))
                 .andExpect(jsonPath("$.data.items[0].category").value("FASHION"))
                 .andExpect(jsonPath("$.data.items[0].name").value("미니 크로스백"))
                 .andExpect(jsonPath("$.data.items[0].price").value(49000))
+                .andExpect(jsonPath("$.data.items[0].score").value(0.9))
                 .andExpect(jsonPath("$.data.items[0].matchingKeywords[0]").value("미니멀"))
                 .andExpect(jsonPath("$.data.items[0].matchingKeywords[1]").value("데일리"))
                 .andExpect(jsonPath("$.data.items[0].reason").value("데일리룩을 즐겨 입어요."))
+                .andExpect(jsonPath("$.data.priceRange.minPrice").value(15000))
+                .andExpect(jsonPath("$.data.priceRange.maxPrice").value(230000))
                 .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
                 .andExpect(jsonPath("$.hasNext").value(true));
     }
@@ -72,7 +82,8 @@ class GiftProductControllerTest {
     @Test
     void noGiftProducts_findAllGiftProducts_returnsEmptyItems() throws Exception {
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, FIRST_PAGE_CONDITION))
-                .willReturn(new CursorPageResponse<>(List.of(), null, false));
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
 
         mockMvc.perform(firstPageRequest())
                 .andExpect(status().isOk())
@@ -86,7 +97,8 @@ class GiftProductControllerTest {
     void cursorGiven_findAllGiftProducts_passesConditionToService() throws Exception {
         GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "cursor", 10);
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
-                .willReturn(new CursorPageResponse<>(List.of(), null, false));
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
 
         mockMvc.perform(get(URL, FRIEND_USER_ID)
                         .param("minPrice", "30000")
@@ -100,20 +112,29 @@ class GiftProductControllerTest {
     }
 
     @Test
-    void requiredParameterMissing_findAllGiftProducts_returnsBadRequest() throws Exception {
+    void priceRangeOmitted_findAllGiftProducts_usesDefaults() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
+
         mockMvc.perform(get(URL, FRIEND_USER_ID)
-                        .param("minPrice", "30000")
                         .param("size", "20")
                         .with(authenticatedUser()))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(status().isOk());
 
+        verify(giftProductService).findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition);
+    }
+
+    @Test
+    void sizeMissing_findAllGiftProducts_returnsBadRequest() throws Exception {
         mockMvc.perform(get(URL, FRIEND_USER_ID)
                         .param("minPrice", "30000")
                         .param("maxPrice", "50000")
                         .with(authenticatedUser()))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
 
         verify(giftProductService, never()).findAllGiftProducts(anyLong(), anyLong(), any());
     }

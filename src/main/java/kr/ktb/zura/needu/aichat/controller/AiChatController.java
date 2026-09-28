@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Min;
 
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
-import kr.ktb.zura.needu.aichat.dto.response.AiChatResponseMessage;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
@@ -43,10 +42,10 @@ public class AiChatController {
         AiConversationStartResult result = aiChatFacade.startOrResumeConversation(userId);
         if (result.isCreated()) {
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.of(AiChatResponseMessage.CONVERSATION_CREATED.getMessage(),
+                    .body(ApiResponse.of(AiChatResponseMessages.CONVERSATION_CREATED,
                             result.conversation()));
         }
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_FOUND.getMessage(),
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.CONVERSATION_FOUND,
                 result.conversation()));
     }
 
@@ -58,7 +57,7 @@ public class AiChatController {
             @RequestParam @Min(AiChatPageLimits.MIN_PAGE_SIZE) @Max(AiChatPageLimits.MAX_PAGE_SIZE) int size
     ) {
         return ResponseEntity.ok(CursorApiResponse.of(
-                AiChatResponseMessage.MESSAGES_FOUND.getMessage(),
+                AiChatResponseMessages.MESSAGES_FOUND,
                 aiChatFacade.findAllMessages(userId, conversationId, cursor, size)
         ));
     }
@@ -70,7 +69,7 @@ public class AiChatController {
             @Valid @RequestBody SendMessageRequest request
     ) {
         AiMessageResponse response = aiChatFacade.sendMessage(userId, conversationId, request);
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.MESSAGE_SENT.getMessage(), response));
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.MESSAGE_SENT, response));
     }
 
     @PostMapping("/{conversationId}/analysis")
@@ -79,7 +78,7 @@ public class AiChatController {
             @PathVariable Long conversationId
     ) {
         AnalysisResultResponse response = aiChatFacade.createAnalysis(userId, conversationId);
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.ANALYSIS_COMPLETED.getMessage(), response));
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.ANALYSIS_COMPLETED, response));
     }
 
     @PatchMapping("/{conversationId}/analysis")
@@ -89,7 +88,7 @@ public class AiChatController {
             @Valid @RequestBody PatchAnalyzeMessageRequest request
     ) {
         AnalysisResultResponse response = aiChatFacade.patchAnalyze(userId, conversationId, request);
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.ANALYSIS_UPDATED.getMessage(), response));
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.ANALYSIS_UPDATED, response));
     }
 
     @PostMapping("/{conversationId}/confirm")
@@ -98,7 +97,7 @@ public class AiChatController {
             @PathVariable Long conversationId
     ) {
         ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(userId, conversationId);
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessage.CONVERSATION_COMPLETED.getMessage(), response));
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.CONVERSATION_COMPLETED, response));
     }
 
 
