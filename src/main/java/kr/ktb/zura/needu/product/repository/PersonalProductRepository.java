@@ -13,6 +13,16 @@ import org.springframework.data.repository.query.Param;
 public interface PersonalProductRepository extends JpaRepository<PersonalProduct, Long> {
 
     @Query("""
+            select new kr.ktb.zura.needu.product.repository.ProductPriceRange(min(p.price), max(p.price))
+            from PersonalProduct pp
+            join pp.product p
+            where pp.userId = :userId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            """)
+    ProductPriceRange findPriceRangeByUserId(@Param("userId") Long userId);
+
+    @Query("""
             select pp
             from PersonalProduct pp
             join fetch pp.product p

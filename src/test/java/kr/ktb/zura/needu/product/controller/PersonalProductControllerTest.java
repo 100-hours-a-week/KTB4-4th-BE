@@ -1,12 +1,14 @@
 package kr.ktb.zura.needu.product.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
+import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.service.PersonalProductService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +45,7 @@ class PersonalProductControllerTest {
                     "https://shop.test/lamp",
                     "LIVING",
                     52000L,
+                    new BigDecimal("0.900000"),
                     "미니멀한 취향과 잘 맞아요.");
 
     @Autowired
@@ -54,7 +57,8 @@ class PersonalProductControllerTest {
     @Test
     void firstPageRequest_findAllPersonalProducts_returnsItemsWithTopLevelCursor() throws Exception {
         given(personalProductService.findAllPersonalProducts(USER_ID, FIRST_PAGE_CONDITION))
-                .willReturn(new CursorPageResponse<>(List.of(LAMP), "next-cursor", true));
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(LAMP), new PriceRangeResponse(12000L, 185000L), "next-cursor", true));
 
         mockMvc.perform(firstPageRequest())
                 .andExpect(status().isOk())
@@ -66,7 +70,10 @@ class PersonalProductControllerTest {
                 .andExpect(jsonPath("$.data.items[0].purchaseUrl").value("https://shop.test/lamp"))
                 .andExpect(jsonPath("$.data.items[0].category").value("LIVING"))
                 .andExpect(jsonPath("$.data.items[0].price").value(52000))
+                .andExpect(jsonPath("$.data.items[0].score").value(0.9))
                 .andExpect(jsonPath("$.data.items[0].reason").value("미니멀한 취향과 잘 맞아요."))
+                .andExpect(jsonPath("$.data.priceRange.minPrice").value(12000))
+                .andExpect(jsonPath("$.data.priceRange.maxPrice").value(185000))
                 .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
                 .andExpect(jsonPath("$.hasNext").value(true));
     }
@@ -75,7 +82,8 @@ class PersonalProductControllerTest {
     void cursorAndSizeGiven_findAllPersonalProducts_passesThemToService() throws Exception {
         PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "cursor", 10);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
-                .willReturn(new CursorPageResponse<>(List.of(), null, false));
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
 
         mockMvc.perform(get(URL)
                         .param("minPrice", "30000")
@@ -93,7 +101,8 @@ class PersonalProductControllerTest {
     void priceRangeOmitted_findAllPersonalProducts_usesDefaults() throws Exception {
         PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, 20);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
-                .willReturn(new CursorPageResponse<>(List.of(), null, false));
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
 
         mockMvc.perform(get(URL).with(authenticatedUser()))
                 .andExpect(status().isOk());

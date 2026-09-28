@@ -5,9 +5,10 @@ import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
+import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -24,7 +25,7 @@ public class PersonalProductService {
     private final UserService userService;
     private final PersonalProductRepository personalProductRepository;
 
-    public CursorPageResponse<PersonalProductResponse> findAllPersonalProducts(
+    public ProductCursorPageResponse<PersonalProductResponse> findAllPersonalProducts(
             Long userId, PersonalProductSearchCondition condition) {
         validatePriceRange(condition);
         userService.validateActiveUser(userId);
@@ -36,8 +37,9 @@ public class PersonalProductService {
         List<PersonalProduct> pageItems = hasNext ? personalProducts.subList(0, size) : personalProducts;
 
         String nextCursor = hasNext ? PersonalProductCursor.from(pageItems.getLast()).encode() : null;
-        return new CursorPageResponse<>(
+        return new ProductCursorPageResponse<>(
                 pageItems.stream().map(PersonalProductResponse::from).toList(),
+                PriceRangeResponse.from(personalProductRepository.findPriceRangeByUserId(userId)),
                 nextCursor,
                 hasNext
         );

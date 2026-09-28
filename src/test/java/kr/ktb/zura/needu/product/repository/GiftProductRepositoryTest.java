@@ -62,6 +62,23 @@ class GiftProductRepositoryTest {
     }
 
     @Test
+    void productsFound_findPriceRangeByUserId_returnsOwnActiveProductRange() {
+        saveGiftProduct(USER_ID, "0.100000", saveProduct("최저가", "10000.00"));
+        saveGiftProduct(USER_ID, "0.200000", saveProduct("최고가", "90000.00"));
+        saveGiftProduct(OTHER_USER_ID, "0.300000", saveProduct("다른 사용자", "1000.00"));
+        Product soldOut = saveProduct("품절", "100000.00");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        saveGiftProduct(USER_ID, "0.400000", soldOut);
+        entityManager.flush();
+        entityManager.clear();
+
+        ProductPriceRange result = giftProductRepository.findPriceRangeByUserId(USER_ID);
+
+        assertThat(result.minPrice()).isEqualByComparingTo("10000.00");
+        assertThat(result.maxPrice()).isEqualByComparingTo("90000.00");
+    }
+
+    @Test
     void inactiveOrDeletedProduct_findAllByUserIdAndPriceRange_excludesItem() {
         GiftProduct active = saveGiftProduct(USER_ID, "0.100000", saveProduct("판매 중", "40000.00"));
         Product soldOut = saveProduct("품절", "40000.00");
