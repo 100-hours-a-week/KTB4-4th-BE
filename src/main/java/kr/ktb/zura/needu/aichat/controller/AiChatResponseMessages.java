@@ -6,6 +6,9 @@ final class AiChatResponseMessages {
     static final String CONVERSATION_CREATED = "AI 대화를 시작했습니다.";
     static final String MESSAGE_SENT = "메시지를 전송했습니다.";
     static final String MESSAGES_FOUND = "대화 메시지를 조회했습니다.";
+    static final String ANALYSIS_COMPLETED = "취향 분석이 완료되었습니다.";
+    static final String ANALYSIS_UPDATED = "취향 분석이 수정되었습니다.";
+    static final String CONVERSATION_COMPLETED = "취향 분석을 확정했습니다.";
 
     private AiChatResponseMessages() {
     }
