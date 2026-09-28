@@ -28,8 +28,8 @@ public class GiftProductController {
     public ResponseEntity<ProductCursorApiResponse<GiftProductResponse>> findAllGiftProducts(
             @AuthenticationPrincipal Long loginUserId,
             @PathVariable Long userId,
-            @RequestParam @PositiveOrZero long minPrice,
-            @RequestParam @PositiveOrZero long maxPrice,
+            @RequestParam(defaultValue = "0") @PositiveOrZero long minPrice,
+            @RequestParam(defaultValue = "99999999") @PositiveOrZero long maxPrice,
             @RequestParam(required = false) String cursor,
             @RequestParam @Min(GiftProductPageLimits.MIN_PAGE_SIZE) @Max(GiftProductPageLimits.MAX_PAGE_SIZE) int size
     ) {
