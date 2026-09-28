@@ -4,8 +4,7 @@ import lombok.Getter;
 
 @Getter
 public enum AiChatRequestField {
-    CONVERSATION_ROOM_ID("conversationRoomId"),
-    USER_ID("userId");
+    CONVERSATION_ROOM_ID("conversationRoomId");
 
     private final String fieldName;
 
