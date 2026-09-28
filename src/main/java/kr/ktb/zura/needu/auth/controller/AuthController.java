@@ -12,7 +12,6 @@ import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.security.AuthCookieNames;
-import kr.ktb.zura.needu.user.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
