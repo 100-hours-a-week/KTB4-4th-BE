@@ -13,6 +13,7 @@ public record PersonalProductResponse(
         String purchaseUrl,
         String category,
         Long price,
+        BigDecimal score,
         String reason) {
 
     public static PersonalProductResponse from(PersonalProduct personalProduct) {
@@ -25,6 +26,7 @@ public record PersonalProductResponse(
                 product.getPurchaseUrl(),
                 product.getCategory(),
                 toPrice(product.getPrice()),
+                personalProduct.getScore(),
                 personalProduct.getReason()
         );
     }

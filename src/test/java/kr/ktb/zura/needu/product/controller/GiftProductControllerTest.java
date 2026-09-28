@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.product.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -41,6 +42,7 @@ class GiftProductControllerTest {
     private static final GiftProductResponse CROSS_BAG = new GiftProductResponse(
             101L, 1001L, "https://example.com/products/1001.jpg", "https://example.com/products/1001",
             "FASHION", "미니 크로스백", 49000L,
+            new BigDecimal("0.900000"),
             List.of("미니멀", "데일리"), "데일리룩을 즐겨 입어요.");
 
     @Autowired
@@ -67,6 +69,7 @@ class GiftProductControllerTest {
                 .andExpect(jsonPath("$.data.items[0].category").value("FASHION"))
                 .andExpect(jsonPath("$.data.items[0].name").value("미니 크로스백"))
                 .andExpect(jsonPath("$.data.items[0].price").value(49000))
+                .andExpect(jsonPath("$.data.items[0].score").value(0.9))
                 .andExpect(jsonPath("$.data.items[0].matchingKeywords[0]").value("미니멀"))
                 .andExpect(jsonPath("$.data.items[0].matchingKeywords[1]").value("데일리"))
                 .andExpect(jsonPath("$.data.items[0].reason").value("데일리룩을 즐겨 입어요."))

@@ -14,6 +14,7 @@ public record GiftProductResponse(
         String category,
         String name,
         Long price,
+        BigDecimal score,
         List<String> matchingKeywords,
         String reason
 ) {
@@ -28,6 +29,7 @@ public record GiftProductResponse(
                 product.getCategory(),
                 product.getName(),
                 toPrice(product.getPrice()),
+                giftProduct.getScore(),
                 toMatchingKeywords(giftProduct.getTasteKeywords()),
                 giftProduct.getReason()
         );

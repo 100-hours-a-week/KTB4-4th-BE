@@ -75,6 +75,8 @@ class GiftProductServiceTest {
 
         assertThat(response.items())
                 .extracting(GiftProductResponse::recommendationId).containsExactly(30L, 20L);
+        assertThat(response.items()).extracting(GiftProductResponse::score)
+                .containsExactly(new BigDecimal("0.900000"), new BigDecimal("0.800000"));
         assertThat(response.hasNext()).isTrue();
         GiftProductCursor nextCursor = GiftProductCursor.decode(response.nextCursor());
         assertThat(nextCursor.score()).isEqualByComparingTo("0.800000");

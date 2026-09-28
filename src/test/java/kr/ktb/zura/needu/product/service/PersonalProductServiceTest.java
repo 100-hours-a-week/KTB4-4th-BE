@@ -64,6 +64,8 @@ class PersonalProductServiceTest {
                 personalProductService.findAllPersonalProducts(USER_ID, condition(null, 2));
 
         assertThat(response.items()).extracting(PersonalProductResponse::recommendationId).containsExactly(30L, 20L);
+        assertThat(response.items()).extracting(PersonalProductResponse::score)
+                .containsExactly(new BigDecimal("0.900000"), new BigDecimal("0.800000"));
         assertThat(response.hasNext()).isTrue();
         PersonalProductCursor nextCursor = PersonalProductCursor.decode(response.nextCursor());
         assertThat(nextCursor.score()).isEqualByComparingTo("0.800000");
