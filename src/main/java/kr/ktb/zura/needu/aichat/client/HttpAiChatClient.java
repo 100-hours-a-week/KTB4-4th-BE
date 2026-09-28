@@ -33,6 +33,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class HttpAiChatClient implements AiChatClient {
 
     private static final String SESSION_CLOSED_CODE = "SESSION_CLOSED";
+    private static final String PROFILE_TOO_SPARSE_CODE = "PROFILE_TOO_SPARSE";
 
     private final RestClient restClient;
     private final RestClient messageRestClient;
@@ -131,6 +132,9 @@ public class HttpAiChatClient implements AiChatClient {
         if (exception.getStatusCode().is5xxServerError()) {
             return AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE;
         }
+        if (endpoint == AiChatEndpoint.CREATE_ANALYSIS && status == HttpStatus.UNPROCESSABLE_CONTENT.value()) {
+            return toUnprocessableAnalysisErrorCode(exception);
+        }
         // 메시지 전송에서만 세션 소멸(404)과 종료된 대화(409)를 구분해 대화방을 정리할 수 있게 한다
         if (endpoint != AiChatEndpoint.SEND_MESSAGE) {
             return AiChatErrorCode.AICHAT_REQUEST_REJECTED;
@@ -151,6 +155,14 @@ public class HttpAiChatClient implements AiChatClient {
         return error != null && SESSION_CLOSED_CODE.equals(error.code())
                 ? AiChatErrorCode.AICHAT_SESSION_CLOSED
                 : AiChatErrorCode.AICHAT_TURN_IN_PROGRESS;
+    }
+
+    // FastAPI는 요청 형식 검증 실패도 422로 응답 => 취향 부족만 골라내며 나머지는 기존처럼 거절로 처리
+    private AiChatErrorCode toUnprocessableAnalysisErrorCode(RestClientResponseException exception) {
+        AiServerErrorResponse error = readError(exception);
+        return error != null && PROFILE_TOO_SPARSE_CODE.equals(error.code())
+                ? AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE
+                : AiChatErrorCode.AICHAT_REQUEST_REJECTED;
     }
 
     private AiServerErrorResponse readError(RestClientResponseException exception) {
