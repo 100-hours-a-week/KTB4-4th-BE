@@ -187,6 +187,27 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void recentlyCompletedRoom_startOrResumeConversation_returnsResumedEvenAfterPurgeAt() {
+        AiChatRoom completedRoom = room(ROOM_ID, AiChatRoomStatus.COMPLETED,
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1));
+        OffsetDateTime nextConversationAvailableAt = OffsetDateTime.now(ZoneOffset.UTC).plusHours(23);
+        given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(completedRoom);
+        given(aiChatRoomService.findNextConversationAvailableAt(completedRoom))
+                .willReturn(nextConversationAvailableAt);
+        given(aiMessageService.findLatestProgress(ROOM_ID)).willReturn(100);
+
+        AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
+
+        assertThat(result.isCreated()).isFalse();
+        assertThat(result.conversation().status()).isEqualTo(AiChatRoomStatus.COMPLETED);
+        assertThat(result.conversation().progress()).isEqualTo(100);
+        assertThat(result.conversation().nextConversationAvailableAt())
+                .isEqualTo(nextConversationAvailableAt);
+        verifyNoInteractions(aiChatClient);
+        verify(aiChatRoomService, never()).expireAndReserveRoom(anyLong(), anyLong());
+    }
+
+    @Test
     void aiServerUnavailableWhileStarting_startOrResumeConversation_discardsReservedRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(aiChatClient.startSession(USER_ID, ROOM_ID))
@@ -450,7 +471,7 @@ class AiChatFacadeTest {
     @Test
     void inaccessibleConversation_findAllMessages_doesNotReadMessages() {
         willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN))
-                .given(aiChatRoomService).validateActiveRoom(USER_ID, ROOM_ID);
+                .given(aiChatRoomService).validateReadableRoom(USER_ID, ROOM_ID);
 
         assertThatThrownBy(() -> aiChatFacade.findAllMessages(USER_ID, ROOM_ID, null, 20))
                 .isInstanceOf(BusinessException.class)

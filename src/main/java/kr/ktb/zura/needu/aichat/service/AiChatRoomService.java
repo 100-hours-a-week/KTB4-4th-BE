@@ -2,7 +2,9 @@ package kr.ktb.zura.needu.aichat.service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
@@ -24,13 +26,16 @@ public class AiChatRoomService {
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiMessageRepository aiMessageRepository;
     private final Duration pendingTimeout;
+    private final Duration completionCooldown;
 
     public AiChatRoomService(AiChatRoomRepository aiChatRoomRepository,
                              AiMessageRepository aiMessageRepository,
-                             @Value("${ai.chat.pending-timeout:1m}") Duration pendingTimeout) {
+                             @Value("${ai.chat.pending-timeout:1m}") Duration pendingTimeout,
+                             @Value("${ai.chat.completion-cooldown:24h}") Duration completionCooldown) {
         this.aiChatRoomRepository = aiChatRoomRepository;
         this.aiMessageRepository = aiMessageRepository;
         this.pendingTimeout = pendingTimeout;
+        this.completionCooldown = completionCooldown;
     }
 
     // 반환된 방이 PENDING => 이번 호출에서 새로 예약한 방
@@ -38,7 +43,7 @@ public class AiChatRoomService {
     public AiChatRoom findOrReserveRoom(Long userId) {
         AiChatRoom room = aiChatRoomRepository.findByActiveUserId(userId).orElse(null);
         if (room == null) {
-            return reserveRoom(userId);
+            return findRecentCompletedRoom(userId).orElseGet(() -> reserveRoom(userId));
         }
         if (!room.isPending()) {
             return room;
@@ -69,6 +74,14 @@ public class AiChatRoomService {
         return room;
     }
 
+    @Transactional(readOnly = true)
+    public void validateReadableRoom(Long userId, Long roomId) {
+        AiChatRoom room = findOwnedRoom(userId, roomId);
+        if (!room.isCompleted()) {
+            validateUsableRoom(room);
+        }
+    }
+
     // 대화 작업이 가능한 상태(소유자 본인, ACTIVE/ANALYZING, 만료 전)인지 확인한다
     @Transactional(readOnly = true)
     public void validateActiveRoom(Long userId, Long roomId) {
@@ -91,6 +104,12 @@ public class AiChatRoomService {
     }
 
     private AiChatRoom findAccessibleRoom(Long userId, Long roomId) {
+        AiChatRoom room = findOwnedRoom(userId, roomId);
+        validateUsableRoom(room);
+        return room;
+    }
+
+    private AiChatRoom findOwnedRoom(Long userId, Long roomId) {
         AiChatRoom room = aiChatRoomRepository.findById(roomId)
                 .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND));
@@ -98,11 +117,14 @@ public class AiChatRoomService {
         if (!room.isOwnedBy(userId)) {
             throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
         }
+        return room;
+    }
+
+    private void validateUsableRoom(AiChatRoom room) {
         if ((!room.isActive() && !room.isAnalyzing())
                 || room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
         }
-        return room;
     }
 
     @Transactional
@@ -112,7 +134,7 @@ public class AiChatRoomService {
 
     @Transactional
     public void completeRoom(Long roomId) {
-        findRoom(roomId).complete();
+        findRoom(roomId).complete(LocalDateTime.now(ZoneOffset.UTC));
     }
 
     @Transactional
@@ -133,6 +155,18 @@ public class AiChatRoomService {
     private void discardAndFlush(AiChatRoom room) {
         room.discard(LocalDateTime.now(ZoneOffset.UTC));
         aiChatRoomRepository.flush();
+    }
+
+    private Optional<AiChatRoom> findRecentCompletedRoom(Long userId) {
+        LocalDateTime threshold = LocalDateTime.now(ZoneOffset.UTC).minus(completionCooldown);
+        return aiChatRoomRepository.findFirstByUserIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(userId)
+                .filter(room -> room.getCompletedAt().isAfter(threshold));
+    }
+
+    public OffsetDateTime findNextConversationAvailableAt(AiChatRoom room) {
+        return room.isCompleted()
+                ? room.getCompletedAt().plus(completionCooldown).atOffset(ZoneOffset.UTC)
+                : null;
     }
 
     // 동시에 들어온 요청이 먼저 방을 예약했다면 유일 제약 위반이 발생 => 대화 시작 중으로 응답

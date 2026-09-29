@@ -71,16 +71,19 @@ public class AiChatFacade {
         }
         // AI 서버에 세션 조회 API가 없어 purgeAt으로 만료를 판단, 규칙보다 일찍 사라진 세션은 메시지 전송·분석 시 발견
         // ANALYZING도 AI 세션이 만료되면 분석을 이어갈 수 없음 => 다른 대화 API처럼 만료로 보고 새 대화를 시작한다
-        if (room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
+        if (!room.isCompleted() && room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             return restartConversation(userId, room.getId());
         }
         return AiConversationStartResult.resumed(
-                AiConversationResponse.from(room, aiMessageService.findLatestProgress(room.getId())));
+                AiConversationResponse.from(
+                        room,
+                        aiMessageService.findLatestProgress(room.getId()),
+                        aiChatRoomService.findNextConversationAvailableAt(room)));
     }
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
             Long userId, Long conversationId, String cursor, int size) {
-        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        aiChatRoomService.validateReadableRoom(userId, conversationId);
         return aiMessageService.findAllMessages(conversationId, cursor, size);
     }
 

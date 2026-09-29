@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface AiChatRoomRepository extends JpaRepository<AiChatRoom, Long> {
 
     Optional<AiChatRoom> findByActiveUserId(Long activeUserId);
+
+    Optional<AiChatRoom> findFirstByUserIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(Long userId);
 }

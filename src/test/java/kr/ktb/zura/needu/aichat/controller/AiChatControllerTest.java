@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.aichat.controller;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -85,6 +87,21 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.conversationId").value(101))
                 .andExpect(jsonPath("$.data.status").value("ANALYZING"))
                 .andExpect(jsonPath("$.data.progress").value(100));
+    }
+
+    @Test
+    void completedConversation_startOrResumeConversation_returnsNextAvailableAt() throws Exception {
+        OffsetDateTime nextConversationAvailableAt = OffsetDateTime.of(
+                2026, 9, 30, 0, 30, 0, 0, ZoneOffset.UTC);
+        given(aiChatFacade.startOrResumeConversation(USER_ID)).willReturn(AiConversationStartResult.resumed(
+                new AiConversationResponse(
+                        101L, AiChatRoomStatus.COMPLETED, 100, nextConversationAvailableAt)));
+
+        mockMvc.perform(postConversation())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.nextConversationAvailableAt")
+                        .value("2026-09-30T00:30:00Z"));
     }
 
     @Test
