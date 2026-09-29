@@ -97,14 +97,42 @@ CREATE TABLE IF NOT EXISTS ai_chat_rooms (
     active_user_id BIGINT      NULL,
     status         VARCHAR(20) NOT NULL COMMENT 'PENDING, ACTIVE, ANALYZING, COMPLETED, EXPIRED',
     purge_at       DATETIME(6) NULL COMMENT 'AI 세션 만료 예상 시각 = 대화 원문 삭제 예정 시각',
+    completed_at   DATETIME(6) NULL COMMENT '취향 분석 및 결과 저장 정상 완료 시각',
     input_locked   TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '사용자 메시지 입력 잠금 여부',
     version        BIGINT      NOT NULL COMMENT '낙관적 락(@Version)',
     created_at     DATETIME(6) NOT NULL,
     updated_at     DATETIME(6) NOT NULL,
     deleted_at     DATETIME(6) NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_ai_chat_rooms_active_user_id (active_user_id)
+    UNIQUE KEY uk_ai_chat_rooms_active_user_id (active_user_id),
+    KEY idx_ai_chat_rooms_user_id_completed_at (user_id, completed_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_room_completed_at = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_chat_rooms ADD COLUMN completed_at DATETIME(6) NULL COMMENT ''취향 분석 및 결과 저장 정상 완료 시각''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_chat_rooms'
+      AND column_name = 'completed_at'
+);
+PREPARE add_room_completed_at_statement FROM @add_room_completed_at;
+EXECUTE add_room_completed_at_statement;
+DEALLOCATE PREPARE add_room_completed_at_statement;
+
+SET @add_room_completed_at_index = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_chat_rooms ADD INDEX idx_ai_chat_rooms_user_id_completed_at (user_id, completed_at)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_chat_rooms'
+      AND index_name = 'idx_ai_chat_rooms_user_id_completed_at'
+);
+PREPARE add_room_completed_at_index_statement FROM @add_room_completed_at_index;
+EXECUTE add_room_completed_at_index_statement;
+DEALLOCATE PREPARE add_room_completed_at_index_statement;
 
 SET @add_room_input_locked = (
     SELECT IF(COUNT(*) = 0,
