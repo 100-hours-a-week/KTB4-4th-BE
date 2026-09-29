@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.common.exception;
 
+import io.sentry.Sentry;
 import jakarta.validation.ConstraintViolationException;
 
 import kr.ktb.zura.needu.common.response.ApiResponse;
@@ -30,6 +31,7 @@ public class GlobalExceptionHandler {
         ErrorCode errorCode = e.getErrorCode();
         if (errorCode.getStatus().is5xxServerError()) {
             log.warn("Business exception occurred. code={}", errorCode.name(), e);
+            captureException(e, errorCode);
         } else {
             log.info("Business exception occurred. code={}", errorCode.name());
         }
@@ -82,7 +84,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(Exception e) {
         log.error("Unexpected exception occurred", e);
+        captureException(e, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR);
         return toErrorResponse(CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR);
+    }
+
+    private void captureException(Exception e, ErrorCode errorCode) {
+        Sentry.withScope(scope -> {
+            scope.setTag("http.status_code", String.valueOf(errorCode.getStatus().value()));
+            scope.setTag("error.code", errorCode.name());
+            Sentry.captureException(e);
+        });
     }
 
     private ResponseEntity<ApiResponse<Void>> toErrorResponse(ErrorCode errorCode) {
