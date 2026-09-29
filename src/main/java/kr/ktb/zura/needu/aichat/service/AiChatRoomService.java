@@ -81,10 +81,19 @@ public class AiChatRoomService {
 
     @Transactional(readOnly = true)
     public void validateReadableRoom(Long userId, Long roomId) {
+        validateReadableRoom(userId, roomId, completionCooldown);
+    }
+
+    @Transactional(readOnly = true)
+    public void validateReadableRoom(Long userId, Long roomId, Duration completionCooldown) {
         AiChatRoom room = findOwnedRoom(userId, roomId);
-        if (!room.isCompleted()) {
-            validateUsableRoom(room);
+        if (room.isCompleted()) {
+            if(room.getCompletedAt() == null || !room.getCompletedAt().plus(completionCooldown).isAfter(LocalDateTime.now(ZoneOffset.UTC))){
+                throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+            }
+            return;
         }
+        validateUsableRoom(room);
     }
 
     // 대화 작업이 가능한 상태(소유자 본인, ACTIVE/ANALYZING, 만료 전)인지 확인한다

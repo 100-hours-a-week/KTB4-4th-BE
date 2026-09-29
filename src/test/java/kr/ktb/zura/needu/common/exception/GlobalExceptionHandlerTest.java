@@ -4,8 +4,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 
+import io.sentry.Sentry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +20,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,18 +43,26 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void businessException_returnsErrorCodeStatusAndMessage() throws Exception {
-        mockMvc.perform(get("/test/business"))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.message").value("일시적으로 서비스를 이용할 수 없습니다."))
-                .andExpect(jsonPath("$.data").isEmpty());
+        try (MockedStatic<Sentry> sentry = mockStatic(Sentry.class, CALLS_REAL_METHODS)) {
+            mockMvc.perform(get("/test/business"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.message").value("일시적으로 서비스를 이용할 수 없습니다."))
+                    .andExpect(jsonPath("$.data").isEmpty());
+
+            sentry.verify(() -> Sentry.captureException(any(BusinessException.class)), times(1));
+        }
     }
 
     @Test
     void tooManyRequestsException_returnsRetryAfterSeconds() throws Exception {
-        mockMvc.perform(get("/test/rate-limit"))
-                .andExpect(status().isTooManyRequests())
-                .andExpect(jsonPath("$.message").value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."))
-                .andExpect(jsonPath("$.data.retryAfterSeconds").value(10));
+        try (MockedStatic<Sentry> sentry = mockStatic(Sentry.class)) {
+            mockMvc.perform(get("/test/rate-limit"))
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(jsonPath("$.message").value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."))
+                    .andExpect(jsonPath("$.data.retryAfterSeconds").value(10));
+
+            sentry.verifyNoInteractions();
+        }
     }
 
     @Test

@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
+    id "io.sentry.jvm.gradle" version "6.23.0"
 }
 
 group = 'kr.ktb.zura'
@@ -39,6 +40,17 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+sentry {
+    // Generates a JVM (Java, Kotlin, etc.) source bundle and uploads your source code to Sentry.
+    // This enables source context, allowing you to see your source
+    // code as part of your stack traces in Sentry.
+    includeSourceContext = System.getenv("SENTRY_AUTH_TOKEN") != null
+
+    org = "ktb4"
+    projectName = "needu"
+    authToken = System.getenv("SENTRY_AUTH_TOKEN")
 }
 
 def integrationTestPattern = '*IntegrationTest'
