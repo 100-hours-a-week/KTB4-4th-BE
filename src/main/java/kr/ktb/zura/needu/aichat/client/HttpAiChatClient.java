@@ -157,12 +157,15 @@ public class HttpAiChatClient implements AiChatClient {
                 : AiChatErrorCode.AICHAT_TURN_IN_PROGRESS;
     }
 
-    // FastAPI는 요청 형식 검증 실패도 422로 응답 => 취향 부족만 골라내며 나머지는 기존처럼 거절로 처리
     private AiChatErrorCode toUnprocessableAnalysisErrorCode(RestClientResponseException exception) {
         AiServerErrorResponse error = readError(exception);
-        return error != null && PROFILE_TOO_SPARSE_CODE.equals(error.code())
-                ? AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE
-                : AiChatErrorCode.AICHAT_REQUEST_REJECTED;
+
+        // 취향 부족으로 인한 AI 서버의 422 응답일 경우
+        if (error != null && PROFILE_TOO_SPARSE_CODE.equals(error.code())) {
+            return AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE;
+        }
+
+        return AiChatErrorCode.AICHAT_REQUEST_REJECTED;
     }
 
     private AiServerErrorResponse readError(RestClientResponseException exception) {
