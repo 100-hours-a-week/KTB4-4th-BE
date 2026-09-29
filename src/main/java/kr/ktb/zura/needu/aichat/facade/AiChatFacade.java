@@ -97,15 +97,19 @@ public class AiChatFacade {
                                 : aiChatRoomService.findNextConversationAvailableAt(room)));
     }
 
-    private boolean hasShortCompletionCooldown(Long userId) {
-        return !shortCooldownExternalIds.isEmpty()
-                && shortCooldownExternalIds.contains(
-                        userService.findAuthenticatedUser(userId).externalId());
-    }
+
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
             Long userId, Long conversationId, String cursor, int size) {
-        aiChatRoomService.validateReadableRoom(userId, conversationId);
+        boolean hasShortCooldown = hasShortCompletionCooldown(userId);
+
+        if (hasShortCooldown) {
+            aiChatRoomService.validateReadableRoom(
+                    userId, conversationId, shortCompletionCooldown);
+        } else {
+            aiChatRoomService.validateReadableRoom(userId, conversationId);
+        }
+
         return aiMessageService.findAllMessages(conversationId, cursor, size);
     }
 
@@ -121,6 +125,12 @@ public class AiChatFacade {
         } finally {
             aiConversationLock.unlock(conversationId);
         }
+    }
+
+    private boolean hasShortCompletionCooldown(Long userId) {
+        return !shortCooldownExternalIds.isEmpty()
+                && shortCooldownExternalIds.contains(
+                userService.findAuthenticatedUser(userId).externalId());
     }
 
     private AiMessageResponse replyToUserMessage(Long userId, Long conversationId, SendMessageRequest request) {
