@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -32,6 +33,7 @@ import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,25 +49,37 @@ public class AiChatFacade {
     private final AiConversationLock aiConversationLock;
     private final AiChatClient aiChatClient;
     private final AiAnalysisConfirmService aiAnalysisConfirmService;
+    private final UserService userService;
     private final Duration messageRetryAfter;
+    private final Duration shortCompletionCooldown;
+    private final Set<Long> shortCooldownExternalIds;
 
     public AiChatFacade(AiChatRoomService aiChatRoomService,
                         AiMessageService aiMessageService,
                         AiConversationLock aiConversationLock,
                         AiChatClient aiChatClient,
                         AiAnalysisConfirmService aiAnalysisConfirmService,
-                        @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter) {
+                        UserService userService,
+                        @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter,
+                        @Value("${ai.chat.short-completion-cooldown:5m}") Duration shortCompletionCooldown,
+                        @Value("${ai.chat.short-cooldown-external-ids:}") Set<Long> shortCooldownExternalIds) {
         this.aiChatRoomService = aiChatRoomService;
         this.aiMessageService = aiMessageService;
         this.aiConversationLock = aiConversationLock;
         this.aiChatClient = aiChatClient;
         this.aiAnalysisConfirmService = aiAnalysisConfirmService;
+        this.userService = userService;
         this.messageRetryAfter = messageRetryAfter;
+        this.shortCompletionCooldown = shortCompletionCooldown;
+        this.shortCooldownExternalIds = shortCooldownExternalIds;
     }
 
     public AiConversationStartResult startOrResumeConversation(Long userId) {
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
-        AiChatRoom room = aiChatRoomService.findOrReserveRoom(userId);
+        boolean hasShortCooldown = hasShortCompletionCooldown(userId);
+        AiChatRoom room = hasShortCooldown
+                ? aiChatRoomService.findOrReserveRoom(userId, shortCompletionCooldown)
+                : aiChatRoomService.findOrReserveRoom(userId);
         if (room.isPending()) {
             return startConversation(userId, room.getId());
         }
@@ -78,7 +92,15 @@ public class AiChatFacade {
                 AiConversationResponse.from(
                         room,
                         aiMessageService.findLatestProgress(room.getId()),
-                        aiChatRoomService.findNextConversationAvailableAt(room)));
+                        hasShortCooldown
+                                ? aiChatRoomService.findNextConversationAvailableAt(room, shortCompletionCooldown)
+                                : aiChatRoomService.findNextConversationAvailableAt(room)));
+    }
+
+    private boolean hasShortCompletionCooldown(Long userId) {
+        return !shortCooldownExternalIds.isEmpty()
+                && shortCooldownExternalIds.contains(
+                        userService.findAuthenticatedUser(userId).externalId());
     }
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(

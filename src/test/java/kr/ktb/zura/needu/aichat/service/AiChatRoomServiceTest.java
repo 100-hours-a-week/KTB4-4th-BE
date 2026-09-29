@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -232,6 +233,33 @@ class AiChatRoomServiceTest {
         assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.COMPLETED);
         assertThat(aiChatRoomService.findNextConversationAvailableAt(room))
                 .isEqualTo(room.getCompletedAt().plusHours(24).atOffset(ZoneOffset.UTC));
+    }
+
+    @Test
+    void recentlyCompletedRoomWithShortCooldown_findOrReserveRoom_returnsCompletedRoom() {
+        AiChatRoom completedRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(completedRoom.getId());
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID, Duration.ofMinutes(5));
+
+        assertThat(room.getId()).isEqualTo(completedRoom.getId());
+        assertThat(aiChatRoomService.findNextConversationAvailableAt(room, Duration.ofMinutes(5)))
+                .isEqualTo(room.getCompletedAt().plusMinutes(5).atOffset(ZoneOffset.UTC));
+    }
+
+    @Test
+    void completedRoomAfterShortCooldown_findOrReserveRoom_reservesNewRoom() {
+        AiChatRoom completedRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(completedRoom.getId());
+        aiChatRoomRepository.flush();
+        jdbcTemplate.update("update ai_chat_rooms set completed_at = ? where id = ?",
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(5).minusSeconds(1), completedRoom.getId());
+        entityManager.clear();
+
+        AiChatRoom newRoom = aiChatRoomService.findOrReserveRoom(USER_ID, Duration.ofMinutes(5));
+
+        assertThat(newRoom.getId()).isNotEqualTo(completedRoom.getId());
+        assertThat(newRoom.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
     }
 
     @Test

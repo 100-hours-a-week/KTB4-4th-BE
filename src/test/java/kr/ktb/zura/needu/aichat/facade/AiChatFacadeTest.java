@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
@@ -41,6 +42,8 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.user.dto.response.UserResponse;
+import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,11 +74,13 @@ class AiChatFacadeTest {
     private static final Long NEW_ROOM_ID = 102L;
     private static final Long USER_MESSAGE_ID = 201L;
     private static final Long AI_MESSAGE_ID = 202L;
+    private static final Long SHORT_COOLDOWN_EXTERNAL_ID = 123456789L;
     private static final String GREETING = "안녕하세요";
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
     private static final String AI_CONTENT = "러닝을 좋아하시는군요.";
     private static final UUID CLIENT_MESSAGE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Duration MESSAGE_RETRY_AFTER = Duration.ofSeconds(10);
+    private static final Duration SHORT_COMPLETION_COOLDOWN = Duration.ofMinutes(5);
     private static final OffsetDateTime EXPIRATION_AT = OffsetDateTime.parse("2026-09-23T05:48:00+00:00");
     private static final LocalDateTime PURGE_AT = LocalDateTime.of(2026, 9, 23, 5, 48);
 
@@ -91,6 +96,9 @@ class AiChatFacadeTest {
     @Mock
     private AiAnalysisConfirmService aiAnalysisConfirmService;
 
+    @Mock
+    private UserService userService;
+
     private AiConversationLock aiConversationLock;
     private AiChatFacade aiChatFacade;
 
@@ -98,7 +106,8 @@ class AiChatFacadeTest {
     void setUp() {
         aiConversationLock = new AiConversationLock();
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiChatClient, aiAnalysisConfirmService, MESSAGE_RETRY_AFTER);
+                aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
+                SHORT_COMPLETION_COOLDOWN, Set.of());
     }
 
     @Test
@@ -115,6 +124,25 @@ class AiChatFacadeTest {
         assertThat(result.conversation().conversationId()).isEqualTo(ROOM_ID);
         assertThat(result.conversation().status()).isEqualTo(AiChatRoomStatus.ACTIVE);
         assertThat(result.conversation().progress()).isZero();
+    }
+
+    @Test
+    void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
+        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
+                aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
+                SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
+        given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
+                USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
+        given(aiChatRoomService.findOrReserveRoom(USER_ID, SHORT_COMPLETION_COOLDOWN))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(aiChatClient.startSession(USER_ID, ROOM_ID)).willReturn(startSessionResponse(ROOM_ID));
+        given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT));
+
+        AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
+
+        assertThat(result.isCreated()).isTrue();
+        verify(aiChatRoomService).findOrReserveRoom(USER_ID, SHORT_COMPLETION_COOLDOWN);
     }
 
     @Test

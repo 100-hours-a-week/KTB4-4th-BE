@@ -41,9 +41,14 @@ public class AiChatRoomService {
     // 반환된 방이 PENDING => 이번 호출에서 새로 예약한 방
     @Transactional
     public AiChatRoom findOrReserveRoom(Long userId) {
+        return findOrReserveRoom(userId, completionCooldown);
+    }
+
+    @Transactional
+    public AiChatRoom findOrReserveRoom(Long userId, Duration cooldown) {
         AiChatRoom room = aiChatRoomRepository.findByActiveUserId(userId).orElse(null);
         if (room == null) {
-            return findRecentCompletedRoom(userId).orElseGet(() -> reserveRoom(userId));
+            return findRecentCompletedRoom(userId, cooldown).orElseGet(() -> reserveRoom(userId));
         }
         if (!room.isPending()) {
             return room;
@@ -157,15 +162,19 @@ public class AiChatRoomService {
         aiChatRoomRepository.flush();
     }
 
-    private Optional<AiChatRoom> findRecentCompletedRoom(Long userId) {
-        LocalDateTime threshold = LocalDateTime.now(ZoneOffset.UTC).minus(completionCooldown);
+    private Optional<AiChatRoom> findRecentCompletedRoom(Long userId, Duration cooldown) {
+        LocalDateTime threshold = LocalDateTime.now(ZoneOffset.UTC).minus(cooldown);
         return aiChatRoomRepository.findFirstByUserIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(userId)
                 .filter(room -> room.getCompletedAt().isAfter(threshold));
     }
 
     public OffsetDateTime findNextConversationAvailableAt(AiChatRoom room) {
+        return findNextConversationAvailableAt(room, completionCooldown);
+    }
+
+    public OffsetDateTime findNextConversationAvailableAt(AiChatRoom room, Duration cooldown) {
         return room.isCompleted()
-                ? room.getCompletedAt().plus(completionCooldown).atOffset(ZoneOffset.UTC)
+                ? room.getCompletedAt().plus(cooldown).atOffset(ZoneOffset.UTC)
                 : null;
     }
 
