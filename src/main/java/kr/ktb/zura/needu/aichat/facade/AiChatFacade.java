@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -22,6 +23,7 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
+import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -32,6 +34,7 @@ import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,40 +50,63 @@ public class AiChatFacade {
     private final AiConversationLock aiConversationLock;
     private final AiChatClient aiChatClient;
     private final AiAnalysisConfirmService aiAnalysisConfirmService;
+    private final UserService userService;
     private final Duration messageRetryAfter;
+    private final Duration shortCompletionCooldown;
+    private final Set<Long> shortCooldownExternalIds;
 
     public AiChatFacade(AiChatRoomService aiChatRoomService,
                         AiMessageService aiMessageService,
                         AiConversationLock aiConversationLock,
                         AiChatClient aiChatClient,
                         AiAnalysisConfirmService aiAnalysisConfirmService,
-                        @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter) {
+                        UserService userService,
+                        @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter,
+                        @Value("${ai.chat.short-completion-cooldown:5m}") Duration shortCompletionCooldown,
+                        @Value("${ai.chat.short-cooldown-external-ids:}") Set<Long> shortCooldownExternalIds) {
         this.aiChatRoomService = aiChatRoomService;
         this.aiMessageService = aiMessageService;
         this.aiConversationLock = aiConversationLock;
         this.aiChatClient = aiChatClient;
         this.aiAnalysisConfirmService = aiAnalysisConfirmService;
+        this.userService = userService;
         this.messageRetryAfter = messageRetryAfter;
+        this.shortCompletionCooldown = shortCompletionCooldown;
+        this.shortCooldownExternalIds = shortCooldownExternalIds;
     }
 
     public AiConversationStartResult startOrResumeConversation(Long userId) {
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
-        AiChatRoom room = aiChatRoomService.findOrReserveRoom(userId);
+        boolean hasShortCooldown = hasShortCompletionCooldown(userId);
+        AiChatRoom room = hasShortCooldown
+                ? aiChatRoomService.findOrReserveRoom(userId, shortCompletionCooldown)
+                : aiChatRoomService.findOrReserveRoom(userId);
         if (room.isPending()) {
             return startConversation(userId, room.getId());
         }
         // AI 서버에 세션 조회 API가 없어 purgeAt으로 만료를 판단, 규칙보다 일찍 사라진 세션은 메시지 전송·분석 시 발견
         // ANALYZING도 AI 세션이 만료되면 분석을 이어갈 수 없음 => 다른 대화 API처럼 만료로 보고 새 대화를 시작한다
-        if (room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
+        if (!room.isCompleted() && room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
             return restartConversation(userId, room.getId());
         }
         return AiConversationStartResult.resumed(
-                AiConversationResponse.from(room, aiMessageService.findLatestProgress(room.getId())));
+                AiConversationResponse.from(
+                        room,
+                        aiMessageService.findLatestProgress(room.getId()),
+                        hasShortCooldown
+                                ? aiChatRoomService.findNextConversationAvailableAt(room, shortCompletionCooldown)
+                                : aiChatRoomService.findNextConversationAvailableAt(room)));
+    }
+
+    private boolean hasShortCompletionCooldown(Long userId) {
+        return !shortCooldownExternalIds.isEmpty()
+                && shortCooldownExternalIds.contains(
+                        userService.findAuthenticatedUser(userId).externalId());
     }
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
             Long userId, Long conversationId, String cursor, int size) {
-        aiChatRoomService.validateActiveRoom(userId, conversationId);
+        aiChatRoomService.validateReadableRoom(userId, conversationId);
         return aiMessageService.findAllMessages(conversationId, cursor, size);
     }
 
@@ -213,8 +239,19 @@ public class AiChatFacade {
             return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
         } catch (BusinessException e) {
             expireRoomIfSessionGone(userId, conversationId, e);
+            if (e.getErrorCode() == AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE) {
+                throw expireSparseRoom(userId, conversationId, e);
+            }
             throw e;
         }
+    }
+
+    // AI 세션은 입력이 잠긴 채 분석도 거절해 다시 요청해도 결과가 같다 => ANALYZING에 묶이지 않도록 만료해 새 대화를 시작하게 한다
+    private BusinessException expireSparseRoom(Long userId, Long conversationId, BusinessException cause) {
+        log.info("AI analysis rejected for sparse profile. userId={}, conversationId={}", userId, conversationId);
+        aiChatRoomService.expireRoom(conversationId);
+        return new BusinessException(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE,
+                new RestartRequiredResponse(true), cause);
     }
 
     public AnalysisResultResponse patchAnalyze(Long userId, Long conversationId, PatchAnalyzeMessageRequest request) {

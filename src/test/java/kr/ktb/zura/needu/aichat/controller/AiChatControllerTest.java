@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.aichat.controller;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,6 +14,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
+import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
@@ -85,6 +88,21 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.conversationId").value(101))
                 .andExpect(jsonPath("$.data.status").value("ANALYZING"))
                 .andExpect(jsonPath("$.data.progress").value(100));
+    }
+
+    @Test
+    void completedConversation_startOrResumeConversation_returnsNextAvailableAt() throws Exception {
+        OffsetDateTime nextConversationAvailableAt = OffsetDateTime.of(
+                2026, 9, 30, 0, 30, 0, 0, ZoneOffset.UTC);
+        given(aiChatFacade.startOrResumeConversation(USER_ID)).willReturn(AiConversationStartResult.resumed(
+                new AiConversationResponse(
+                        101L, AiChatRoomStatus.COMPLETED, 100, nextConversationAvailableAt)));
+
+        mockMvc.perform(postConversation())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.nextConversationAvailableAt")
+                        .value("2026-09-30T00:30:00Z"));
     }
 
     @Test
@@ -227,6 +245,19 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.keywords.taste[0].value").value("핸드드립"))
                 .andExpect(jsonPath("$.data.keywords.interest[0].value").value("캠핑"))
                 .andExpect(jsonPath("$.data.correctionAvailable").value(true));
+    }
+
+    @Test
+    void profileTooSparse_createAnalysis_returnsConflictWithRestartRequired() throws Exception {
+        given(aiChatFacade.createAnalysis(USER_ID, CONVERSATION_ID)).willThrow(new BusinessException(
+                AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE, new RestartRequiredResponse(true)));
+
+        mockMvc.perform(post(ANALYSIS_URL)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())))
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("대화에서 취향을 찾지 못했습니다. 새 대화를 시작해 주세요."))
+                .andExpect(jsonPath("$.data.restartRequired").value(true));
     }
 
     @Test

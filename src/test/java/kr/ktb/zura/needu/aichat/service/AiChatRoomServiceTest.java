@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -131,6 +132,18 @@ class AiChatRoomServiceTest {
     }
 
     @Test
+    void completedRoomOwnedByUser_validateReadableRoom_completes() {
+        AiChatRoom completedRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(completedRoom.getId());
+
+        assertThatCode(() -> aiChatRoomService.validateReadableRoom(USER_ID, completedRoom.getId()))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> aiChatRoomService.validateMessageSendableRoom(USER_ID, completedRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+    }
+
+    @Test
     void unknownRoomId_validateActiveRoom_throwsConversationNotFound() {
         assertThatThrownBy(() -> aiChatRoomService.validateActiveRoom(USER_ID, UNKNOWN_ROOM_ID))
                 .isInstanceOf(BusinessException.class)
@@ -205,7 +218,63 @@ class AiChatRoomServiceTest {
 
         AiChatRoom completedRoom = aiChatRoomRepository.findById(activeRoom.getId()).orElseThrow();
         assertThat(completedRoom.getStatus()).isEqualTo(AiChatRoomStatus.COMPLETED);
+        assertThat(completedRoom.getCompletedAt()).isNotNull();
         assertThat(completedRoom.getActiveUserId()).isNull();
+    }
+
+    @Test
+    void recentlyCompletedRoom_findOrReserveRoom_returnsCompletedRoom() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(activeRoom.getId());
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
+
+        assertThat(room.getId()).isEqualTo(activeRoom.getId());
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.COMPLETED);
+        assertThat(aiChatRoomService.findNextConversationAvailableAt(room))
+                .isEqualTo(room.getCompletedAt().plusHours(24).atOffset(ZoneOffset.UTC));
+    }
+
+    @Test
+    void recentlyCompletedRoomWithShortCooldown_findOrReserveRoom_returnsCompletedRoom() {
+        AiChatRoom completedRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(completedRoom.getId());
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID, Duration.ofMinutes(5));
+
+        assertThat(room.getId()).isEqualTo(completedRoom.getId());
+        assertThat(aiChatRoomService.findNextConversationAvailableAt(room, Duration.ofMinutes(5)))
+                .isEqualTo(room.getCompletedAt().plusMinutes(5).atOffset(ZoneOffset.UTC));
+    }
+
+    @Test
+    void completedRoomAfterShortCooldown_findOrReserveRoom_reservesNewRoom() {
+        AiChatRoom completedRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(completedRoom.getId());
+        aiChatRoomRepository.flush();
+        jdbcTemplate.update("update ai_chat_rooms set completed_at = ? where id = ?",
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(5).minusSeconds(1), completedRoom.getId());
+        entityManager.clear();
+
+        AiChatRoom newRoom = aiChatRoomService.findOrReserveRoom(USER_ID, Duration.ofMinutes(5));
+
+        assertThat(newRoom.getId()).isNotEqualTo(completedRoom.getId());
+        assertThat(newRoom.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void completedRoomAfterCooldown_findOrReserveRoom_reservesNewRoom() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(activeRoom.getId());
+        aiChatRoomRepository.flush();
+        jdbcTemplate.update("update ai_chat_rooms set completed_at = ? where id = ?",
+                LocalDateTime.now(ZoneOffset.UTC).minusHours(24).minusSeconds(1), activeRoom.getId());
+        entityManager.clear();
+
+        AiChatRoom newRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
+
+        assertThat(newRoom.getId()).isNotEqualTo(activeRoom.getId());
+        assertThat(newRoom.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
     }
 
     @Test

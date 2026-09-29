@@ -309,6 +309,33 @@ class AiChatClientTest {
         assertEquals(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS, exception.getErrorCode());
     }
 
+    @Test
+    void profileTooSparse_createAnalysis_throwsProfileTooSparse() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/analysis"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_CONTENT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "PROFILE_TOO_SPARSE", "message": "취향 프로필을 만들기 위한 정보가 부족합니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.createAnalysis(101L));
+
+        assertEquals(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE, exception.getErrorCode());
+    }
+
+    // FastAPI 요청 검증 실패처럼 원인을 모르는 422는 취향 부족으로 보지 않는다
+    @Test
+    void unprocessableWithoutErrorCode_createAnalysis_throwsRequestRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/analysis"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_CONTENT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"detail": [{"loc": ["body"], "msg": "Field required"}]}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.createAnalysis(101L));
+
+        assertEquals(AiChatErrorCode.AICHAT_REQUEST_REJECTED, exception.getErrorCode());
+    }
+
     @ParameterizedTest
     @MethodSource("httpErrors")
     void httpError_request_throwsMappedBusinessException(HttpStatus status, AiChatErrorCode errorCode) {
