@@ -1,0 +1,75 @@
+needu:
+  rate-limit:
+    policies:
+      friend-list:
+        method: GET
+        path-pattern: /api/v1/friends
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      friend-detail:
+        method: GET
+        path-pattern: /api/v1/friends/{userId}
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      guidance:
+        method: GET
+        path-pattern: /api/v1/guidance
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      personal-recommendations:
+        method: GET
+        path-pattern: /api/v1/users/me/personal-recommendations
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      gift-recommendations:
+        method: GET
+        path-pattern: /api/v1/users/{userId}/gift-recommendations
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      ai-message-history:
+        method: GET
+        path-pattern: /api/v1/ai/conversations/{conversationId}/messages
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      error-reports:
+        method: POST
+        path-pattern: /api/v1/error-reports
+        limit: 10
+        window: 1m
+        maximum-size: 100000
+      ai-conversations:
+        method: POST
+        path-pattern: /api/v1/ai/conversations
+        limit: 10
+        window: 1m
+        maximum-size: 100000
+      ai-messages:
+        method: POST
+        path-pattern: /api/v1/ai/conversations/{conversationId}/messages
+        limit: 10
+        window: 1m
+        maximum-size: 100000
+      ai-analysis-create:
+        method: POST
+        path-pattern: /api/v1/ai/conversations/{conversationId}/analysis
+        limit: 5
+        window: 1m
+        maximum-size: 100000
+      ai-analysis-update:
+        method: PATCH
+        path-pattern: /api/v1/ai/conversations/{conversationId}/analysis
+        limit: 10
+        window: 1m
+        maximum-size: 100000
+      ai-confirm:
+        method: POST
+        path-pattern: /api/v1/ai/conversations/{conversationId}/confirm
+        limit: 5
+        window: 1m
+        maximum-size: 100000
