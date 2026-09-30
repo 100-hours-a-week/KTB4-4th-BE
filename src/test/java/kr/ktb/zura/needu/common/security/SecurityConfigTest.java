@@ -6,6 +6,7 @@ import kr.ktb.zura.needu.auth.service.AccessTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -99,6 +100,39 @@ class SecurityConfigTest {
                         .cookie(csrfCookie)
                         .header(CSRF_HEADER, csrfToken))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void accessTokenWithoutCsrf_postRequest_returnsCsrfRefreshRequired() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/conversations/1/messages").cookie(accessCookie()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
+    }
+
+    @Test
+    void accessTokenWithInvalidCsrf_postRequest_returnsCsrfRefreshRequired() throws Exception {
+        Cookie csrfCookie = mockMvc.perform(get("/api/v1/auth/csrf"))
+                .andReturn().getResponse().getCookie(CSRF_COOKIE);
+
+        mockMvc.perform(post("/api/v1/ai/conversations/1/messages")
+                        .cookie(accessCookie(), csrfCookie)
+                        .header(CSRF_HEADER, "invalid-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
+    }
+
+    @Test
+    void accessTokenWithValidCsrf_postRequest_reachesController() throws Exception {
+        MvcResult csrf = mockMvc.perform(get("/api/v1/auth/csrf")).andReturn();
+        Cookie csrfCookie = csrf.getResponse().getCookie(CSRF_COOKIE);
+        String csrfToken = JsonPath.read(csrf.getResponse().getContentAsString(), "$.data.token");
+
+        mockMvc.perform(post("/api/v1/ai/conversations/999999/messages")
+                        .cookie(accessCookie(), csrfCookie)
+                        .header(CSRF_HEADER, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clientMessageId\":\"00000000-0000-0000-0000-000000000001\",\"content\":\"hi\"}"))
+                .andExpect(status().isNotFound());
     }
 
     @Test
