@@ -1,0 +1,16 @@
+auth:
+  jwt:
+    access-token-expiration: 15m
+  refresh-token-expiration: 14d
+
+ai:
+  chat:
+    # AI 세션 생성 요청보다 오래 PENDING이면 비정상 종료로 정리한다.
+    pending-timeout: ${AI_CHAT_PENDING_TIMEOUT:1m}
+    # 취향 분석 완료 후 새 AI 대화를 시작할 수 있을 때까지의 대기 시간이다.
+    completion-cooldown: ${AI_CHAT_COMPLETION_COOLDOWN:24h}
+    # 지정된 카카오 external ID에는 짧은 완료 쿨다운을 적용한다.
+    short-cooldown-external-ids: ${AI_CHAT_SHORT_COOLDOWN_EXTERNAL_IDS:}
+    short-completion-cooldown: ${AI_CHAT_SHORT_COMPLETION_COOLDOWN:5m}
+    # 같은 대화방의 메시지가 처리 중일 때 클라이언트에 안내할 재시도 시간이다.
+    message-retry-after: ${AI_CHAT_MESSAGE_RETRY_AFTER:10s}
