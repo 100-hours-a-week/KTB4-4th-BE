@@ -30,7 +30,8 @@ public enum AiChatErrorCode implements ErrorCode {
     AICHAT_INVALID_RESPONSE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
     AICHAT_AUTHENTICATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "요청을 처리하지 못했습니다."),
     AICHAT_REQUEST_REJECTED(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
-    AICHAT_CONVERSATION_STARTING(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다.");
+    AICHAT_CONVERSATION_STARTING(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
+    AICHAT_CONVERSATION_EXPIRED(HttpStatus.GONE,"AI 대화 세션이 만료되었습니다." );
 
     private final HttpStatus status;
     private final String message;
