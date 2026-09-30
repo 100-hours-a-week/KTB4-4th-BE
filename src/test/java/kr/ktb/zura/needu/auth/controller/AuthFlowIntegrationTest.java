@@ -87,7 +87,8 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.birthday").doesNotExist());
         mockMvc.perform(post("/api/v1/auth/refresh").cookie(refreshCookie, csrfCookie))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("접근 권한이 없습니다."));
+                .andExpect(jsonPath("$.message").value("보안 토큰이 만료되었습니다. 다시 시도해 주세요."))
+                .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
 
         MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(refreshCookie, csrfCookie,

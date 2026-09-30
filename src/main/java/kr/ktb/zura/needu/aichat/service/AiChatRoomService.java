@@ -1,9 +1,6 @@
 package kr.ktb.zura.needu.aichat.service;
 
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.*;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -135,9 +132,11 @@ public class AiChatRoomService {
     }
 
     private void validateUsableRoom(AiChatRoom room) {
-        if ((!room.isActive() && !room.isAnalyzing())
-                || room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
+        if (!room.isActive() && !room.isAnalyzing()) {
             throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+        }
+        if (room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_EXPIRED);
         }
     }
 

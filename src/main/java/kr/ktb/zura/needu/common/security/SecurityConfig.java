@@ -8,13 +8,16 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.web.util.WebUtils;
 
 @Configuration
@@ -44,6 +47,8 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, HEALTH_PATH).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/metrics/hikaricp.connections.active",
+                                "/actuator/metrics/hikaricp.connections.pending").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/kakao/authorize", "/api/v1/auth/kakao/callback")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/friends/kakao/callback").permitAll()
@@ -60,7 +65,18 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                         .bearerTokenResolver(cookieTokenResolver)
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens))
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens)
+                        // STATELESS에서 인증된 요청마다 새 로그인으로 판단돼 기본 전략이 CSRF 쿠키를 매번 삭제하므로 끈다.
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())
+                        // 리소스 서버는 베어러 토큰이 포함된 요청을 CSRF 검사에서 제외
+                        // 액세스 토큰 활성화된 상태에서 CSRF 검사 X => 모든 상태 변경 요청을 검사하도록
+                        .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
+                            @Override
+                            public <O extends CsrfFilter> O postProcess(O filter) {
+                                filter.setRequireCsrfProtectionMatcher(CsrfFilter.DEFAULT_CSRF_MATCHER);
+                                return filter;
+                            }
+                        }))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .build();
