@@ -44,6 +44,8 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, HEALTH_PATH).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/metrics/hikaricp.connections.active",
+                                "/actuator/metrics/hikaricp.connections.pending").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/kakao/authorize", "/api/v1/auth/kakao/callback")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/friends/kakao/callback").permitAll()

@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "management.endpoints.web.exposure.include=health,metrics")
 @AutoConfigureMockMvc
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class SecurityConfigTest {
@@ -40,6 +40,14 @@ class SecurityConfigTest {
     void noAuthentication_findHealthDetails_doesNotExposeComponents() throws Exception {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(jsonPath("$.components").doesNotExist());
+    }
+
+    @Test
+    void noAuthentication_findHikariConnectionMetrics_returnsOk() throws Exception {
+        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending"))
+                .andExpect(status().isOk());
     }
 
     @Test
