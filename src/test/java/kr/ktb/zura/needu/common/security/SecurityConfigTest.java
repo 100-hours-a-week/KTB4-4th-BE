@@ -52,6 +52,14 @@ class SecurityConfigTest {
     }
 
     @Test
+    void noAuthentication_findHikariConnectionMetrics_returnsOk() throws Exception {
+        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void noAuthentication_findOtherActuatorEndpoint_isNotExposed() throws Exception {
         mockMvc.perform(get("/actuator/env"))
                 .andExpect(status().isUnauthorized());
