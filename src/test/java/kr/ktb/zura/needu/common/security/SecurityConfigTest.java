@@ -1,12 +1,16 @@
 package kr.ktb.zura.needu.common.security;
 
+import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
+import kr.ktb.zura.needu.auth.service.AccessTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -17,10 +21,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class SecurityConfigTest {
 
-    private final MockMvc mockMvc;
+    private static final String CSRF_COOKIE = "NEEDU_CSRF";
+    private static final String CSRF_HEADER = "X-XSRF-TOKEN";
 
-    SecurityConfigTest(MockMvc mockMvc) {
+    private final MockMvc mockMvc;
+    private final AccessTokenService accessTokenService;
+
+    SecurityConfigTest(MockMvc mockMvc, AccessTokenService accessTokenService) {
         this.mockMvc = mockMvc;
+        this.accessTokenService = accessTokenService;
+    }
+
+    private Cookie accessCookie() {
+        return new Cookie(AuthCookieNames.ACCESS_TOKEN, accessTokenService.issueAccessToken(1L));
     }
 
     @Test
@@ -49,6 +62,43 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("보안 토큰이 만료되었습니다. 다시 시도해 주세요."))
                 .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
+    }
+
+    @Test
+    void authenticatedRequest_withCsrfCookie_keepsCsrfCookie() throws Exception {
+        Cookie csrfCookie = mockMvc.perform(get("/api/v1/auth/csrf"))
+                .andReturn().getResponse().getCookie(CSRF_COOKIE);
+
+        MvcResult result = mockMvc.perform(get("/api/v1/guidance").cookie(accessCookie(), csrfCookie))
+                .andReturn();
+
+        assertThat(result.getResponse().getCookie(CSRF_COOKIE)).isNull();
+    }
+
+    @Test
+    void authenticatedPostRequest_withCsrfCookie_keepsCsrfCookie() throws Exception {
+        MvcResult csrf = mockMvc.perform(get("/api/v1/auth/csrf")).andReturn();
+        Cookie csrfCookie = csrf.getResponse().getCookie(CSRF_COOKIE);
+        String csrfToken = JsonPath.read(csrf.getResponse().getContentAsString(), "$.data.token");
+
+        MvcResult result = mockMvc.perform(post("/api/v1/error-reports")
+                        .cookie(accessCookie(), csrfCookie)
+                        .header(CSRF_HEADER, csrfToken))
+                .andReturn();
+
+        assertThat(result.getResponse().getCookie(CSRF_COOKIE)).isNull();
+    }
+
+    @Test
+    void validCsrfWithoutAccessToken_postRequest_returnsUnauthorized() throws Exception {
+        MvcResult csrf = mockMvc.perform(get("/api/v1/auth/csrf")).andReturn();
+        Cookie csrfCookie = csrf.getResponse().getCookie(CSRF_COOKIE);
+        String csrfToken = JsonPath.read(csrf.getResponse().getContentAsString(), "$.data.token");
+
+        mockMvc.perform(post("/api/v1/ai/conversations/1/messages")
+                        .cookie(csrfCookie)
+                        .header(CSRF_HEADER, csrfToken))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

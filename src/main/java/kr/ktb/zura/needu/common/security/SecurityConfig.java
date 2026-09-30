@@ -14,6 +14,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.web.util.WebUtils;
 
@@ -62,7 +63,9 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                         .bearerTokenResolver(cookieTokenResolver)
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens))
+                // STATELESS에서 인증된 요청마다 새 로그인으로 판단돼 기본 전략이 CSRF 쿠키를 매번 삭제하므로 끈다.
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens)
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy()))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .build();
