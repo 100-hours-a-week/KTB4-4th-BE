@@ -49,12 +49,6 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("보안 토큰이 만료되었습니다. 다시 시도해 주세요."))
                 .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
-      
-    void noAuthentication_findHikariConnectionMetrics_returnsOk() throws Exception {
-        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active"))
-                .andExpect(status().isOk());
-        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending"))
-                .andExpect(status().isOk());
     }
 
     @Test
