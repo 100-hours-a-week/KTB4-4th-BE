@@ -8,6 +8,7 @@ import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,6 +41,14 @@ class SecurityConfigTest {
     void noAuthentication_findHealthDetails_doesNotExposeComponents() throws Exception {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(jsonPath("$.components").doesNotExist());
+    }
+
+    @Test
+    void missingCsrfToken_postRequest_returnsCsrfRefreshRequired() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("보안 토큰이 만료되었습니다. 다시 시도해 주세요."))
+                .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
     }
 
     @Test
