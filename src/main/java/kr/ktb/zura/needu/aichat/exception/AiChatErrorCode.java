@@ -25,6 +25,7 @@ public enum AiChatErrorCode implements ErrorCode {
     AICHAT_TURN_IN_PROGRESS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 
     // AI 서버 장애는 FE 명세상 500/503만 노출 => 공통 문구로 응답, 원인은 코드 이름으로 구분
+    // TODO: 응답 message만으로 원인 알기가 쉽지 않음, 수정 필요
     AICHAT_SERVER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
     AICHAT_REQUEST_TIMEOUT(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
     AICHAT_INVALID_RESPONSE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
