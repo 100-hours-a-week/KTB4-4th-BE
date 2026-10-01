@@ -136,10 +136,14 @@ class SecurityConfigTest {
     }
 
     @Test
-    void noAuthentication_findHikariConnectionMetrics_returnsOk() throws Exception {
+    void authentication_findHikariConnectionMetrics_returnsOk() throws Exception {
+        Cookie accessCookie = accessCookie();
+
         mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active").cookie(accessCookie))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending"))
+        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending").cookie(accessCookie))
                 .andExpect(status().isOk());
     }
 
