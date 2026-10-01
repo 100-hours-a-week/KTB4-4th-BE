@@ -14,6 +14,7 @@ import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -24,7 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-// 유일 제약과 flush 순서가 핵심이라 실제 JPA(H2) 위에서 검증한다.
 @DataJpaTest
 @Import(AiChatRoomService.class)
 class AiChatRoomServiceTest {
@@ -49,6 +49,12 @@ class AiChatRoomServiceTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @BeforeEach
+    void setUp() {
+        aiMessageRepository.deleteAll();
+        aiChatRoomRepository.deleteAll();
+    }
 
     @Test
     void noRoom_findOrReserveRoom_reservesPendingRoom() {
