@@ -137,11 +137,11 @@ class SecurityConfigTest {
     }
 
     @Test
-    void noAuthentication_findHikariConnectionMetrics_returnsOk() throws Exception {
+    void noAuthentication_findHikariConnectionMetrics_returnsUnauthorized() throws Exception {
         mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
