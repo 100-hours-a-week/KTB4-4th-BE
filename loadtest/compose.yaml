@@ -1,0 +1,135 @@
+name: needu-loadtest
+
+services:
+  mysql:
+    image: mysql:8.4
+    command:
+      - --performance-schema=ON
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_DATABASE: needu
+      MYSQL_USER: needu
+      MYSQL_PASSWORD: needu
+      MYSQL_ROOT_PASSWORD: root
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+      - ./mysql/01-exporter.sql:/docker-entrypoint-initdb.d/01-exporter.sql:ro
+      - ./mysql/02-seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    cpus: ${MYSQL_CPUS:-2.0}
+    mem_limit: ${MYSQL_MEMORY:-1g}
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: loadtest
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/needu?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC
+      DB_USERNAME: needu
+      DB_PASSWORD: needu
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_COOKIE_SECURE: "false"
+      KAKAO_REST_API_KEY: loadtest
+      KAKAO_CLIENT_SECRET: loadtest
+      KAKAO_REDIRECT_URI: http://localhost:8080/api/v1/auth/kakao/callback
+      KAKAO_FRIEND_REDIRECT_URI: http://localhost:8080/api/v1/friends/kakao/callback
+      AI_SERVER_BASE_URL: http://unused:9000
+      AI_SERVICE_TOKEN: loadtest
+      TOMCAT_THREADS_MAX: ${TOMCAT_THREADS_MAX:-200}
+      HIKARI_MAX_POOL_SIZE: ${HIKARI_MAX_POOL_SIZE:-10}
+      AI_SERVER_MOCK_LATENCY: ${AI_SERVER_MOCK_LATENCY:-2s}
+      AI_SERVER_MOCK_MAX_TURNS: ${AI_SERVER_MOCK_MAX_TURNS:-2}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=${APP_MAX_RAM_PERCENTAGE:-75.0}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    cpus: ${APP_CPUS:-2.0}
+    mem_limit: ${APP_MEMORY:-1g}
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.20.0
+    command:
+      - --config.my-cnf=/cfg/.my.cnf
+      - --mysqld.address=mysql:3306
+      - --collect.perf_schema.eventsstatements
+      - --collect.info_schema.processlist
+      - --collect.info_schema.innodb_metrics
+    environment:
+      MYSQLD_EXPORTER_PASSWORD: exporter
+    ports:
+      - "127.0.0.1:${MYSQL_EXPORTER_PORT:-9104}:9104"
+    volumes:
+      - ./mysql/exporter.my.cnf:/cfg/.my.cnf:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      app:
+        condition: service_healthy
+      mysqld-exporter:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:13.2.3
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    profiles: [cadvisor]
+    privileged: true
+    command:
+      - --docker_only=true
+      - --store_container_labels=true
+    ports:
+      - "127.0.0.1:${CADVISOR_PORT:-8081}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+
+volumes:
+  mysql-data:
+  prometheus-data:
+  grafana-data:
