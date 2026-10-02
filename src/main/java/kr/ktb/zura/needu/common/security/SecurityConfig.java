@@ -51,12 +51,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, HEALTH_PATH).permitAll()
                         .requestMatchers(HttpMethod.GET, PROMETHEUS_PATH).permitAll()
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/v1/auth/kakao/authorize",
-                                "/api/v1/auth/kakao/callback"
-                        ).permitAll()
-
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/kakao/authorize", "/api/v1/auth/kakao/callback")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/friends/kakao/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/logout")

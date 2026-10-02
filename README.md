@@ -24,4 +24,6 @@
 
 DB 연결은 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`로 설정합니다. HTTPS 운영 환경에서는 `SERVER_SERVLET_SESSION_COOKIE_SECURE=true`로 설정합니다.
 
+CloudWatch에는 HikariCP의 활성 연결 수와 연결 대기 수만 전송합니다. 실행 환경의 IAM Role에 `cloudwatch:PutMetricData` 권한을 부여하고 `CLOUDWATCH_METRICS_ENABLED=true`, `AWS_REGION`, `CLOUDWATCH_METRICS_NAMESPACE`를 설정합니다. 전송 주기는 `CLOUDWATCH_METRICS_STEP`으로 조정하며 기본값은 `1m`입니다. 로컬과 테스트 환경에서는 기본적으로 전송하지 않습니다.
+
 브라우저에서 `GET /api/v1/auth/kakao/authorize?returnUrl=https%3A%2F%2Fexample.com%2Flogin`으로 이동하면 카카오 로그인 화면으로 리다이렉트됩니다. 성공 후 콜백은 쿠키를 설정하고 전달받은 `returnUrl`로 302 리다이렉트합니다. `returnUrl`은 절대 `http` 또는 `https` URL이어야 합니다. 기존 MySQL `users` 테이블에는 [`db/unique_users_external_id.sql`](db/unique_users_external_id.sql)을 적용해야 합니다. 적용 전 `external_id` 중복 행을 정리하세요.
