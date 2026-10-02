@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.aichat.client;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -20,6 +21,7 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -29,24 +31,42 @@ public class FakeAiChatClient implements AiChatClient {
     private static final String MOCK_SELF_PRODUCT_ID = "8255331367";
     private static final String MOCK_GIFT_PRODUCT_ID = "6927419268";
 
+    private final Duration latency;
+    private final int maxTurns;
     private final Map<Long, Integer> mockTurns = new ConcurrentHashMap<>();
     private final Map<Long, AiServerAnalysisResponse> mockAnalyses = new ConcurrentHashMap<>();
 
+    public FakeAiChatClient(
+            @Value("${ai.server.mock-latency:0s}") Duration latency,
+            @Value("${ai.server.mock-max-turns:2}") int maxTurns
+    ) {
+        if (latency.isNegative()) {
+            throw new IllegalArgumentException("AI mock latency must not be negative");
+        }
+        if (maxTurns < 1) {
+            throw new IllegalArgumentException("AI mock max turns must be positive");
+        }
+        this.latency = latency;
+        this.maxTurns = maxTurns;
+    }
+
     @Override
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
+        pause();
         mockTurns.put(conversationRoomId, 0);
         return new AiServerStartSessionResponse(
                 conversationRoomId,
                 "안녕하세요! 요즘 어떻게 지내시는지 궁금해요.",
                 OffsetDateTime.now(ZoneOffset.UTC),
                 OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(30),
-                20);
+                maxTurns);
     }
 
     @Override
     public AiServerSendMessageResponse sendMessage(Long userId, Long conversationRoomId, String message) {
+        pause();
         int turn = mockTurns.merge(conversationRoomId, 1, Integer::sum);
-        boolean inputLocked = turn >= 2;
+        boolean inputLocked = turn >= maxTurns;
         return new AiServerSendMessageResponse(
                 inputLocked
                         ? "좋아요. 말씀해주신 내용을 바탕으로 취향을 분석해 볼게요."
@@ -54,14 +74,15 @@ public class FakeAiChatClient implements AiChatClient {
                 OffsetDateTime.now(ZoneOffset.UTC),
                 OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(30),
                 turn,
-                20,
+                maxTurns,
                 inputLocked,
                 inputLocked,
-                inputLocked ? 100 : 50);
+                Math.min(100, turn * 100 / maxTurns));
     }
 
     @Override
     public AiServerAnalysisResponse createAnalysis(Long conversationRoomId) {
+        pause();
         AiServerAnalysisResponse response = createMockAnalysis(10293L);
         mockAnalyses.put(conversationRoomId, response);
         return response;
@@ -69,6 +90,7 @@ public class FakeAiChatClient implements AiChatClient {
 
     @Override
     public AiServerAnalysisResponse patchAnalyze(Long conversationRoomId, AiServerPatchAnalysisRequest request) {
+        pause();
         AiServerAnalysisResponse response = new AiServerAnalysisResponse(new AiServerAnalysisProfileResponse(
                 request.userId(),
                 request.summary(),
@@ -82,6 +104,7 @@ public class FakeAiChatClient implements AiChatClient {
 
     @Override
     public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId) {
+        pause();
         AiServerAnalysisProfileResponse profile = mockAnalyses.getOrDefault(
                 conversationRoomId, createMockAnalysis(userId)).profile();
         mockAnalyses.remove(conversationRoomId);
@@ -118,6 +141,15 @@ public class FakeAiChatClient implements AiChatClient {
         return keywords.stream()
                 .map(keyword -> new AiServerAnalysisKeywordResponse(keyword, 1.0))
                 .toList();
+    }
+
+    private void pause() {
+        try {
+            Thread.sleep(latency);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("AI mock call was interrupted", exception);
+        }
     }
 
 }

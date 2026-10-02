@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: NeedU load test
+    folder: NeedU
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
