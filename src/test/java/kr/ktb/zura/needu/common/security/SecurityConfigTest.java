@@ -12,12 +12,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "management.endpoints.web.exposure.include=health,metrics")
+@SpringBootTest(properties = "management.endpoints.web.exposure.include=health,metrics,prometheus")
 @AutoConfigureMockMvc
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class SecurityConfigTest {
@@ -141,6 +142,14 @@ class SecurityConfigTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void noAuthentication_findPrometheusMetrics_returnsOk() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(containsString("jvm_")));
     }
 
     @Test
