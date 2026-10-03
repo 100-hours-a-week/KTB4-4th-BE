@@ -1,0 +1,141 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "1. k6 RPS",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(k6_http_reqs_total[$__rate_interval]))", "legendFormat": "requests/s" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "2. k6 p50 / p95 / p99",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "k6_http_req_duration_p50", "legendFormat": "p50 {{name}}" },
+        { "refId": "B", "expr": "k6_http_req_duration_p95", "legendFormat": "p95 {{name}}" },
+        { "refId": "C", "expr": "k6_http_req_duration_p99", "legendFormat": "p99 {{name}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "3. k6 Failures / Dropped Iterations",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "k6_http_req_failed_rate", "legendFormat": "HTTP failure rate" },
+        { "refId": "B", "expr": "1 - k6_checks_rate", "legendFormat": "check failure rate" },
+        { "refId": "C", "expr": "sum(rate(k6_dropped_iterations_total[$__rate_interval]))", "legendFormat": "dropped/s" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "4. Spring Request Throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (method, uri) (rate(http_server_requests_seconds_count[$__rate_interval])) or sum by (method, uri) (rate(http_server_request_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{method}} {{uri}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "5. Spring URI p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, method, uri) (rate(http_server_requests_seconds_bucket[$__rate_interval]))) or histogram_quantile(0.95, sum by (le, method, uri) (rate(http_server_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{method}} {{uri}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "6. Tomcat Threads",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "tomcat_threads_busy_threads", "legendFormat": "busy" },
+        { "refId": "B", "expr": "tomcat_threads_current_threads", "legendFormat": "current" },
+        { "refId": "C", "expr": "tomcat_threads_config_max_threads", "legendFormat": "max" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "7. Hikari Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "hikaricp_connections_active", "legendFormat": "active" },
+        { "refId": "B", "expr": "hikaricp_connections_idle", "legendFormat": "idle" },
+        { "refId": "C", "expr": "hikaricp_connections_pending", "legendFormat": "pending" },
+        { "refId": "D", "expr": "hikaricp_connections_max", "legendFormat": "max" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "8. MySQL Connections / Locks / Slow Statements",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "mysql_global_status_threads_connected", "legendFormat": "connected" },
+        { "refId": "B", "expr": "mysql_global_status_threads_running", "legendFormat": "running" },
+        { "refId": "C", "expr": "rate(mysql_global_status_innodb_row_lock_waits[$__rate_interval])", "legendFormat": "row lock waits/s" },
+        { "refId": "D", "expr": "rate(mysql_global_status_slow_queries[$__rate_interval])", "legendFormat": "slow queries/s" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "9. App CPU",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "100 * process_cpu_usage", "legendFormat": "Micrometer process" },
+        { "refId": "B", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"app\"}[$__rate_interval])) / scalar(max(container_spec_cpu_quota{container_label_com_docker_compose_service=\"app\"} / container_spec_cpu_period{container_label_com_docker_compose_service=\"app\"}))", "legendFormat": "cAdvisor container" }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "10. JVM / Container Memory and GC",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "100 * sum(jvm_memory_used_bytes{area=\"heap\"}) / sum(jvm_memory_max_bytes{area=\"heap\"})", "legendFormat": "JVM heap" },
+        { "refId": "B", "expr": "100 * sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"app\"}) / sum(container_spec_memory_limit_bytes{container_label_com_docker_compose_service=\"app\"})", "legendFormat": "cAdvisor container" },
+        { "refId": "C", "expr": "100 * sum(rate(jvm_gc_pause_seconds_sum[$__rate_interval]))", "legendFormat": "GC pause time" }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["needu", "loadtest"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "NeedU Load Test Overview",
+  "uid": "needu-loadtest",
+  "version": 1
+}

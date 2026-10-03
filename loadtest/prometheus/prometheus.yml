@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: needu-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["app:8080"]
+
+  - job_name: needu-mysql
+    static_configs:
+      - targets: ["mysqld-exporter:9104"]
+
+  - job_name: needu-containers
+    static_configs:
+      - targets: ["cadvisor:8080"]
