@@ -21,6 +21,7 @@ import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -60,7 +61,9 @@ class GiftProductServiceTest {
     private GiftProductService giftProductService;
 
     @Test
+    @DisplayName("조회 결과가 요청 크기보다 많으면 다음 페이지가 존재하고 마지막 상품 기준 커서를 반환한다.")
     void moreItemsThanSize_findAllGiftProducts_returnsHasNextWithLastItemCursor() {
+        //given
         givenFriend(true);
         given(giftProductRepository.findAllByUserIdAndPriceRange(FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
                 .willReturn(List.of(
@@ -70,13 +73,15 @@ class GiftProductServiceTest {
                 ));
         given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
 
+        //when
         ProductCursorPageResponse<GiftProductResponse> response =
                 giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 2));
 
+
+        //then
         assertThat(response.items())
                 .extracting(GiftProductResponse::recommendationId).containsExactly(30L, 20L);
-        assertThat(response.items()).extracting(GiftProductResponse::score)
-                .containsExactly(new BigDecimal("0.900000"), new BigDecimal("0.800000"));
+
         assertThat(response.hasNext()).isTrue();
         GiftProductCursor nextCursor = GiftProductCursor.decode(response.nextCursor());
         assertThat(nextCursor.score()).isEqualByComparingTo("0.800000");
@@ -84,15 +89,41 @@ class GiftProductServiceTest {
     }
 
     @Test
+    @DisplayName("친구 상품 조회는 score 기준 내림차순으로 조회된다")
+    void findAllGiftProducts_Order_By_Score_Desc() {
+        //given
+        givenFriend(true);
+        given(giftProductRepository.findAllByUserIdAndPriceRange(FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
+                .willReturn(List.of(
+                        createGiftProduct(30L, "0.900000", 49000),
+                        createGiftProduct(20L, "0.800000", 39000),
+                        createGiftProduct(10L, "0.700000", 30000)
+                ));
+        given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
+
+        //when
+        ProductCursorPageResponse<GiftProductResponse> response =
+                giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 2));
+
+        //then
+        assertThat(response.items()).extracting(GiftProductResponse::score)
+                .containsExactly(new BigDecimal("0.900000"), new BigDecimal("0.800000"));
+    }
+
+    @Test
+    @DisplayName("다음 페이지가 없으면 커서를 반환하지 않는다")
     void itemsNotExceedingSize_findAllGiftProducts_returnsLastPage() {
+        //given
         givenFriend(true);
         given(giftProductRepository.findAllByUserIdAndPriceRange(FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
                 .willReturn(List.of(createGiftProduct(30L, "0.900000", 49000)));
         given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
 
+        //when
         ProductCursorPageResponse<GiftProductResponse> response =
                 giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 2));
 
+        //then
         GiftProductResponse product = response.items().getFirst();
         assertThat(product.price()).isEqualTo(49000L);
         assertThat(product.matchingKeywords()).containsExactly("미니멀", "데일리");
@@ -101,7 +132,9 @@ class GiftProductServiceTest {
     }
 
     @Test
+    @DisplayName("다음 페이지가 있으면 커서를 반환한다")
     void cursorGiven_findAllGiftProducts_findsItemsAfterCursor() {
+        //given
         givenFriend(true);
         String cursor = new GiftProductCursor(new BigDecimal("0.800000"), 20L).encode();
         given(giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
@@ -109,9 +142,11 @@ class GiftProductServiceTest {
                 .willReturn(List.of(createGiftProduct(10L, "0.700000", 30000)));
         given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
 
+        //when
         ProductCursorPageResponse<GiftProductResponse> response =
                 giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(cursor, 2));
 
+        //then
         assertThat(response.items())
                 .extracting(GiftProductResponse::recommendationId).containsExactly(10L);
         assertThat(response.hasNext()).isFalse();
@@ -119,16 +154,21 @@ class GiftProductServiceTest {
     }
 
     @Test
+    @DisplayName("선물 상품이 없으면 빈 리스트를 반환한다.")
     void noGiftProducts_findAllGiftProducts_returnsEmptyItems() {
+        //given
         givenFriend(true);
         given(giftProductRepository.findAllByUserIdAndPriceRange(FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(21)))
                 .willReturn(List.of());
         given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID))
                 .willReturn(new ProductPriceRange(null, null));
 
+        //when
+
         ProductCursorPageResponse<GiftProductResponse> response =
                 giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 20));
 
+        //then
         assertThat(response.items()).isEmpty();
         assertThat(response.hasNext()).isFalse();
         assertThat(response.nextCursor()).isNull();
@@ -137,9 +177,12 @@ class GiftProductServiceTest {
     }
 
     @Test
+    @DisplayName("최소 가격이 최대 가격보다 크면 COMMON_INVALID_INPUT 예외를 던진다.")
     void minPriceGreaterThanMaxPrice_findAllGiftProducts_throwsInvalidInput() {
+        //given
         GiftProductSearchCondition condition = new GiftProductSearchCondition(50000L, 30000L, null, 20);
 
+        //when & then
         assertThatThrownBy(() -> giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -148,10 +191,13 @@ class GiftProductServiceTest {
     }
 
     @Test
+    @DisplayName("친구가 아닌 사용자의 상품 리스트를 조회하면 404 FRIEND_NOT_FOUND 예외를 던진다.")
     void notFriend_findAllGiftProducts_throwsFriendNotFoundWithoutFindingProducts() {
+        //given
         given(friendService.findFriend(USER_ID, FRIEND_USER_ID))
                 .willThrow(new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
 
+        //when & then
         assertThatThrownBy(() -> giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -160,32 +206,42 @@ class GiftProductServiceTest {
     }
 
     @Test
+    @DisplayName("친구가 취향 분석이 완료하지 않았을 경우 상품 리스트를 조회하면 403 PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN 예외를 던진다.")
     void friendTasteAnalysisNotCompleted_findAllGiftProducts_throwsForbidden() {
+        //given
         givenFriend(false);
 
+        //when & then
         assertThatThrownBy(() -> giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN);
-        verifyNoInteractions(giftProductRepository);
+        verifyNoInteractions(giftProductRepository); //상품조회 자체가 발생하면 안됨!
     }
 
     @Test
+    @DisplayName("유효하지 않은 커서를 입력하면 400 COMMON_INVALID_REQUEST 예외를 던진다.")
     void invalidCursor_findAllGiftProducts_throwsInvalidRequest() {
+        //given
         givenFriend(true);
 
+        //when & then
         assertThatThrownBy(() ->
-                giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition("invalid!!", 20)))
+                giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition("invalid!!", 20)))//유효하지 않은 cursor 값
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.COMMON_INVALID_REQUEST);
-        verifyNoInteractions(giftProductRepository);
+        verifyNoInteractions(giftProductRepository);//커서가 유효하지 않으면 조회 발생 x
     }
 
     @Test
+    @DisplayName("로그인한 유저가 차단 상태일 경우 친구의 추천 상품 조회 시 403 USER_BLOCKED 예외를 던진다.")
     void blockedLoginUser_findAllGiftProducts_throwsUserBlocked() {
+
+        //given
         willThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).given(userService).validateActiveUser(USER_ID);
 
+        //when & then
         assertThatThrownBy(() -> giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition(null, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
