@@ -1,4 +1,4 @@
-package kr.ktb.zura.needu.common.config;
+package kr.ktb.zura.needu.common.openapi;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -23,7 +23,7 @@ public class OpenApiConfig {
                         .title("NeedU API")
                         .version("v1")
                         .description("dev 브랜치 기준으로 자동 생성되는 API 문서"))
-                // 스펙은 CI의 MockMvc에서 생성되므로 요청 URL 대신 로컬 실행 주소를 명시한다.
+                // 스펙은 CI의 MockMvc에서 생성되므로 요청 URL 대신 로컬 실행 주소를 명시
                 .servers(List.of(new Server().url("http://localhost:8080").description("로컬 실행")))
                 .components(new Components().addSecuritySchemes(ACCESS_TOKEN_SCHEME, new SecurityScheme()
                         .type(SecurityScheme.Type.APIKEY)
