@@ -4,13 +4,13 @@ needu:
       friend-list:
         method: GET
         path-pattern: /api/v1/friends
-        limit: 1000
+        limit: 120
         window: 1m
         maximum-size: 100000
       friend-detail:
         method: GET
         path-pattern: /api/v1/friends/{userId}
-        limit: 1000
+        limit: 120
         window: 1m
         maximum-size: 100000
       guidance:
@@ -22,13 +22,13 @@ needu:
       personal-recommendations:
         method: GET
         path-pattern: /api/v1/users/me/personal-recommendations
-        limit: 1000
+        limit: 120
         window: 1m
         maximum-size: 100000
       gift-recommendations:
         method: GET
         path-pattern: /api/v1/users/{userId}/gift-recommendations
-        limit: 1000
+        limit: 120
         window: 1m
         maximum-size: 100000
       ai-message-history:
