@@ -1,0 +1,50 @@
+name: API Docs
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-docs
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Generate & Deploy API Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # H2 테스트 컨텍스트로 /v3/api-docs를 조회해 build/openapi/openapi.json을 만든다.
+      - name: Generate OpenAPI Spec
+        run: ./gradlew test --tests 'kr.ktb.zura.needu.common.config.OpenApiConfigTest' --no-daemon
+
+      - name: Assemble Site
+        run: |
+          mkdir -p build/api-docs-site
+          cp api-docs/index.html api-docs/_headers build/api-docs-site/
+          cp build/openapi/openapi.json build/api-docs-site/
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/api-docs-site --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }} --branch=main --commit-dirty=true

@@ -14,6 +14,8 @@ import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -24,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-// 유일 제약과 flush 순서가 핵심이라 실제 JPA(H2) 위에서 검증한다.
 @DataJpaTest
 @Import(AiChatRoomService.class)
 class AiChatRoomServiceTest {
@@ -50,30 +51,48 @@ class AiChatRoomServiceTest {
     @Autowired
     private EntityManager entityManager;
 
+    @BeforeEach
+    void setUp() {
+        aiMessageRepository.deleteAll();
+        aiChatRoomRepository.deleteAll();
+    }
+
     @Test
+    @DisplayName("기존에 대화방이 존재하지 않던 사용자가 대화방 진입 시 새로운 대화방을 생성한다.")
     void noRoom_findOrReserveRoom_reservesPendingRoom() {
+        // Given: 대화방이 하나도 없던 사용자
+
+        // When
         AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
 
+        // Then
         assertThat(room.getId()).isNotNull();
         assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
         assertThat(room.getActiveUserId()).isEqualTo(USER_ID);
     }
 
     @Test
+    @DisplayName("활성화 되어 있던 기존 방이 존재하면 기존 활성화된 방을 돌려준다.")
     void activeRoomExists_findOrReserveRoom_returnsExistingRoom() {
+        // Given
         AiChatRoom activeRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
         aiChatRoomService.activateRoom(activeRoom.getId(), GREETING, PURGE_AT);
 
+        // When
         AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
 
+        // Then
         assertThat(room.getId()).isEqualTo(activeRoom.getId());
         assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.ACTIVE);
     }
 
     @Test
+    @DisplayName("대화방을 준비하는 중에 다시 대화를 시작하면 거절된다.")
     void recentPendingRoomExists_findOrReserveRoom_throwsConversationStarting() {
+        // Given
         aiChatRoomService.findOrReserveRoom(USER_ID);
 
+        // When, Then
         assertThatThrownBy(() -> aiChatRoomService.findOrReserveRoom(USER_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_STARTING);
