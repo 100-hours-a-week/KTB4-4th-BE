@@ -1,4 +1,4 @@
-package kr.ktb.zura.needu.common.config;
+package kr.ktb.zura.needu.common.openapi;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -15,7 +15,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // 문서 경로는 운영 Security 설정에서 열지 않으므로 필터 없이 스펙만 조회한다.
 // CI(api-docs 워크플로)는 이 테스트가 남긴 파일을 Cloudflare Pages에 배포한다.
-@SpringBootTest(properties = "springdoc.api-docs.enabled=true")
+@SpringBootTest(properties = {
+        "springdoc.api-docs.enabled=true",
+        "springdoc.default-produces-media-type=application/json"
+})
 @AutoConfigureMockMvc(addFilters = false)
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class OpenApiConfigTest {

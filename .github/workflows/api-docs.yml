@@ -34,7 +34,7 @@ jobs:
 
       # H2 테스트 컨텍스트로 /v3/api-docs를 조회해 build/openapi/openapi.json을 만든다.
       - name: Generate OpenAPI Spec
-        run: ./gradlew test --tests 'kr.ktb.zura.needu.common.config.OpenApiConfigTest' --no-daemon
+        run: ./gradlew test --tests 'kr.ktb.zura.needu.common.openapi.OpenApiConfigTest' --no-daemon
 
       - name: Assemble Site
         run: |
