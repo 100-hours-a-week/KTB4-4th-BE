@@ -40,10 +40,10 @@ class GiftProductRepositoryTest {
         saveGiftProduct(OTHER_USER_ID, "0.990000", saveProduct("다른 사용자", "40000.00"));
         entityManager.clear();
 
-        List<GiftProduct> result =
+        List<GiftProductSummary> result =
                 giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId)
+        assertThat(result).extracting(GiftProductSummary::id)
                 .containsExactly(high.getId(), sameScoreSecond.getId(), sameScoreFirst.getId(), low.getId());
     }
 
@@ -55,10 +55,10 @@ class GiftProductRepositoryTest {
         saveGiftProduct(USER_ID, "0.800000", saveProduct("최대 초과", "50001.00"));
         entityManager.clear();
 
-        List<GiftProduct> result =
+        List<GiftProductSummary> result =
                 giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId).containsExactly(maxBoundary.getId(), minBoundary.getId());
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(maxBoundary.getId(), minBoundary.getId());
     }
 
     @Test
@@ -91,10 +91,10 @@ class GiftProductRepositoryTest {
         entityManager.flush();
         entityManager.clear();
 
-        List<GiftProduct> result =
+        List<GiftProductSummary> result =
                 giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId).containsExactly(active.getId());
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(active.getId());
     }
 
     @Test
@@ -105,24 +105,29 @@ class GiftProductRepositoryTest {
         saveGiftProduct(USER_ID, "0.900000", saveProduct("높은 점수", "40000.00"));
         entityManager.clear();
 
-        List<GiftProduct> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
                 USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.500000"), sameScoreSecond.getId(), Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId).containsExactly(sameScoreFirst.getId(), low.getId());
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(sameScoreFirst.getId(), low.getId());
     }
 
     @Test
-    void giftProductsFound_findAllByUserIdAndPriceRange_fetchesProductAndKeywordsTogether() {
-        saveGiftProduct(USER_ID, "0.100000", saveProduct("램프", "40000.00"));
+    void giftProductsFound_findAllByUserIdAndPriceRange_returnsProductFieldsAndKeywords() {
+        Product lamp = saveProduct("램프", "40000.00");
+        GiftProduct saved = saveGiftProduct(USER_ID, "0.100000", lamp);
         entityManager.clear();
 
-        GiftProduct result = giftProductRepository
+        GiftProductSummary result = giftProductRepository
                 .findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(1)).getFirst();
 
-        assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
-                .isLoaded(result, "product")).isTrue();
-        assertThat(result.getProduct().getName()).isEqualTo("램프");
-        assertThat(result.getTasteKeywords()).containsExactly("인테리어", "감성");
+        assertThat(result.id()).isEqualTo(saved.getId());
+        assertThat(result.productId()).isEqualTo(lamp.getId());
+        assertThat(result.productName()).isEqualTo("램프");
+        assertThat(result.category()).isEqualTo("LIVING");
+        assertThat(result.price()).isEqualByComparingTo("40000.00");
+        assertThat(result.score()).isEqualByComparingTo("0.100000");
+        assertThat(result.reason()).isEqualTo("이유");
+        assertThat(result.tasteKeywords()).containsExactly("인테리어", "감성");
     }
 
     private Product saveProduct(String name, String price) {

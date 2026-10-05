@@ -6,7 +6,7 @@ import java.util.Base64;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.product.entity.GiftProduct;
+import kr.ktb.zura.needu.product.repository.GiftProductSummary;
 
 // 정렬 기준(score desc, id desc)의 마지막 값을 불투명한 문자열로 전달해, 클라이언트가 커서 내부 구조에 의존하지 않도록 한다.
 public record GiftProductCursor(BigDecimal score, Long id) {
@@ -14,8 +14,8 @@ public record GiftProductCursor(BigDecimal score, Long id) {
     private static final String DELIMITER = ":";
     private static final int PART_COUNT = 2;
 
-    public static GiftProductCursor from(GiftProduct giftProduct) {
-        return new GiftProductCursor(giftProduct.getScore(), giftProduct.getId());
+    public static GiftProductCursor from(GiftProductSummary giftProduct) {
+        return new GiftProductCursor(giftProduct.score(), giftProduct.id());
     }
 
     public static GiftProductCursor decode(String cursor) {
