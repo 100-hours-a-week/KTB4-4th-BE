@@ -40,10 +40,10 @@ class PersonalProductRepositoryTest {
         savePersonalProduct(OTHER_USER_ID, "0.990000", saveProduct("다른 사용자"));
         entityManager.clear();
 
-        List<PersonalProduct> result =
+        List<PersonalProductSummary> result =
                 personalProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
 
-        assertThat(result).extracting(PersonalProduct::getId)
+        assertThat(result).extracting(PersonalProductSummary::id)
                 .containsExactly(high.getId(), sameScoreSecond.getId(), sameScoreFirst.getId(), low.getId());
     }
 
@@ -67,10 +67,10 @@ class PersonalProductRepositoryTest {
         savePersonalProduct(USER_ID, "0.800000", saveProduct("최대 초과", "50001.00"));
         entityManager.clear();
 
-        List<PersonalProduct> result =
+        List<PersonalProductSummary> result =
                 personalProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
 
-        assertThat(result).extracting(PersonalProduct::getId)
+        assertThat(result).extracting(PersonalProductSummary::id)
                 .containsExactly(maxBoundary.getId(), minBoundary.getId());
     }
 
@@ -104,10 +104,10 @@ class PersonalProductRepositoryTest {
         entityManager.flush();
         entityManager.clear();
 
-        List<PersonalProduct> result =
+        List<PersonalProductSummary> result =
                 personalProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
 
-        assertThat(result).extracting(PersonalProduct::getId).containsExactly(active.getId());
+        assertThat(result).extracting(PersonalProductSummary::id).containsExactly(active.getId());
     }
 
     @Test
@@ -118,24 +118,26 @@ class PersonalProductRepositoryTest {
         savePersonalProduct(USER_ID, "0.900000", saveProduct("높은 점수"));
         entityManager.clear();
 
-        List<PersonalProduct> result = personalProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+        List<PersonalProductSummary> result = personalProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
                 USER_ID, MIN_PRICE, MAX_PRICE,
                 new BigDecimal("0.500000"), sameScoreSecond.getId(), Limit.of(10));
 
-        assertThat(result).extracting(PersonalProduct::getId).containsExactly(sameScoreFirst.getId(), low.getId());
+        assertThat(result).extracting(PersonalProductSummary::id).containsExactly(sameScoreFirst.getId(), low.getId());
     }
 
     @Test
-    void personalProductsFound_findAllByUserIdAndPriceRange_fetchesProductTogether() {
-        savePersonalProduct(USER_ID, "0.100000", saveProduct("램프"));
+    void personalProductsFound_findAllByUserIdAndPriceRange_returnsProductFields() {
+        Product lamp = saveProduct("램프");
+        PersonalProduct saved = savePersonalProduct(USER_ID, "0.100000", lamp);
         entityManager.clear();
 
-        PersonalProduct result = personalProductRepository
+        PersonalProductSummary result = personalProductRepository
                 .findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(1)).getFirst();
 
-        assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
-                .isLoaded(result, "product")).isTrue();
-        assertThat(result.getProduct().getName()).isEqualTo("램프");
+        assertThat(result.id()).isEqualTo(saved.getId());
+        assertThat(result.productId()).isEqualTo(lamp.getId());
+        assertThat(result.productName()).isEqualTo("램프");
+        assertThat(result.score()).isEqualByComparingTo("0.100000");
     }
 
     @Test

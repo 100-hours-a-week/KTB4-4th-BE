@@ -3,8 +3,7 @@ package kr.ktb.zura.needu.product.dto.response;
 import java.math.BigDecimal;
 import java.util.List;
 
-import kr.ktb.zura.needu.product.entity.GiftProduct;
-import kr.ktb.zura.needu.product.entity.Product;
+import kr.ktb.zura.needu.product.repository.GiftProductSummary;
 
 public record GiftProductResponse(
         Long recommendationId,
@@ -19,19 +18,18 @@ public record GiftProductResponse(
         String reason
 ) {
 
-    public static GiftProductResponse from(GiftProduct giftProduct) {
-        Product product = giftProduct.getProduct();
+    public static GiftProductResponse from(GiftProductSummary giftProduct) {
         return new GiftProductResponse(
-                giftProduct.getId(),
-                product.getId(),
-                product.getImageUrl(),
-                product.getPurchaseUrl(),
-                product.getCategory(),
-                product.getName(),
-                toPrice(product.getPrice()),
-                giftProduct.getScore(),
-                toMatchingKeywords(giftProduct.getTasteKeywords()),
-                giftProduct.getReason()
+                giftProduct.id(),
+                giftProduct.productId(),
+                giftProduct.productImageUrl(),
+                giftProduct.purchaseUrl(),
+                giftProduct.category(),
+                giftProduct.productName(),
+                toPrice(giftProduct.price()),
+                giftProduct.score(),
+                toMatchingKeywords(giftProduct.tasteKeywords()),
+                giftProduct.reason()
         );
     }
 

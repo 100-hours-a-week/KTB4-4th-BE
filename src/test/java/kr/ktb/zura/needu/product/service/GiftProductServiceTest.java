@@ -13,12 +13,9 @@ import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
 import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
-import kr.ktb.zura.needu.product.entity.GiftProduct;
-import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
-import kr.ktb.zura.needu.product.type.PlatformType;
-import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
+import kr.ktb.zura.needu.product.repository.GiftProductSummary;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +25,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -265,15 +261,9 @@ class GiftProductServiceTest {
         return new PriceRangeResponse(30000L, 49000L);
     }
 
-    private GiftProduct createGiftProduct(Long id, String score, long price) {
-        Product product = new Product(
-                PlatformType.COUPANG, String.valueOf(id), "상품" + id, "FASHION", null,
-                BigDecimal.valueOf(price), null, null, null);
-        GiftProduct giftProduct = new GiftProduct(
-                FRIEND_USER_ID, product, new BigDecimal(score), null, List.of("미니멀", "데일리"));
-        // ID는 DB에서 생성되므로 단위 테스트에서만 직접 설정한다.
-        ReflectionTestUtils.setField(product, "id", id + 1000);
-        ReflectionTestUtils.setField(giftProduct, "id", id);
-        return giftProduct;
+    private GiftProductSummary createGiftProduct(Long id, String score, long price) {
+        return new GiftProductSummary(
+                id, id + 1000, "상품" + id, null, null, "FASHION",
+                BigDecimal.valueOf(price), new BigDecimal(score), null, List.of("미니멀", "데일리"));
     }
 }

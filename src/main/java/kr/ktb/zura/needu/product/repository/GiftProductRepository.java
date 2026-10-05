@@ -23,16 +23,18 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
     ProductPriceRange findPriceRangeByUserId(@Param("userId") Long userId);
 
     @Query("""
-            select gp
+            select new kr.ktb.zura.needu.product.repository.GiftProductSummary(
+                gp.id, p.id, p.name, p.imageUrl, p.purchaseUrl, p.category, p.price,
+                gp.score, gp.reason, gp.tasteKeywords)
             from GiftProduct gp
-            join fetch gp.product p
+            join gp.product p
             where gp.userId = :userId
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and p.price between :minPrice and :maxPrice
             order by gp.score desc, gp.id desc
             """)
-    List<GiftProduct> findAllByUserIdAndPriceRange(
+    List<GiftProductSummary> findAllByUserIdAndPriceRange(
             @Param("userId") Long userId,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
@@ -40,9 +42,11 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
     );
 
     @Query("""
-            select gp
+            select new kr.ktb.zura.needu.product.repository.GiftProductSummary(
+                gp.id, p.id, p.name, p.imageUrl, p.purchaseUrl, p.category, p.price,
+                gp.score, gp.reason, gp.tasteKeywords)
             from GiftProduct gp
-            join fetch gp.product p
+            join gp.product p
             where gp.userId = :userId
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
@@ -50,7 +54,7 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
               and (gp.score < :score or (gp.score = :score and gp.id < :id))
             order by gp.score desc, gp.id desc
             """)
-    List<GiftProduct> findAllByUserIdAndPriceRangeAfterCursor(
+    List<GiftProductSummary> findAllByUserIdAndPriceRangeAfterCursor(
             @Param("userId") Long userId,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,

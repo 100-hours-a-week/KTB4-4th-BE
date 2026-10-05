@@ -8,8 +8,8 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
-import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
+import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
@@ -32,9 +32,9 @@ public class PersonalProductService {
 
         int size = condition.size();
         // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회한다.
-        List<PersonalProduct> personalProducts = findPersonalProducts(userId, condition, Limit.of(size + 1));
+        List<PersonalProductSummary> personalProducts = findPersonalProducts(userId, condition, Limit.of(size + 1));
         boolean hasNext = personalProducts.size() > size;
-        List<PersonalProduct> pageItems = hasNext ? personalProducts.subList(0, size) : personalProducts;
+        List<PersonalProductSummary> pageItems = hasNext ? personalProducts.subList(0, size) : personalProducts;
 
         String nextCursor = hasNext ? PersonalProductCursor.from(pageItems.getLast()).encode() : null;
         return new ProductCursorPageResponse<>(
@@ -51,7 +51,7 @@ public class PersonalProductService {
         }
     }
 
-    private List<PersonalProduct> findPersonalProducts(
+    private List<PersonalProductSummary> findPersonalProducts(
             Long userId, PersonalProductSearchCondition condition, Limit limit) {
         BigDecimal minPrice = BigDecimal.valueOf(condition.minPrice());
         BigDecimal maxPrice = BigDecimal.valueOf(condition.maxPrice());

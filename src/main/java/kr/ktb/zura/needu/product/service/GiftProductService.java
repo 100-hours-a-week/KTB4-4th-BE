@@ -10,9 +10,9 @@ import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
-import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
+import kr.ktb.zura.needu.product.repository.GiftProductSummary;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
@@ -37,9 +37,9 @@ public class GiftProductService {
 
         int size = condition.size();
         // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회한다.
-        List<GiftProduct> giftProducts = findGiftProducts(friendUserId, condition, Limit.of(size + 1));
+        List<GiftProductSummary> giftProducts = findGiftProducts(friendUserId, condition, Limit.of(size + 1));
         boolean hasNext = giftProducts.size() > size;
-        List<GiftProduct> pageItems = hasNext ? giftProducts.subList(0, size) : giftProducts;
+        List<GiftProductSummary> pageItems = hasNext ? giftProducts.subList(0, size) : giftProducts;
 
         String nextCursor = hasNext ? GiftProductCursor.from(pageItems.getLast()).encode() : null;
         return new ProductCursorPageResponse<>(
@@ -63,7 +63,8 @@ public class GiftProductService {
         }
     }
 
-    private List<GiftProduct> findGiftProducts(Long friendUserId, GiftProductSearchCondition condition, Limit limit) {
+    private List<GiftProductSummary> findGiftProducts(
+            Long friendUserId, GiftProductSearchCondition condition, Limit limit) {
         BigDecimal minPrice = BigDecimal.valueOf(condition.minPrice());
         BigDecimal maxPrice = BigDecimal.valueOf(condition.maxPrice());
         if (condition.cursor() == null) {

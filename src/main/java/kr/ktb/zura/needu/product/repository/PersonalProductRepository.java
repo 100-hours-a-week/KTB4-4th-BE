@@ -23,16 +23,18 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
     ProductPriceRange findPriceRangeByUserId(@Param("userId") Long userId);
 
     @Query("""
-            select pp
+            select new kr.ktb.zura.needu.product.repository.PersonalProductSummary(
+                pp.id, p.id, p.name, p.imageUrl, p.purchaseUrl, p.category, p.price,
+                pp.score, pp.reason)
             from PersonalProduct pp
-            join fetch pp.product p
+            join pp.product p
             where pp.userId = :userId
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and p.price between :minPrice and :maxPrice
             order by pp.score desc, pp.id desc
             """)
-    List<PersonalProduct> findAllByUserIdAndPriceRange(
+    List<PersonalProductSummary> findAllByUserIdAndPriceRange(
             @Param("userId") Long userId,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
@@ -40,9 +42,11 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
     );
 
     @Query("""
-            select pp
+            select new kr.ktb.zura.needu.product.repository.PersonalProductSummary(
+                pp.id, p.id, p.name, p.imageUrl, p.purchaseUrl, p.category, p.price,
+                pp.score, pp.reason)
             from PersonalProduct pp
-            join fetch pp.product p
+            join pp.product p
             where pp.userId = :userId
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
@@ -50,7 +54,7 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
               and p.price between :minPrice and :maxPrice
             order by pp.score desc, pp.id desc
             """)
-    List<PersonalProduct> findAllByUserIdAndPriceRangeAfterCursor(
+    List<PersonalProductSummary> findAllByUserIdAndPriceRangeAfterCursor(
             @Param("userId") Long userId,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
