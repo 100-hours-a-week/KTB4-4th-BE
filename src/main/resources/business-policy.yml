@@ -14,3 +14,9 @@ ai:
     short-completion-cooldown: ${AI_CHAT_SHORT_COMPLETION_COOLDOWN:5m}
     # 같은 대화방의 메시지가 처리 중일 때 클라이언트에 안내할 재시도 시간이다.
     message-retry-after: ${AI_CHAT_MESSAGE_RETRY_AFTER:10s}
+
+needu:
+  product:
+    price-range-cache:
+      ttl: ${PRODUCT_PRICE_RANGE_CACHE_TTL:10m}
+      maximum-size: ${PRODUCT_PRICE_RANGE_CACHE_MAXIMUM_SIZE:100000}

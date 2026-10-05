@@ -19,6 +19,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +43,9 @@ class ProductRecommendationServiceTest {
 
     @Mock
     private GiftProductRepository giftProductRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Captor
     private ArgumentCaptor<List<PersonalProduct>> personalProductsCaptor;
@@ -79,6 +83,7 @@ class ProductRecommendationServiceTest {
         assertThat(savedGift.getProduct()).isSameAs(giftProduct);
         assertThat(savedGift.getReason()).isEqualTo("선물 추천");
         assertThat(savedGift.getTasteKeywords()).containsExactly("캠핑");
+        verify(eventPublisher).publishEvent(new ProductRecommendationsUpdatedEvent(USER_ID));
     }
 
     @Test

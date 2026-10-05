@@ -9,7 +9,6 @@ import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
-import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
@@ -28,6 +27,7 @@ public class GiftProductService {
     private final UserService userService;
     private final FriendService friendService;
     private final GiftProductRepository giftProductRepository;
+    private final ProductPriceRangeCacheService productPriceRangeCacheService;
 
     public ProductCursorPageResponse<GiftProductResponse> findAllGiftProducts(
             Long userId, Long friendUserId, GiftProductSearchCondition condition) {
@@ -44,7 +44,7 @@ public class GiftProductService {
         String nextCursor = hasNext ? GiftProductCursor.from(pageItems.getLast()).encode() : null;
         return new ProductCursorPageResponse<>(
                 pageItems.stream().map(GiftProductResponse::from).toList(),
-                PriceRangeResponse.from(giftProductRepository.findPriceRangeByUserId(friendUserId)),
+                productPriceRangeCacheService.findGiftPriceRange(friendUserId),
                 nextCursor,
                 hasNext
         );

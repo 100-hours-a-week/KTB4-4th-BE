@@ -11,12 +11,12 @@ import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
+import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
-import kr.ktb.zura.needu.product.repository.ProductPriceRange;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
@@ -57,6 +57,9 @@ class GiftProductServiceTest {
     @Mock
     private GiftProductRepository giftProductRepository;
 
+    @Mock
+    private ProductPriceRangeCacheService productPriceRangeCacheService;
+
     @InjectMocks
     private GiftProductService giftProductService;
 
@@ -71,7 +74,7 @@ class GiftProductServiceTest {
                         createGiftProduct(20L, "0.800000", 39000),
                         createGiftProduct(10L, "0.700000", 30000)
                 ));
-        given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
+        given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID)).willReturn(priceRange());
 
         //when
         ProductCursorPageResponse<GiftProductResponse> response =
@@ -99,7 +102,7 @@ class GiftProductServiceTest {
                         createGiftProduct(20L, "0.800000", 39000),
                         createGiftProduct(10L, "0.700000", 30000)
                 ));
-        given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
+        given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID)).willReturn(priceRange());
 
         //when
         ProductCursorPageResponse<GiftProductResponse> response =
@@ -117,7 +120,7 @@ class GiftProductServiceTest {
         givenFriend(true);
         given(giftProductRepository.findAllByUserIdAndPriceRange(FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
                 .willReturn(List.of(createGiftProduct(30L, "0.900000", 49000)));
-        given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
+        given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID)).willReturn(priceRange());
 
         //when
         ProductCursorPageResponse<GiftProductResponse> response =
@@ -140,7 +143,7 @@ class GiftProductServiceTest {
         given(giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
                 FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.800000"), 20L, Limit.of(3)))
                 .willReturn(List.of(createGiftProduct(10L, "0.700000", 30000)));
-        given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID)).willReturn(priceRange());
+        given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID)).willReturn(priceRange());
 
         //when
         ProductCursorPageResponse<GiftProductResponse> response =
@@ -160,8 +163,8 @@ class GiftProductServiceTest {
         givenFriend(true);
         given(giftProductRepository.findAllByUserIdAndPriceRange(FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(21)))
                 .willReturn(List.of());
-        given(giftProductRepository.findPriceRangeByUserId(FRIEND_USER_ID))
-                .willReturn(new ProductPriceRange(null, null));
+        given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID))
+                .willReturn(new PriceRangeResponse(null, null));
 
         //when
 
@@ -187,7 +190,7 @@ class GiftProductServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
-        verifyNoInteractions(userService, friendService, giftProductRepository);
+        verifyNoInteractions(userService, friendService, giftProductRepository, productPriceRangeCacheService);
     }
 
     @Test
@@ -202,7 +205,7 @@ class GiftProductServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
-        verifyNoInteractions(giftProductRepository);
+        verifyNoInteractions(giftProductRepository, productPriceRangeCacheService);
     }
 
     @Test
@@ -216,7 +219,7 @@ class GiftProductServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN);
-        verifyNoInteractions(giftProductRepository); //상품조회 자체가 발생하면 안됨!
+        verifyNoInteractions(giftProductRepository, productPriceRangeCacheService); //상품조회 자체가 발생하면 안됨!
     }
 
     @Test
@@ -231,7 +234,7 @@ class GiftProductServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.COMMON_INVALID_REQUEST);
-        verifyNoInteractions(giftProductRepository);//커서가 유효하지 않으면 조회 발생 x
+        verifyNoInteractions(giftProductRepository, productPriceRangeCacheService);//커서가 유효하지 않으면 조회 발생 x
     }
 
     @Test
@@ -246,7 +249,7 @@ class GiftProductServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(UserErrorCode.USER_BLOCKED);
-        verifyNoInteractions(friendService, giftProductRepository);
+        verifyNoInteractions(friendService, giftProductRepository, productPriceRangeCacheService);
     }
 
     private void givenFriend(boolean tasteAnalysisCompleted) {
@@ -258,8 +261,8 @@ class GiftProductServiceTest {
         return new GiftProductSearchCondition(30000L, 50000L, cursor, size);
     }
 
-    private ProductPriceRange priceRange() {
-        return new ProductPriceRange(BigDecimal.valueOf(30000L), BigDecimal.valueOf(49000L));
+    private PriceRangeResponse priceRange() {
+        return new PriceRangeResponse(30000L, 49000L);
     }
 
     private GiftProduct createGiftProduct(Long id, String score, long price) {
