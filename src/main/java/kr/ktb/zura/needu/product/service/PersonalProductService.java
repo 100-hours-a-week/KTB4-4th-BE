@@ -7,7 +7,6 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
-import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
@@ -24,6 +23,7 @@ public class PersonalProductService {
 
     private final UserService userService;
     private final PersonalProductRepository personalProductRepository;
+    private final ProductPriceRangeCacheService productPriceRangeCacheService;
 
     public ProductCursorPageResponse<PersonalProductResponse> findAllPersonalProducts(
             Long userId, PersonalProductSearchCondition condition) {
@@ -39,7 +39,7 @@ public class PersonalProductService {
         String nextCursor = hasNext ? PersonalProductCursor.from(pageItems.getLast()).encode() : null;
         return new ProductCursorPageResponse<>(
                 pageItems.stream().map(PersonalProductResponse::from).toList(),
-                PriceRangeResponse.from(personalProductRepository.findPriceRangeByUserId(userId)),
+                productPriceRangeCacheService.findPersonalPriceRange(userId),
                 nextCursor,
                 hasNext
         );

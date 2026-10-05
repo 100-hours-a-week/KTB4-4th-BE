@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,7 @@ public class ProductRecommendationService {
     private final ProductRepository productRepository;
     private final PersonalProductRepository personalProductRepository;
     private final GiftProductRepository giftProductRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void saveRecommendations(
@@ -40,6 +42,7 @@ public class ProductRecommendationService {
         List<RecommendedProduct> giftProducts = toRecommendedProducts(gift);
         savePersonalProducts(userId, personalProducts);
         saveGiftProducts(userId, giftProducts, tasteKeywords);
+        eventPublisher.publishEvent(new ProductRecommendationsUpdatedEvent(userId));
     }
 
     private void savePersonalProducts(Long userId, List<RecommendedProduct> recommendedProducts) {
