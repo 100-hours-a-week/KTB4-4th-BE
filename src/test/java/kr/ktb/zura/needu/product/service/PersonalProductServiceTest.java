@@ -122,7 +122,7 @@ class PersonalProductServiceTest {
 
     @Test
     void minPriceGreaterThanMaxPrice_findAllPersonalProducts_throwsInvalidInput() {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(50000L, 30000L, null, 20);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(50000L, 30000L, null, null, 20);
 
         assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .isInstanceOf(BusinessException.class)
@@ -154,7 +154,7 @@ class PersonalProductServiceTest {
     }
 
     private PersonalProductSearchCondition condition(String cursor, int size) {
-        return new PersonalProductSearchCondition(MIN_PRICE.longValue(), MAX_PRICE.longValue(), cursor, size);
+        return new PersonalProductSearchCondition(MIN_PRICE.longValue(), MAX_PRICE.longValue(), null, cursor, size);
     }
 
     private PriceRangeResponse priceRange() {

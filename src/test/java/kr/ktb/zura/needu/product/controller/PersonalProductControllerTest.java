@@ -35,7 +35,7 @@ class PersonalProductControllerTest {
     private static final Long USER_ID = 1L;
     private static final String URL = "/api/v1/users/me/personal-recommendations";
     private static final PersonalProductSearchCondition FIRST_PAGE_CONDITION =
-            new PersonalProductSearchCondition(30000L, 60000L, null, 20);
+            new PersonalProductSearchCondition(30000L, 60000L, null, null, 20);
     private static final PersonalProductResponse LAMP =
             new PersonalProductResponse(
                     5001L,
@@ -46,7 +46,8 @@ class PersonalProductControllerTest {
                     "LIVING",
                     52000L,
                     new BigDecimal("0.900000"),
-                    "미니멀한 취향과 잘 맞아요.");
+                    "미니멀한 취향과 잘 맞아요.",
+                    null);
 
     @Autowired
     private MockMvc mockMvc;
@@ -80,7 +81,7 @@ class PersonalProductControllerTest {
 
     @Test
     void cursorAndSizeGiven_findAllPersonalProducts_passesThemToService() throws Exception {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "cursor", 10);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, null, "cursor", 10);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -99,7 +100,7 @@ class PersonalProductControllerTest {
 
     @Test
     void priceRangeOmitted_findAllPersonalProducts_usesDefaults() throws Exception {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, 20);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, null, 20);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -144,7 +145,7 @@ class PersonalProductControllerTest {
 
     @Test
     void invalidCursor_findAllPersonalProducts_returnsBadRequest() throws Exception {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "invalid", 20);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, null, "invalid", 20);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .willThrow(new BusinessException(CommonErrorCode.COMMON_INVALID_REQUEST));
 

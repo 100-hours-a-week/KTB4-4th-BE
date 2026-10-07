@@ -5,14 +5,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
+import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
+import kr.ktb.zura.needu.user.dto.response.AiSummaryResponse;
+import kr.ktb.zura.needu.user.dto.response.TasteProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
+import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
+import kr.ktb.zura.needu.user.type.TasteProfileStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -44,15 +51,21 @@ class FriendServiceTest {
     }
 
     @Test
-    void friendExists_findFriend_returnsFriendUser() {
-        when(friendRepository.existsByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(true);
+    void friendExists_findFriend_returnsFriendWithTasteProfileAndFavorite() {
+        Friend friend = new Friend(1L, 2L);
+        friend.markAsFavorite();
+        when(friendRepository.findByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(Optional.of(friend));
         when(userService.findUserById(2L))
                 .thenReturn(Optional.of(new UserDetailResponse(
                         2L, "친구", null, true, LocalDate.of(2000, 2, 29))));
+        when(userService.findTasteProfile(2L)).thenReturn(new TasteProfileResponse(
+                TasteProfileStatus.COMPLETED, List.of("미니멀"), List.of("러닝"), AiSummaryResponse.from("러닝을 좋아해요.")));
 
         FriendDetailResponse response = friendService.findFriend(1L, 2L);
 
-        assertThat(response).isEqualTo(new FriendDetailResponse(2L, "친구", null, true, LocalDate.of(2000, 2, 29)));
+        assertThat(response).isEqualTo(new FriendDetailResponse(
+                2L, "친구", null, LocalDate.of(2000, 2, 29), true,
+                List.of("미니멀"), List.of("러닝"), "러닝을 좋아해요.", true));
     }
 
     @Test
@@ -65,12 +78,55 @@ class FriendServiceTest {
 
     @Test
     void missingUser_findFriend_throwsFriendNotFound() {
-        when(friendRepository.existsByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(true);
+        when(friendRepository.findByOwnerUserIdAndFriendUserId(1L, 2L))
+                .thenReturn(Optional.of(new Friend(1L, 2L)));
         when(userService.findUserById(2L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> friendService.findFriend(1L, 2L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
+    }
+
+    @Test
+    void blockedLoginUser_findFriend_throwsUserBlockedWithoutFindingFriend() {
+        doThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).when(userService).validateActiveUser(1L);
+
+        assertThatThrownBy(() -> friendService.findFriend(1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(UserErrorCode.USER_BLOCKED);
+        verify(friendRepository, never()).findByOwnerUserIdAndFriendUserId(1L, 2L);
+    }
+
+    @Test
+    void friendExists_updateFavorite_marksAndUnmarksFavorite() {
+        Friend friend = new Friend(1L, 2L);
+        when(friendRepository.findByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(Optional.of(friend));
+        when(userService.findUserById(2L))
+                .thenReturn(Optional.of(new UserDetailResponse(2L, "친구", null, true, null)));
+
+        FriendFavoriteResponse marked = friendService.updateFavorite(1L, 2L, true);
+        FriendFavoriteResponse markedAgain = friendService.updateFavorite(1L, 2L, true);
+
+        assertThat(marked).isEqualTo(new FriendFavoriteResponse(2L, true));
+        assertThat(markedAgain).isEqualTo(marked);
+        assertThat(friendService.updateFavorite(1L, 2L, false)).isEqualTo(new FriendFavoriteResponse(2L, false));
+        assertThat(friend.isFavorite()).isFalse();
+    }
+
+    @Test
+    void notFriend_updateFavorite_throwsFriendNotFound() {
+        assertThatThrownBy(() -> friendService.updateFavorite(1L, 2L, true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
+    }
+
+    @Test
+    void keywordOverTwentyCharactersAfterStrip_findAllFriends_throwsInvalidInput() {
+        FriendSearchCondition condition = new FriendSearchCondition(null, null, "  " + "가".repeat(21) + "  ", null, 20);
+
+        assertThatThrownBy(() -> friendService.findAllFriends(1L, condition))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
     }
 
     @Test
@@ -82,7 +138,8 @@ class FriendServiceTest {
                 .thenReturn(List.of(first, second, extra));
         when(userService.isKakaoFriendSynced(1L)).thenReturn(true);
 
-        FriendListResponse response = friendService.findAllFriends(1L, null, null, 2);
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition(null, null, null, null, 2));
 
         assertThat(response.items()).containsExactly(first, second);
         assertThat(response.isKakaoFriendSynced()).isTrue();
@@ -98,7 +155,8 @@ class FriendServiceTest {
         when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
                 .thenReturn(List.of(friend));
 
-        FriendListResponse response = friendService.findAllFriends(1L, "birthday", null, 2);
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition("birthday", null, null, null, 2));
 
         assertThat(response.items()).containsExactly(friend);
         assertThat(response.hasNext()).isFalse();

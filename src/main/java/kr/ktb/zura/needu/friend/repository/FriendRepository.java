@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.friend.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import org.springframework.data.domain.Limit;
@@ -12,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 public interface FriendRepository extends JpaRepository<Friend, Long> {
 
     boolean existsByOwnerUserIdAndFriendUserId(Long ownerUserId, Long friendUserId);
+
+    Optional<Friend> findByOwnerUserIdAndFriendUserId(Long ownerUserId, Long friendUserId);
 
     List<Friend> findAllByOwnerUserIdAndFriendUserIdIn(Long ownerUserId, Collection<Long> friendUserIds);
 

@@ -6,16 +6,17 @@ import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.request.GiftProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.GiftProductResponse;
+import kr.ktb.zura.needu.product.dto.response.MyGiftProductResponse;
 import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.GiftProductSummary;
+import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
@@ -179,7 +180,7 @@ class GiftProductServiceTest {
     @DisplayName("최소 가격이 최대 가격보다 크면 COMMON_INVALID_INPUT 예외를 던진다.")
     void minPriceGreaterThanMaxPrice_findAllGiftProducts_throwsInvalidInput() {
         //given
-        GiftProductSearchCondition condition = new GiftProductSearchCondition(50000L, 30000L, null, 20);
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(50000L, 30000L, null, null, 20);
 
         //when & then
         assertThatThrownBy(() -> giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition))
@@ -193,7 +194,7 @@ class GiftProductServiceTest {
     @DisplayName("친구가 아닌 사용자의 상품 리스트를 조회하면 404 FRIEND_NOT_FOUND 예외를 던진다.")
     void notFriend_findAllGiftProducts_throwsFriendNotFoundWithoutFindingProducts() {
         //given
-        given(friendService.findFriend(USER_ID, FRIEND_USER_ID))
+        given(friendService.findFriendUser(USER_ID, FRIEND_USER_ID))
                 .willThrow(new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
 
         //when & then
@@ -248,13 +249,33 @@ class GiftProductServiceTest {
         verifyNoInteractions(friendService, giftProductRepository, productPriceRangeCacheService);
     }
 
+    @Test
+    @DisplayName("내 GiftProduct 목록은 친구 확인 없이 내 추천 상품을 조회하고 만족도는 아직 비어 있다.")
+    void ownGiftProducts_findAllMyGiftProducts_returnsOwnProductsWithoutFriendCheck() {
+        //given
+        given(giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
+                .willReturn(List.of(createGiftProduct(30L, "0.900000", 49000)));
+        given(productPriceRangeCacheService.findGiftPriceRange(USER_ID)).willReturn(priceRange());
+
+        //when
+        ProductCursorPageResponse<MyGiftProductResponse> response =
+                giftProductService.findAllMyGiftProducts(USER_ID, condition(null, 2));
+
+        //then
+        assertThat(response.items()).extracting(MyGiftProductResponse::recommendationId).containsExactly(30L);
+        assertThat(response.items().getFirst().myFeedback()).isNull();
+        assertThat(response.hasNext()).isFalse();
+        verify(userService).validateActiveUser(USER_ID);
+        verifyNoInteractions(friendService);
+    }
+
     private void givenFriend(boolean tasteAnalysisCompleted) {
-        given(friendService.findFriend(USER_ID, FRIEND_USER_ID)).willReturn(
-                new FriendDetailResponse(FRIEND_USER_ID, "친구", null, tasteAnalysisCompleted, null));
+        given(friendService.findFriendUser(USER_ID, FRIEND_USER_ID)).willReturn(
+                new UserDetailResponse(FRIEND_USER_ID, "친구", null, tasteAnalysisCompleted, null));
     }
 
     private GiftProductSearchCondition condition(String cursor, int size) {
-        return new GiftProductSearchCondition(30000L, 50000L, cursor, size);
+        return new GiftProductSearchCondition(30000L, 50000L, null, cursor, size);
     }
 
     private PriceRangeResponse priceRange() {

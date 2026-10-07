@@ -59,11 +59,15 @@ class FriendDetailIntegrationTest {
         mockMvc.perform(get(URL, friend.getId()).with(authenticatedUser(owner.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("친구 정보를 조회했습니다."))
-                .andExpect(jsonPath("$.data.id").value(friend.getId()))
-                .andExpect(jsonPath("$.data.nickname").value("친구"))
+                .andExpect(jsonPath("$.data.userId").value(friend.getId()))
+                .andExpect(jsonPath("$.data.name").value("친구"))
                 .andExpect(jsonPath("$.data.profileImageUrl").isEmpty())
                 .andExpect(jsonPath("$.data.tasteAnalysisCompleted").value(false))
-                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"));
+                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"))
+                .andExpect(jsonPath("$.data.tasteKeywords").isEmpty())
+                .andExpect(jsonPath("$.data.interestKeywords").isEmpty())
+                .andExpect(jsonPath("$.data.interestSummary").isEmpty())
+                .andExpect(jsonPath("$.data.isFavorite").value(false));
     }
 
     @Test

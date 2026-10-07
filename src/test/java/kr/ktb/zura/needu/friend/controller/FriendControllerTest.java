@@ -4,26 +4,33 @@ import java.time.LocalDate;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
+import kr.ktb.zura.needu.friend.service.PokeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +41,7 @@ class FriendControllerTest {
     private static final Long FRIEND_USER_ID = 123L;
     private static final String URL = "/api/v1/friends/{userId}";
     private static final String LIST_URL = "/api/v1/friends";
+    private static final String FAVORITE_URL = "/api/v1/friends/{userId}/favorite";
 
     @Autowired
     private MockMvc mockMvc;
@@ -44,11 +52,14 @@ class FriendControllerTest {
     @MockitoBean
     private KakaoFriendSyncService kakaoFriendSyncService;
 
+    @MockitoBean
+    private PokeService pokeService;
+
     @Test
     void friendsExist_findAllFriends_returnsBirthdayPage() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(
                 FRIEND_USER_ID, "친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29), true);
-        given(friendService.findAllFriends(LOGIN_USER_ID, "birthday", null, 20))
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition("birthday", null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(friend), true, "next", true));
 
         mockMvc.perform(get(LIST_URL)
@@ -68,7 +79,7 @@ class FriendControllerTest {
 
     @Test
     void missingSort_findAllFriends_returnsDefaultNamePage() throws Exception {
-        given(friendService.findAllFriends(LOGIN_USER_ID, null, null, 20))
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(), false, null, false));
 
         mockMvc.perform(get(LIST_URL).param("size", "20").with(authenticatedUser()))
@@ -99,16 +110,59 @@ class FriendControllerTest {
     @Test
     void friendExists_findFriend_returnsFriendUser() throws Exception {
         given(friendService.findFriend(LOGIN_USER_ID, FRIEND_USER_ID))
-                .willReturn(new FriendDetailResponse(FRIEND_USER_ID, "사용자", null, true, LocalDate.of(2000, 2, 29)));
+                .willReturn(new FriendDetailResponse(FRIEND_USER_ID, "사용자", null, LocalDate.of(2000, 2, 29), true,
+                        List.of("미니멀"), List.of("러닝"), "러닝을 좋아해요.", true));
 
         mockMvc.perform(get(URL, FRIEND_USER_ID).with(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("친구 정보를 조회했습니다."))
-                .andExpect(jsonPath("$.data.id").value(123))
-                .andExpect(jsonPath("$.data.nickname").value("사용자"))
+                .andExpect(jsonPath("$.data.userId").value(123))
+                .andExpect(jsonPath("$.data.name").value("사용자"))
                 .andExpect(jsonPath("$.data.profileImageUrl").isEmpty())
                 .andExpect(jsonPath("$.data.tasteAnalysisCompleted").value(true))
-                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"));
+                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"))
+                .andExpect(jsonPath("$.data.tasteKeywords[0]").value("미니멀"))
+                .andExpect(jsonPath("$.data.interestKeywords[0]").value("러닝"))
+                .andExpect(jsonPath("$.data.interestSummary").value("러닝을 좋아해요."))
+                .andExpect(jsonPath("$.data.isFavorite").value(true));
+    }
+
+    @Test
+    void friendExists_updateFavorite_returnsFavoriteState() throws Exception {
+        given(friendService.updateFavorite(LOGIN_USER_ID, FRIEND_USER_ID, true))
+                .willReturn(new FriendFavoriteResponse(FRIEND_USER_ID, true));
+
+        mockMvc.perform(put(FAVORITE_URL, FRIEND_USER_ID)
+                        .with(authenticatedUser())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"isFavorite\": true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("즐겨찾기를 변경했습니다."))
+                .andExpect(jsonPath("$.data.userId").value(123))
+                .andExpect(jsonPath("$.data.isFavorite").value(true));
+    }
+
+    @Test
+    void missingIsFavorite_updateFavorite_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(put(FAVORITE_URL, FRIEND_USER_ID)
+                        .with(authenticatedUser())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).updateFavorite(anyLong(), anyLong(), anyBoolean());
+    }
+
+    @Test
+    void nonBooleanIsFavorite_updateFavorite_returnsBadRequest() throws Exception {
+        mockMvc.perform(put(FAVORITE_URL, FRIEND_USER_ID)
+                        .with(authenticatedUser())
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"isFavorite\": \"yes\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

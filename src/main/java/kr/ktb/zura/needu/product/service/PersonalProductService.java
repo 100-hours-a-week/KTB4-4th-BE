@@ -28,6 +28,7 @@ public class PersonalProductService {
     public ProductCursorPageResponse<PersonalProductResponse> findAllPersonalProducts(
             Long userId, PersonalProductSearchCondition condition) {
         validatePriceRange(condition);
+        validateCategory(condition);
         userService.validateActiveUser(userId);
 
         int size = condition.size();
@@ -48,6 +49,13 @@ public class PersonalProductService {
     private void validatePriceRange(PersonalProductSearchCondition condition) {
         if (condition.minPrice() > condition.maxPrice()) {
             throw new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT);
+        }
+    }
+
+    // TODO: 카테고리 코드를 정한 뒤 없는 코드는 COMMON_INVALID_INPUT, 있는 코드는 조회 조건에 넣을 것
+    private void validateCategory(PersonalProductSearchCondition condition) {
+        if (condition.category() != null) {
+            throw new UnsupportedOperationException("PROD-1 미구현");
         }
     }
 
