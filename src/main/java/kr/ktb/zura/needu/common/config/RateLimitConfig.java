@@ -16,7 +16,7 @@ import org.springframework.core.Ordered;
 @EnableConfigurationProperties(RateLimitProperties.class)
 public class RateLimitConfig {
 
-    // Redis로 전환할 때는 이 Bean만 Redis 구현체로 교체
+    // TODO: RedisRateLimitCounter 구현 후 이 Bean만 교체
     @Bean
     public RateLimitCounter rateLimitCounter(RateLimitProperties properties) {
         return new CaffeineRateLimitCounter(properties);
