@@ -5,7 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.user.dto.response.AiSummaryResponse;
+import kr.ktb.zura.needu.user.dto.response.MyPageResponse;
+import kr.ktb.zura.needu.user.dto.response.MyProfileResponse;
+import kr.ktb.zura.needu.user.dto.response.TasteProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
@@ -15,11 +20,13 @@ import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.repository.UserTasteProfileRepository;
 import kr.ktb.zura.needu.user.type.Gender;
+import kr.ktb.zura.needu.user.type.TasteProfileStatus;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
@@ -65,6 +72,22 @@ public class UserService {
         return UserSummaryResponse.from(user);
     }
 
+    public MyPageResponse findMyPage(Long userId) {
+        User user = findUser(userId);
+        validateActiveUser(user);
+        return new MyPageResponse(MyProfileResponse.from(user), findTasteProfile(user));
+    }
+
+    public TasteProfileResponse findTasteProfile(Long userId) {
+        return findTasteProfile(findUser(userId));
+    }
+
+    public boolean isOnboardingCompleted(Long userId) {
+        User user = findUser(userId);
+        validateLoginAvailableUser(user);
+        return user.isOnboardingCompleted();
+    }
+
     public Optional<UserDetailResponse> findUserById(Long userId) {
         return userRepository.findById(userId)
                 .filter(User::isActive)
@@ -100,6 +123,31 @@ public class UserService {
         profile.updateAnalysis(summary, toJson(tastes), toJson(interests));
         userTasteProfileRepository.save(profile);
         user.completeTasteAnalysis();
+    }
+
+    private TasteProfileResponse findTasteProfile(User user) {
+        if (!user.isTasteAnalysisCompleted()) {
+            return TasteProfileResponse.notStarted();
+        }
+        return userTasteProfileRepository.findById(user.getId())
+                .map(profile -> new TasteProfileResponse(
+                        TasteProfileStatus.COMPLETED,
+                        toKeywords(profile.getRecentTastes()),
+                        toKeywords(profile.getRecentInterests()),
+                        AiSummaryResponse.from(profile.getAiSummary())))
+                .orElseGet(TasteProfileResponse::notStarted);
+    }
+
+    private List<String> toKeywords(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return jsonMapper.readValue(json, new TypeReference<List<String>>() {
+            });
+        } catch (JacksonException e) {
+            throw new IllegalStateException("Failed to deserialize taste analysis keywords.", e);
+        }
     }
 
     private String toJson(List<String> values) {

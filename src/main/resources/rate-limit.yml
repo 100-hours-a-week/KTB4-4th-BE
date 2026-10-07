@@ -25,6 +25,12 @@ needu:
         limit: 120
         window: 1m
         maximum-size: 100000
+      my-gift-recommendations:
+        method: GET
+        path-pattern: /api/v1/users/me/gift-recommendations
+        limit: 120
+        window: 1m
+        maximum-size: 100000
       gift-recommendations:
         method: GET
         path-pattern: /api/v1/users/{userId}/gift-recommendations
@@ -71,5 +77,137 @@ needu:
         method: POST
         path-pattern: /api/v1/ai/conversations/{conversationId}/confirm
         limit: 5
+        window: 1m
+        maximum-size: 100000
+      friend-favorite:
+        method: PUT
+        path-pattern: /api/v1/friends/{userId}/favorite
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      notification-summary:
+        method: GET
+        path-pattern: /api/v1/notifications/summary
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      notification-list:
+        method: GET
+        path-pattern: /api/v1/notifications
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      notification-read:
+        method: PATCH
+        path-pattern: /api/v1/notifications/{notificationId}
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      notification-delete:
+        method: DELETE
+        path-pattern: /api/v1/notifications/{notificationId}
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      my-page:
+        method: GET
+        path-pattern: /api/v1/users/me
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      withdrawal:
+        method: DELETE
+        path-pattern: /api/v1/users/me
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      notification-setting-find:
+        method: GET
+        path-pattern: /api/v1/users/me/settings/notifications
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      notification-setting-update:
+        method: PATCH
+        path-pattern: /api/v1/users/me/settings/notifications
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      gift-preference-find:
+        method: GET
+        path-pattern: /api/v1/users/me/gift-preferences
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      gift-preference-update:
+        method: PUT
+        path-pattern: /api/v1/users/me/gift-preferences
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      onboarding-find:
+        method: GET
+        path-pattern: /api/v1/users/me/onboarding
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      onboarding-complete:
+        method: PUT
+        path-pattern: /api/v1/users/me/onboarding
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      consent-find:
+        method: GET
+        path-pattern: /api/v1/users/me/consents
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      consent-update:
+        method: PUT
+        path-pattern: /api/v1/users/me/consents
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      push-subscription-create:
+        method: POST
+        path-pattern: /api/v1/users/me/push-subscriptions
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      push-subscription-delete:
+        method: DELETE
+        path-pattern: /api/v1/users/me/push-subscriptions
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      product-categories:
+        method: GET
+        path-pattern: /api/v1/products/categories
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      product-detail:
+        method: GET
+        path-pattern: /api/v1/products/{productId}
+        limit: 120
+        window: 1m
+        maximum-size: 100000
+      product-feedback:
+        method: PUT
+        path-pattern: /api/v1/products/{productId}/feedback
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      product-link-clicks:
+        method: POST
+        path-pattern: /api/v1/analytics/product-link-clicks
+        limit: 30
+        window: 1m
+        maximum-size: 100000
+      purchase-checks:
+        method: POST
+        path-pattern: /api/v1/purchase-checks/{purchaseCheckId}
+        limit: 30
         window: 1m
         maximum-size: 100000

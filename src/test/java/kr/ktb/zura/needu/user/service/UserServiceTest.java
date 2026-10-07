@@ -2,15 +2,19 @@ package kr.ktb.zura.needu.user.service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.user.dto.response.MyPageResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.entity.UserTasteProfile;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.repository.UserTasteProfileRepository;
+import kr.ktb.zura.needu.user.type.AiSummaryStatus;
 import kr.ktb.zura.needu.user.type.Gender;
+import kr.ktb.zura.needu.user.type.TasteProfileStatus;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +26,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -246,6 +252,56 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         assertTrue(userService.findUserById(1L).isEmpty());
+    }
+
+    @Test
+    void tasteAnalysisCompleted_findMyPage_returnsKeywordsAndSummary() {
+        User user = new User(42L, "니듀", "https://example.com/profile.jpg", Gender.NONE, LocalDate.of(2000, 1, 1));
+        user.completeTasteAnalysis();
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        profile.updateAnalysis("홈카페를 좋아해요.", "[\"미니멀\",\"홈카페\"]", "[\"야구\"]");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(user.getId())).thenReturn(Optional.of(profile));
+
+        MyPageResponse response = userService.findMyPage(1L);
+
+        assertEquals("니듀", response.user().name());
+        assertEquals(LocalDate.of(2000, 1, 1), response.user().birthDate());
+        assertEquals(TasteProfileStatus.COMPLETED, response.tasteProfile().analysisStatus());
+        assertEquals(List.of("미니멀", "홈카페"), response.tasteProfile().preferenceKeywords());
+        assertEquals(List.of("야구"), response.tasteProfile().interestKeywords());
+        assertEquals(AiSummaryStatus.READY, response.tasteProfile().aiSummary().status());
+        assertEquals("홈카페를 좋아해요.", response.tasteProfile().aiSummary().content());
+    }
+
+    @Test
+    void tasteAnalysisNotStarted_findMyPage_returnsEmptyTasteProfile() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+
+        MyPageResponse response = userService.findMyPage(1L);
+
+        assertEquals(TasteProfileStatus.NOT_STARTED, response.tasteProfile().analysisStatus());
+        assertTrue(response.tasteProfile().preferenceKeywords().isEmpty());
+        assertEquals(AiSummaryStatus.NOT_READY, response.tasteProfile().aiSummary().status());
+        assertNull(response.tasteProfile().aiSummary().content());
+    }
+
+    @Test
+    void onboardingUser_findMyPage_throwsOnboardingRequired() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createOnboardingUser()));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> userService.findMyPage(1L));
+
+        assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
+    void onboardingUser_isOnboardingCompleted_returnsFalseWithoutThrowing() {
+        User user = createOnboardingUser();
+        ReflectionTestUtils.setField(user, "onboardingCompleted", false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertFalse(userService.isOnboardingCompleted(1L));
     }
 
     private User createOnboardingUser() {
