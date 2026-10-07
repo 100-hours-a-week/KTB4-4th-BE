@@ -22,13 +22,19 @@ public class AiChatControllerDocs implements ControllerDocs {
         return List.of(
                 OperationDoc.of(AiChatController.class, "startOrResumeConversation")
                         .successStatus(HttpStatus.CREATED, HttpStatus.OK)
+                        .errors(AiChatErrorCode.AICHAT_CONSENT_REQUIRED)
                         .errors(AiChatErrorCode.AICHAT_CONVERSATION_STARTING, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
                         .build(),
                 OperationDoc.of(AiChatController.class, "findAllMessages")
                         .errors(CONVERSATION_ACCESS_ERRORS)
                         .build(),
+                OperationDoc.of(AiChatController.class, "connectStream")
+                        .errors(CONVERSATION_ACCESS_ERRORS)
+                        .errors(AiChatErrorCode.AICHAT_INPUT_LOCKED)
+                        .build(),
                 OperationDoc.of(AiChatController.class, "sendMessage")
                         .errors(CONVERSATION_ACCESS_ERRORS)
+                        .errors(AiChatErrorCode.AICHAT_CONSENT_REQUIRED)
                         .errors(AiChatErrorCode.AICHAT_INPUT_LOCKED, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
                         .build(),
                 OperationDoc.of(AiChatController.class, "createAnalysis")

@@ -17,6 +17,7 @@ import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequiredArgsConstructor
@@ -60,6 +62,15 @@ public class AiChatController {
                 AiChatResponseMessages.MESSAGES_FOUND,
                 aiChatFacade.findAllMessages(userId, conversationId, cursor, size)
         ));
+    }
+
+    // 연결 전 오류 => HTTP 오류로, 연결 후 오류 => error 이벤트로
+    @GetMapping(value = "/{conversationId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> connectStream(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long conversationId
+    ) {
+        return ResponseEntity.ok(aiChatFacade.connectStream(userId, conversationId));
     }
 
     @PostMapping("/{conversationId}/messages")
