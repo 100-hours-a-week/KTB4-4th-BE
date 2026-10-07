@@ -32,6 +32,8 @@ dependencies {
     implementation 'io.awspring.cloud:spring-cloud-aws-starter'
     implementation 'io.micrometer:micrometer-registry-cloudwatch2'
     implementation 'com.github.ben-manes.caffeine:caffeine'
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:7.10.1'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.10.1'
     // API 스펙(JSON)만 생성. Swagger UI는 CI가 Cloudflare Pages에 따로 배포
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.1.1'
     compileOnly 'org.projectlombok:lombok'

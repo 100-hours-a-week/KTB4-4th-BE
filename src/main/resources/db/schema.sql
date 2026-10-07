@@ -16,6 +16,18 @@
 SET NAMES utf8mb4;
 
 -- ---------------------------------------------------------------------------
+-- common
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS shedlock (
+    name        VARCHAR(64)  NOT NULL,
+    lock_until DATETIME(6)  NOT NULL,
+    locked_at  DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    locked_by  VARCHAR(255) NOT NULL,
+    PRIMARY KEY (name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
 -- user
 -- ---------------------------------------------------------------------------
 
