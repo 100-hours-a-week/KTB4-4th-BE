@@ -39,6 +39,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 // AI 서버 호출과 DB 저장을 서로 다른 트랜잭션으로 나눠야 함 => 이 클래스는 트랜잭션을 시작하지 않음
 @Slf4j
@@ -112,6 +113,13 @@ public class AiChatFacade {
         }
 
         return aiMessageService.findAllMessages(conversationId, cursor, size);
+    }
+
+    // TODO: 연결 전에 소유자-상태를 검증하고(403, 404, 409 입력 잠김, 410 만료) 대화방 단위 emitter를 등록
+    //  연결 직후 connected(status, inputLocked, generating, pendingUserMessageId)를 보내고,
+    //  턴마다 accepted → delta → completed(또는 error) → done을 보내게 구현. AI 서버 스트리밍 규격이 먼저 필요
+    public SseEmitter connectStream(Long userId, Long conversationId) {
+        throw new UnsupportedOperationException("AI 대화 스트림 연결 미구현");
     }
 
     public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
