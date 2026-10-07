@@ -6,6 +6,7 @@ import kr.ktb.zura.needu.common.openapi.OperationDoc;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -28,6 +29,24 @@ public class ProductControllerDocs implements ControllerDocs {
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(FriendErrorCode.FRIEND_NOT_FOUND,
                                 ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN)
+                        .build(),
+                OperationDoc.of(MyGiftProductController.class, "findAllMyGiftProducts")
+                        .errors(ACTIVE_USER_ERRORS)
+                        .build(),
+                OperationDoc.of(ProductController.class, "findProduct")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
+                                ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN,
+                                ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND, FriendErrorCode.FRIEND_NOT_FOUND)
+                        .build(),
+                OperationDoc.of(ProductController.class, "updateFeedback")
+                        .errors(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND)
+                        .build(),
+                OperationDoc.of(ProductLinkClickController.class, "createLinkClick")
+                        .successStatus(HttpStatus.NO_CONTENT)
+                        .build(),
+                OperationDoc.of(PurchaseCheckController.class, "answerPurchaseCheck")
+                        .errors(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND,
+                                ProductErrorCode.PURCHASE_CHECK_ALREADY_ANSWERED)
                         .build()
         );
     }
