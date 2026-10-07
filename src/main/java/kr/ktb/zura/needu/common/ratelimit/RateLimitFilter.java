@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +37,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                            ErrorResponseWriter errorResponseWriter) {
         this.rules = properties.policies().entrySet().stream()
                 .map(entry -> RateLimitRule.from(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(RateLimitRule::pathPattern, PathPattern.SPECIFICITY_COMPARATOR))
                 .toList();
         this.rateLimitCounter = rateLimitCounter;
         this.errorResponseWriter = errorResponseWriter;

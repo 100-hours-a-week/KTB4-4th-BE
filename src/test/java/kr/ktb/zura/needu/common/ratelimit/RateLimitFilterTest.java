@@ -125,6 +125,26 @@ class RateLimitFilterTest {
         assertThat(sendRequests(PATH, "GET", LIMIT + 1)).isEqualTo(HttpStatus.OK.value());
     }
 
+    @Test
+    void overlappingPathPatterns_doFilter_appliesMostSpecificPolicy() throws Exception {
+        RateLimitProperties properties = new RateLimitProperties(Map.of(
+                "gift-recommendations", new RateLimitProperties.Policy(
+                        HttpMethod.GET, "/api/v1/users/{userId}/gift-recommendations", LIMIT + 10, WINDOW, MAXIMUM_SIZE),
+                "my-gift-recommendations", new RateLimitProperties.Policy(
+                        HttpMethod.GET, "/api/v1/users/me/gift-recommendations", LIMIT, WINDOW, MAXIMUM_SIZE)
+        ));
+        rateLimitFilter = new RateLimitFilter(
+                properties,
+                new CaffeineRateLimitCounter(properties, nanoTime::get),
+                new ErrorResponseWriter(JsonMapper.builder().build()));
+        authenticate(USER_ID);
+
+        assertThat(sendRequests("/api/v1/users/321/gift-recommendations", "GET", LIMIT + 1))
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(sendRequests("/api/v1/users/me/gift-recommendations", "GET", LIMIT + 1))
+                .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    }
+
     private int sendRequests(String path, String method, long count) throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
         for (int i = 0; i < count; i++) {
