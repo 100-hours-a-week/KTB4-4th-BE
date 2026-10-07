@@ -27,11 +27,13 @@ public class PersonalProductController {
             @AuthenticationPrincipal Long userId,
             @RequestParam(defaultValue = "0") @PositiveOrZero long minPrice,
             @RequestParam(defaultValue = "99999999") @PositiveOrZero long maxPrice,
+            @RequestParam(required = false) String category,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = PersonalProductPageLimits.DEFAULT_PAGE_SIZE)
             @Min(PersonalProductPageLimits.MIN_PAGE_SIZE) @Max(PersonalProductPageLimits.MAX_PAGE_SIZE) int size
     ) {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(minPrice, maxPrice, cursor, size);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(
+                minPrice, maxPrice, category, cursor, size);
         return ResponseEntity.ok(ProductCursorApiResponse.of(
                 ProductResponseMessages.PERSONAL_PRODUCTS_FOUND,
                 personalProductService.findAllPersonalProducts(userId, condition)

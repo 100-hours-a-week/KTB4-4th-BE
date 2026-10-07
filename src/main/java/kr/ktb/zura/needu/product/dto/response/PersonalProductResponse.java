@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.product.dto.response;
 import java.math.BigDecimal;
 
 import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 
 public record PersonalProductResponse(
         Long recommendationId,
@@ -13,8 +14,10 @@ public record PersonalProductResponse(
         String category,
         Long price,
         BigDecimal score,
-        String reason) {
+        String reason,
+        ProductFeedbackType myFeedback) {
 
+    // TODO: 만족도 테이블을 추가한 뒤 myFeedback을 채우고 DISLIKE 상품은 목록에서 뺄 것
     public static PersonalProductResponse from(PersonalProductSummary personalProduct) {
         return new PersonalProductResponse(
                 personalProduct.id(),
@@ -25,7 +28,8 @@ public record PersonalProductResponse(
                 personalProduct.category(),
                 toPrice(personalProduct.price()),
                 personalProduct.score(),
-                personalProduct.reason()
+                personalProduct.reason(),
+                null
         );
     }
 

@@ -38,7 +38,7 @@ class GiftProductControllerTest {
     private static final Long FRIEND_USER_ID = 123L;
     private static final String URL = "/api/v1/users/{userId}/gift-recommendations";
     private static final GiftProductSearchCondition FIRST_PAGE_CONDITION =
-            new GiftProductSearchCondition(30000L, 50000L, null, 20);
+            new GiftProductSearchCondition(30000L, 50000L, null, null, 20);
     private static final GiftProductResponse CROSS_BAG = new GiftProductResponse(
             101L, 1001L, "https://example.com/products/1001.jpg", "https://example.com/products/1001",
             "FASHION", "미니 크로스백", 49000L,
@@ -95,7 +95,7 @@ class GiftProductControllerTest {
 
     @Test
     void cursorGiven_findAllGiftProducts_passesConditionToService() throws Exception {
-        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "cursor", 10);
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, null, "cursor", 10);
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -113,7 +113,7 @@ class GiftProductControllerTest {
 
     @Test
     void priceRangeOmitted_findAllGiftProducts_usesDefaults() throws Exception {
-        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, 20);
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, null, 20);
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -127,16 +127,19 @@ class GiftProductControllerTest {
     }
 
     @Test
-    void sizeMissing_findAllGiftProducts_returnsBadRequest() throws Exception {
+    void sizeMissing_findAllGiftProducts_usesDefaultSize() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, null, null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
+
         mockMvc.perform(get(URL, FRIEND_USER_ID)
                         .param("minPrice", "30000")
                         .param("maxPrice", "50000")
                         .with(authenticatedUser()))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(status().isOk());
 
-        verify(giftProductService, never()).findAllGiftProducts(anyLong(), anyLong(), any());
+        verify(giftProductService).findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition);
     }
 
     @Test

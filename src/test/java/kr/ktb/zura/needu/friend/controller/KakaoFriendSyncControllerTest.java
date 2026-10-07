@@ -4,6 +4,7 @@ import java.net.URI;
 import kr.ktb.zura.needu.common.exception.GlobalExceptionHandler;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
+import kr.ktb.zura.needu.friend.service.PokeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpSession;
@@ -28,7 +29,7 @@ class KakaoFriendSyncControllerTest {
     void setUp() {
         syncService = mock(KakaoFriendSyncService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new FriendController(mock(FriendService.class), syncService))
+                        new FriendController(mock(FriendService.class), syncService, mock(PokeService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
