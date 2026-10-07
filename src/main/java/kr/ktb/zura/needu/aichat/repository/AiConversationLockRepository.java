@@ -18,4 +18,7 @@ public class AiConversationLockRepository {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
     }
+
+    // TODO: SET NX와 TTL로 락 획득
+    // TODO: Lua로 ownerToken 확인 후 락 해제
 }
