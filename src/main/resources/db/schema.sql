@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS user_taste_profiles (
     CONSTRAINT fk_user_taste_profiles_user FOREIGN KEY (user_id) REFERENCES users (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- 사용자 동의·철회 이력. 수정 없이 쌓기만 하고 항목별 가장 최근 행이 현재 상태다
+-- 동의 항목(제목, 내용, 필수 여부, 버전)은 코드(ConsentType)로 관리해 테이블이 없다
+CREATE TABLE IF NOT EXISTS user_consents (
+    id           BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id      BIGINT      NOT NULL,
+    consent_type VARCHAR(50) NOT NULL COMMENT 'PRIVACY_COLLECTION, AI_CONVERSATION, FRIEND_TASTE_SHARING, PRODUCT_ACTIVITY',
+    version      VARCHAR(20) NOT NULL COMMENT '동의 당시의 ConsentType.version',
+    agreed       TINYINT(1)  NOT NULL,
+    created_at   DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    -- 사용자·항목별 최신 이력(order by id desc)을 찾는다
+    KEY idx_user_consents_user_id_consent_type_id (user_id, consent_type, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- auth
 -- ---------------------------------------------------------------------------
