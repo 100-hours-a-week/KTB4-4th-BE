@@ -61,7 +61,7 @@ class AuthControllerTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(1L, null));
         when(authService.findSession(1L)).thenReturn(new AuthSessionResponse(
-                new SessionUserResponse(1L, "사용자", null), LocalDate.of(2000, 1, 1)));
+                new SessionUserResponse(1L, "사용자", null, false), LocalDate.of(2000, 1, 1)));
 
         mockMvc.perform(get("/api/v1/auth/session"))
                 .andExpect(status().isOk())
@@ -69,6 +69,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.user.id").value(1L))
                 .andExpect(jsonPath("$.data.user.nickname").value("사용자"))
                 .andExpect(jsonPath("$.data.user.profileImageUrl").isEmpty())
+                .andExpect(jsonPath("$.data.user.onboardingCompleted").value(false))
                 .andExpect(jsonPath("$.data.birthday").value("2000-01-01"));
     }
 
