@@ -16,11 +16,11 @@ class NotificationPubSubConfigTest {
         RedisMessageListenerContainer container = mock(RedisMessageListenerContainer.class);
         NotificationEventSubscriber subscriber = mock(NotificationEventSubscriber.class);
 
-        new NotificationPubSubConfig(container, subscriber, new RedisKeyGenerator("needu:test"));
+        new NotificationPubSubConfig(container, subscriber, new RedisKeyGenerator("backend:test"));
 
         verify(container).addMessageListener(
                 subscriber,
-                new ChannelTopic("needu:test:notification:events")
+                new ChannelTopic("backend:test:notification:events")
         );
     }
 }
