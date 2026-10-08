@@ -249,6 +249,54 @@ CREATE TABLE IF NOT EXISTS gift_recommendations (
     CONSTRAINT fk_gift_recommendations_product FOREIGN KEY (product_id) REFERENCES products (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- 추천 상품 만족도. 선택을 취소하면 deleted_at을 채우고, 다시 선택하면 같은 행을 되살린다
+CREATE TABLE IF NOT EXISTS product_feedbacks (
+    id            BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id       BIGINT      NOT NULL,
+    product_id    BIGINT      NOT NULL,
+    context       VARCHAR(20) NOT NULL COMMENT 'PERSONAL, MY_GIFT',
+    feedback_type VARCHAR(20) NOT NULL COMMENT 'LIKE, DISLIKE',
+    created_at    DATETIME(6) NOT NULL,
+    updated_at    DATETIME(6) NOT NULL,
+    deleted_at    DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_product_feedbacks_user_product_context (user_id, product_id, context),
+    CONSTRAINT fk_product_feedbacks_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 외부 상품 링크 클릭 기록. 구매 확인의 대상이 된다
+-- 같은 (user, product, context) 클릭이 최근 7일 안에 있으면 새 행을 만들지 않아, 행 하나가 구매 확인 하나가 된다
+CREATE TABLE IF NOT EXISTS product_link_clicks (
+    id                BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id           BIGINT      NOT NULL,
+    product_id        BIGINT      NOT NULL,
+    context           VARCHAR(20) NOT NULL COMMENT 'PERSONAL, MY_GIFT, FRIEND_GIFT',
+    friend_user_id    BIGINT      NULL COMMENT 'FRIEND_GIFT일 때만 있다',
+    created_at        DATETIME(6) NOT NULL,
+    updated_at        DATETIME(6) NOT NULL,
+    deleted_at        DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    -- 하루 한 번 도는 구매 확인 스케줄러가 7일이 지난 클릭을 시간순으로 훑는다
+    KEY idx_product_link_clicks_created_at (created_at),
+    -- 클릭 저장 전 최근 7일 안의 같은 클릭 존재 여부 확인
+    KEY idx_product_link_clicks_user_product_context_created_at (user_id, product_id, context, created_at),
+    CONSTRAINT fk_product_link_clicks_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS purchase_checks (
+    id                    BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id               BIGINT      NOT NULL,
+    product_link_click_id BIGINT      NOT NULL,
+    purchased             TINYINT(1)  NULL COMMENT '답하기 전에는 NULL',
+    answered_at           DATETIME(6) NULL,
+    created_at            DATETIME(6) NOT NULL,
+    version               BIGINT      NOT NULL COMMENT '낙관적 락(@Version)',
+    PRIMARY KEY (id),
+    -- 같은 클릭으로 구매 확인이 두 번 만들어지지 않도록 막는다
+    UNIQUE KEY uk_purchase_checks_product_link_click_id (product_link_click_id),
+    CONSTRAINT fk_purchase_checks_product_link_click FOREIGN KEY (product_link_click_id) REFERENCES product_link_clicks (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- feedback
 -- ---------------------------------------------------------------------------
