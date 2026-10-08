@@ -8,10 +8,10 @@ class RedisKeyGeneratorTest {
 
     @Test
     void multipleIdentifiers_generatesColonSeparatedKey() {
-        RedisKeyGenerator generator = new RedisKeyGenerator("needu:test");
+        RedisKeyGenerator generator = new RedisKeyGenerator("backend:test");
 
         String key = generator.generate("aichat", "idempotency", 41L, "message-id");
 
-        assertEquals("needu:test:aichat:idempotency:41:message-id", key);
+        assertEquals("backend:test:aichat:idempotency:41:message-id", key);
     }
 }
