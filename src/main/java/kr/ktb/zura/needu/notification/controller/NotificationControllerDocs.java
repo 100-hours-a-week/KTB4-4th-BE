@@ -36,7 +36,7 @@ public class NotificationControllerDocs implements ControllerDocs {
                                 new RetryAfterResponse(EXAMPLE_RETRY_AFTER_SECONDS))
                         .errors(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
                         .build(),
-                OperationDoc.of(NotificationSettingController.class, "findNotificationSetting")
+                OperationDoc.of(NotificationSettingController.class, "findAllNotificationSettings")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
                 OperationDoc.of(PushSubscriptionController.class, "unsubscribe")

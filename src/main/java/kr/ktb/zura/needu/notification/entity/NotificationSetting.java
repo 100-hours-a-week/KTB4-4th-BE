@@ -1,45 +1,48 @@
 package kr.ktb.zura.needu.notification.entity;
 
+import static lombok.AccessLevel.PROTECTED;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
-
+import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import static lombok.AccessLevel.PROTECTED;
-
-// 사용자당 한 행. 저장한 적 없는 사용자는 행이 없고 Service가 기본값을 내려준다
 @Getter
 @Entity
-@Table(name = "notification_settings")
+@Table(
+        name = "notification_settings",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_notification_settings_user_type",
+                columnNames = {"user_id", "setting_type"}
+        )
+)
 @NoArgsConstructor(access = PROTECTED)
 public class NotificationSetting {
 
-    private static final boolean DEFAULT_FRIEND_JOINED = true;
-    private static final boolean DEFAULT_FRIEND_BIRTHDAY = true;
-    private static final boolean DEFAULT_ANNIVERSARY_EVENT = true;
-    private static final boolean DEFAULT_MARKETING = false;
-
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
     private Long userId;
 
-    @Column(nullable = false)
-    private boolean friendJoined;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "setting_type", nullable = false, length = 30)
+    private NotificationSettingType type;
 
     @Column(nullable = false)
-    private boolean friendBirthday;
-
-    @Column(nullable = false)
-    private boolean anniversaryEvent;
-
-    @Column(nullable = false)
-    private boolean marketing;
+    private boolean enabled;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -49,31 +52,17 @@ public class NotificationSetting {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    private NotificationSetting(Long userId) {
+    private NotificationSetting(Long userId, NotificationSettingType type, boolean enabled) {
         this.userId = userId;
-        this.friendJoined = DEFAULT_FRIEND_JOINED;
-        this.friendBirthday = DEFAULT_FRIEND_BIRTHDAY;
-        this.anniversaryEvent = DEFAULT_ANNIVERSARY_EVENT;
-        this.marketing = DEFAULT_MARKETING;
+        this.type = type;
+        this.enabled = enabled;
     }
 
-    public static NotificationSetting createDefault(Long userId) {
-        return new NotificationSetting(userId);
+    public static NotificationSetting create(Long userId, NotificationSettingType type, boolean enabled) {
+        return new NotificationSetting(userId, type, enabled);
     }
 
-    // PATCH 의미에 맞춰 null인 값은 바꾸지 않는다
-    public void update(Boolean friendJoined, Boolean friendBirthday, Boolean anniversaryEvent, Boolean marketing) {
-        if (friendJoined != null) {
-            this.friendJoined = friendJoined;
-        }
-        if (friendBirthday != null) {
-            this.friendBirthday = friendBirthday;
-        }
-        if (anniversaryEvent != null) {
-            this.anniversaryEvent = anniversaryEvent;
-        }
-        if (marketing != null) {
-            this.marketing = marketing;
-        }
+    public void update(boolean enabled) {
+        this.enabled = enabled;
     }
 }

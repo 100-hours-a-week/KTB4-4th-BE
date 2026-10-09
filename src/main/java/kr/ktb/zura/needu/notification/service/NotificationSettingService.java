@@ -1,25 +1,41 @@
 package kr.ktb.zura.needu.notification.service;
 
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.Map;
 import kr.ktb.zura.needu.notification.dto.request.UpdateNotificationSettingRequest;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSettingResponse;
+import kr.ktb.zura.needu.notification.dto.response.NotificationSettingsResponse;
+import kr.ktb.zura.needu.notification.entity.NotificationSetting;
+import kr.ktb.zura.needu.notification.repository.NotificationSettingRepository;
+import kr.ktb.zura.needu.notification.type.NotificationSettingType;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class NotificationSettingService {
 
-    // TODO: 저장한 적이 없으면 기본값(marketing만 false, updatedAt null)을 내려주도록 구현
-    //  기존 알림 설정 조회 API
-    public NotificationSettingResponse findNotificationSetting(Long userId) {
-        throw new UnsupportedOperationException("기존 알림 설정 조회 로직 미구현");
+    private final NotificationSettingRepository notificationSettingRepository;
+
+    public NotificationSettingsResponse findAllNotificationSettings(Long userId) {
+        Map<NotificationSettingType, NotificationSetting> settings = new EnumMap<>(NotificationSettingType.class);
+        notificationSettingRepository.findAllByUserId(userId)
+                .forEach(setting -> settings.put(setting.getType(), setting));
+
+        return new NotificationSettingsResponse(Arrays.stream(NotificationSettingType.values())
+                .map(type -> NotificationSettingResponse.from(type, settings.get(type)))
+                .toList());
     }
 
-    // TODO: null이 아닌 필드만 바꾸고 최종값을 반환하도록 구현
-    //  알림 설정 업데이트 API
     @Transactional
     public NotificationSettingResponse updateNotificationSetting(
-            Long userId, UpdateNotificationSettingRequest request) {
-        throw new UnsupportedOperationException("알림 설정 업데이트 로직 미구현");
+            Long userId, NotificationSettingType type, UpdateNotificationSettingRequest request) {
+        NotificationSetting setting = notificationSettingRepository.findByUserIdAndType(userId, type)
+                .orElseGet(() -> NotificationSetting.create(userId, type, type.isDefaultEnabled()));
+        setting.update(request.enabled());
+        return NotificationSettingResponse.from(type, notificationSettingRepository.saveAndFlush(setting));
     }
 }

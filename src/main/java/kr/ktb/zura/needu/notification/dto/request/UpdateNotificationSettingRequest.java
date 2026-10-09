@@ -1,16 +1,8 @@
 package kr.ktb.zura.needu.notification.dto.request;
 
-import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
 
 public record UpdateNotificationSettingRequest(
-        Boolean friendJoined,
-        Boolean friendBirthday,
-        Boolean anniversaryEvent,
-        Boolean marketing
+        @NotNull Boolean enabled
 ) {
-
-    @AssertTrue
-    public boolean isAnyFieldPresent() {
-        return friendJoined != null || friendBirthday != null || anniversaryEvent != null || marketing != null;
-    }
 }

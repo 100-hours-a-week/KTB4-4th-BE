@@ -2,19 +2,18 @@ package kr.ktb.zura.needu.notification.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import org.junit.jupiter.api.Test;
 
 class NotificationSettingTest {
 
     @Test
-    void update_nullFields_keepsExistingValues() {
-        NotificationSetting setting = NotificationSetting.createDefault(1L);
+    void disabledSetting_update_enablesSetting() {
+        NotificationSetting setting = NotificationSetting.create(
+                1L, NotificationSettingType.MARKETING, false);
 
-        setting.update(null, false, null, true);
+        setting.update(true);
 
-        assertThat(setting.isFriendJoined()).isTrue();
-        assertThat(setting.isFriendBirthday()).isFalse();
-        assertThat(setting.isAnniversaryEvent()).isTrue();
-        assertThat(setting.isMarketing()).isTrue();
+        assertThat(setting.isEnabled()).isTrue();
     }
 }
