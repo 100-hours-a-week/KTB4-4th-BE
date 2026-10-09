@@ -1,5 +1,5 @@
 -- NeedU Backend 스키마 (MySQL 8.4)
--- 현재 구현된 Entity 11개 기준. ddl-auto=validate가 이 스키마를 검증한다.
+-- 현재 구현된 Entity 기준. ddl-auto=validate가 이 스키마를 검증한다.
 --
 -- 규칙
 --  * Entity를 바꾸면 이 파일도 함께 바꾼다. 어긋나면 애플리케이션이 부팅에 실패한다
@@ -98,6 +98,22 @@ CREATE TABLE IF NOT EXISTS friends (
     PRIMARY KEY (id),
     -- owner_user_id 단독 조회도 이 인덱스의 선두 컬럼으로 처리된다
     UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- notification
+-- ---------------------------------------------------------------------------
+
+-- 사용자가 변경 요청한 알림 설정. 미저장 항목은 애플리케이션의 enum 기본값을 사용한다.
+CREATE TABLE IF NOT EXISTS notification_settings (
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id      BIGINT       NOT NULL,
+    setting_type VARCHAR(30)  NOT NULL COMMENT 'FRIEND_JOINED, FRIEND_BIRTHDAY, ANNIVERSARY_EVENT, MARKETING',
+    enabled      TINYINT(1)   NOT NULL,
+    created_at   DATETIME(6)  NOT NULL,
+    updated_at   DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_notification_settings_user_type (user_id, setting_type)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

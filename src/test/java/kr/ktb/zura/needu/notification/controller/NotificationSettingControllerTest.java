@@ -3,7 +3,9 @@ package kr.ktb.zura.needu.notification.controller;
 import java.util.List;
 import kr.ktb.zura.needu.notification.dto.request.UpdateNotificationSettingRequest;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSettingResponse;
+import kr.ktb.zura.needu.notification.dto.response.NotificationSettingsResponse;
 import kr.ktb.zura.needu.notification.service.NotificationSettingService;
+import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -20,6 +22,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -37,28 +40,45 @@ class NotificationSettingControllerTest {
     private NotificationSettingService notificationSettingService;
 
     @Test
-    void oneFieldGiven_updateNotificationSetting_passesOnlyThatField() throws Exception {
-        UpdateNotificationSettingRequest request = new UpdateNotificationSettingRequest(false, null, null, null);
-        given(notificationSettingService.updateNotificationSetting(LOGIN_USER_ID, request))
-                .willReturn(new NotificationSettingResponse(false, true, true, false, null));
+    void settingsExist_findAllNotificationSettings_returnsDynamicList() throws Exception {
+        given(notificationSettingService.findAllNotificationSettings(LOGIN_USER_ID))
+                .willReturn(new NotificationSettingsResponse(List.of(
+                        new NotificationSettingResponse(NotificationSettingType.FRIEND_JOINED, true, null),
+                        new NotificationSettingResponse(NotificationSettingType.MARKETING, false, null)
+                )));
 
-        mockMvc.perform(patch(URL).with(authenticatedUser()).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"friendJoined\": false}"))
+        mockMvc.perform(get(URL).with(authenticatedUser()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("알림 설정을 저장했습니다."))
-                .andExpect(jsonPath("$.data.friendJoined").value(false))
-                .andExpect(jsonPath("$.data.friendBirthday").value(true));
+                .andExpect(jsonPath("$.data.settings[0].type").value("FRIEND_JOINED"))
+                .andExpect(jsonPath("$.data.settings[0].enabled").value(true))
+                .andExpect(jsonPath("$.data.settings[1].type").value("MARKETING"));
     }
 
     @Test
-    void noFieldGiven_updateNotificationSetting_returnsUnprocessableContent() throws Exception {
-        mockMvc.perform(patch(URL).with(authenticatedUser()).with(csrf())
+    void settingTypeGiven_updateNotificationSetting_updatesOnlyThatType() throws Exception {
+        UpdateNotificationSettingRequest request = new UpdateNotificationSettingRequest(false);
+        given(notificationSettingService.updateNotificationSetting(
+                LOGIN_USER_ID, NotificationSettingType.FRIEND_JOINED, request))
+                .willReturn(new NotificationSettingResponse(
+                        NotificationSettingType.FRIEND_JOINED, false, null));
+
+        mockMvc.perform(patch(URL + "/FRIEND_JOINED").with(authenticatedUser()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\": false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("알림 설정을 저장했습니다."))
+                .andExpect(jsonPath("$.data.type").value("FRIEND_JOINED"))
+                .andExpect(jsonPath("$.data.enabled").value(false));
+    }
+
+    @Test
+    void enabledMissing_updateNotificationSetting_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patch(URL + "/FRIEND_JOINED").with(authenticatedUser()).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnprocessableContent());
 
-        verify(notificationSettingService, never()).updateNotificationSetting(anyLong(), any());
+        verify(notificationSettingService, never()).updateNotificationSetting(anyLong(), any(), any());
     }
 
     private static RequestPostProcessor authenticatedUser() {
