@@ -18,6 +18,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import static lombok.AccessLevel.PROTECTED;
 
+//WebPush 위한 엔티티
 @Getter
 @Entity
 @Table(
