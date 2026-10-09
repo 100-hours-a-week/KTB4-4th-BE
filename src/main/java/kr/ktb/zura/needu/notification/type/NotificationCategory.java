@@ -4,5 +4,6 @@ public enum NotificationCategory {
     CHAT,
     POKE,
     EVENT,
-    FRIEND_JOINED
+    FRIEND_JOINED,
+    PURCHASE_STATUS
 }

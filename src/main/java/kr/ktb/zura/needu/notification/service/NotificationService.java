@@ -17,7 +17,7 @@ public class NotificationService {
         throw new UnsupportedOperationException("알림 존재 여부 확인 로직 미구현");
     }
 
-    // TODO: 최신순 커서 조회, category 필터, since 이후 개수(newCount), 이동 대상 존재 여부(targetAvailable)를 구현
+    // TODO: 최신순 커서 조회, category 필터, since 이후 개수(newCount), 리소스 존재 여부(targetAvailable)를 구현
     //  알림 목록 조회 API
     public NotificationListResponse findAllNotifications(Long userId, NotificationSearchCondition condition) {
         throw new UnsupportedOperationException("알림 목록 조회 로직 미구현");
