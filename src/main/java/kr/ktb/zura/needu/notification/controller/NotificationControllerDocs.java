@@ -25,11 +25,17 @@ public class NotificationControllerDocs implements ControllerDocs {
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
                 OperationDoc.of(NotificationController.class, "readNotification")
-                        .errors(NotificationErrorCode.NOTIFICATION_NOT_FOUND)
+                        .errors(NotificationErrorCode.NOTIFICATION_NOT_FOUND,
+                                NotificationErrorCode.NOTIFICATION_FORBIDDEN,
+                                UserErrorCode.USER_BLOCKED,
+                                UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
                 OperationDoc.of(NotificationController.class, "deleteNotification")
                         .successStatus(HttpStatus.NO_CONTENT)
-                        .errors(NotificationErrorCode.NOTIFICATION_NOT_FOUND)
+                        .errors(NotificationErrorCode.NOTIFICATION_NOT_FOUND,
+                                NotificationErrorCode.NOTIFICATION_FORBIDDEN,
+                                UserErrorCode.USER_BLOCKED,
+                                UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
                 OperationDoc.of(NotificationController.class, "connectStream")
                         .error(NotificationErrorCode.NOTIFICATION_STREAM_LIMIT_EXCEEDED,

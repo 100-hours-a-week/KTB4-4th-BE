@@ -150,11 +150,126 @@ class NotificationControllerTest {
     }
 
     @Test
+    void unexpectedError_findAllNotifications_returnsInternalServerError() throws Exception {
+        given(notificationService.findAllNotifications(
+                LOGIN_USER_ID, new NotificationSearchCondition(null, null, 20, null)))
+                .willThrow(new IllegalStateException("unexpected"));
+
+        mockMvc.perform(get(LIST_URL).with(authenticatedUser()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."));
+    }
+
+    @Test
+    void ownedNotification_readNotification_returnsReadResult() throws Exception {
+        LocalDateTime readAt = LocalDateTime.of(2026, 9, 5, 14, 31);
+        given(notificationService.readNotification(LOGIN_USER_ID, 501L))
+                .willReturn(new NotificationReadResponse(
+                        501L, readAt, NotificationResourceType.USER, 321L, true, 3L));
+
+        mockMvc.perform(patch(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("알림을 읽음 처리했습니다."))
+                .andExpect(jsonPath("$.data.notificationId").value(501))
+                .andExpect(jsonPath("$.data.readAt").value("2026-09-05T14:31:00"))
+                .andExpect(jsonPath("$.data.resourceType").value("USER"))
+                .andExpect(jsonPath("$.data.resourceId").value(321))
+                .andExpect(jsonPath("$.data.targetAvailable").value(true))
+                .andExpect(jsonPath("$.data.unreadCount").value(3))
+                .andExpect(jsonPath("$.data.type").doesNotExist());
+    }
+
+    @Test
+    void csrfMissing_readNotification_returnsCsrfForbidden() throws Exception {
+        mockMvc.perform(patch(LIST_URL + "/{notificationId}", 501L).with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(notificationService, never()).readNotification(anyLong(), anyLong());
+    }
+
+    @Test
+    void notificationNotOwnedByUser_readNotification_returnsForbidden() throws Exception {
+        given(notificationService.readNotification(LOGIN_USER_ID, 501L))
+                .willThrow(new BusinessException(NotificationErrorCode.NOTIFICATION_FORBIDDEN));
+
+        mockMvc.perform(patch(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("접근 할 수 없는 알림입니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void notificationMissing_readNotification_returnsNotFound() throws Exception {
+        given(notificationService.readNotification(LOGIN_USER_ID, 501L))
+                .willThrow(new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
+
+        mockMvc.perform(patch(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("알림을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void unexpectedError_readNotification_returnsInternalServerError() throws Exception {
+        given(notificationService.readNotification(LOGIN_USER_ID, 501L))
+                .willThrow(new IllegalStateException("unexpected"));
+
+        mockMvc.perform(patch(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."));
+    }
+
+    @Test
     void myNotification_deleteNotification_returnsNoContent() throws Exception {
         mockMvc.perform(delete(LIST_URL + "/{notificationId}", 501L).with(authenticatedUser()).with(csrf()))
                 .andExpect(status().isNoContent());
 
         verify(notificationService).deleteNotification(LOGIN_USER_ID, 501L);
+    }
+
+    @Test
+    void csrfMissing_deleteNotification_returnsForbidden() throws Exception {
+        mockMvc.perform(delete(LIST_URL + "/{notificationId}", 501L).with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(notificationService, never()).deleteNotification(anyLong(), anyLong());
+    }
+
+    @Test
+    void notificationMissing_deleteNotification_returnsNotFound() throws Exception {
+        doThrow(new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND))
+                .when(notificationService).deleteNotification(LOGIN_USER_ID, 501L);
+
+        mockMvc.perform(delete(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("알림을 찾을 수 없습니다."));
+    }
+
+    @Test
+    void notificationNotOwnedByUser_deleteNotification_returnsForbidden() throws Exception {
+        doThrow(new BusinessException(NotificationErrorCode.NOTIFICATION_FORBIDDEN))
+                .when(notificationService).deleteNotification(LOGIN_USER_ID, 501L);
+
+        mockMvc.perform(delete(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("접근 할 수 없는 알림입니다."));
+    }
+
+    @Test
+    void unexpectedError_deleteNotification_returnsInternalServerError() throws Exception {
+        doThrow(new IllegalStateException("unexpected"))
+                .when(notificationService).deleteNotification(LOGIN_USER_ID, 501L);
+
+        mockMvc.perform(delete(LIST_URL + "/{notificationId}", 501L)
+                        .with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."));
     }
 
     private static RequestPostProcessor authenticatedUser() {

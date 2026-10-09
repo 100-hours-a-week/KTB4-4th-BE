@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
 import kr.ktb.zura.needu.notification.dto.response.NotificationListResponse;
@@ -11,6 +12,7 @@ import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
 import kr.ktb.zura.needu.notification.entity.Notification;
+import kr.ktb.zura.needu.notification.exception.NotificationErrorCode;
 import kr.ktb.zura.needu.notification.repository.NotificationRepository;
 import kr.ktb.zura.needu.notification.type.NotificationCategory;
 import kr.ktb.zura.needu.notification.type.NotificationType;
@@ -74,17 +76,36 @@ public class NotificationService {
         return notification.getEvent().getResourceType() != null && notification.getEvent().getResourceId() != null;
     }
 
-    // TODO: 내 알림만 조회(findByIdAndReceiverUserId)하고, 이미 읽은 알림은 처음 readAt을 유지(멱등)
-    //  알림 읽음 처리 API
     @Transactional
     public NotificationReadResponse readNotification(Long userId, Long notificationId) {
-        throw new UnsupportedOperationException("알림 읽음 처리 로직 미구현");
+        userService.validateActiveUser(userId);
+        Notification notification = notificationRepository.findOneById(notificationId)
+                .orElseThrow(() -> new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
+        if (!notification.getReceiverUserId().equals(userId)) {
+            throw new BusinessException(NotificationErrorCode.NOTIFICATION_FORBIDDEN);
+        }
+        if (notification.isDeleted()) {
+            throw new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND);
+        }
+
+        notification.read();
+        long unreadCount = notificationRepository.countUnreadByReceiverUserId(userId);
+
+        return NotificationReadResponse.from(notification, isTargetAvailable(notification), unreadCount);
     }
 
-    // TODO: 내 알림이 아니거나 이미 삭제됐으면 NOTIFICATION_NOT_FOUND
-    //  알림 삭제 API
     @Transactional
     public void deleteNotification(Long userId, Long notificationId) {
-        throw new UnsupportedOperationException("알림 삭제 로직 미구현");
+        userService.validateActiveUser(userId);
+        Notification notification = notificationRepository.findOneById(notificationId)
+                .orElseThrow(() -> new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
+        if (!notification.getReceiverUserId().equals(userId)) {
+            throw new BusinessException(NotificationErrorCode.NOTIFICATION_FORBIDDEN);
+        }
+        if (notification.isDeleted()) {
+            throw new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND);
+        }
+
+        notification.delete();
     }
 }
