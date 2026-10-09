@@ -34,8 +34,11 @@ class NotificationSettingServiceTest {
                 notificationSettingService.findAllNotificationSettings(USER_ID);
 
         assertThat(response.settings()).containsExactly(
+                new NotificationSettingResponse(NotificationSettingType.CHAT, true, null),
+                new NotificationSettingResponse(NotificationSettingType.POKE, true, null),
                 new NotificationSettingResponse(NotificationSettingType.FRIEND_JOINED, true, null),
                 new NotificationSettingResponse(NotificationSettingType.FRIEND_BIRTHDAY, true, null),
+                new NotificationSettingResponse(NotificationSettingType.PURCHASE_STATUS, true, null),
                 new NotificationSettingResponse(NotificationSettingType.ANNIVERSARY_EVENT, true, null),
                 new NotificationSettingResponse(NotificationSettingType.MARKETING, true, null)
         );
