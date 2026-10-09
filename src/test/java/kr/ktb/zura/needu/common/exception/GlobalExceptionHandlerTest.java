@@ -91,7 +91,7 @@ class GlobalExceptionHandlerTest {
     void invalidRequestBody_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\"}"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
     }
 
@@ -99,7 +99,7 @@ class GlobalExceptionHandlerTest {
     void outOfRangeParameter_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(get("/test/param").param("size", "101"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
     }
 
     @Test

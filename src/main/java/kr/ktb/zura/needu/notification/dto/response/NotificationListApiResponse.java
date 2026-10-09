@@ -13,9 +13,9 @@ public record NotificationListApiResponse(
     public static NotificationListApiResponse of(String message, NotificationListResponse response) {
         return new NotificationListApiResponse(
                 message,
-                new Data(response.items(), response.unreadCount(), response.newCount(), response.serverTime()),
-                response.nextCursor(),
-                response.hasNext()
+                new Data(response.page().items(), response.unreadCount(), response.newCount(), response.serverTime()),
+                response.page().nextCursor(),
+                response.page().hasNext()
         );
     }
 

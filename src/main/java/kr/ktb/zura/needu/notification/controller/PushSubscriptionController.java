@@ -28,7 +28,7 @@ public class PushSubscriptionController {
             @Valid @RequestBody CreatePushSubscriptionRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.of(
-                NotificationResponseMessages.PUSH_SUBSCRIBED,
+                NotificationResponseMessage.PUSH_SUBSCRIBED.getMessage(),
                 pushSubscriptionService.subscribe(userId, request)
         ));
     }
