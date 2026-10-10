@@ -31,10 +31,10 @@ public class UserControllerDocs implements ControllerDocs {
                                 UserErrorCode.USER_ONBOARDING_ALREADY_COMPLETED)
                         .build(),
                 OperationDoc.of(ConsentController.class, "findConsents")
-                        .errors(UserErrorCode.USER_BLOCKED)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(ConsentController.class, "updateConsents")
-                        .errors(UserErrorCode.USER_NOT_FOUND)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build()
         );
     }
