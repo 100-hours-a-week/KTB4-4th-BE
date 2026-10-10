@@ -67,4 +67,8 @@ public class UserConsent {
     public boolean isAgreedToCurrentVersion() {
         return agreed && consentType.isCurrentVersion(version);
     }
+
+    public boolean isSameChoiceInCurrentVersion(boolean agreed) {
+        return this.agreed == agreed && consentType.isCurrentVersion(version);
+    }
 }
