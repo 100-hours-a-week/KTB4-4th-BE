@@ -116,7 +116,7 @@ class OnboardingControllerTest {
     void moreThanFiveInterestCategories_completeOnboarding_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(completeOnboarding("""
                         {"gender": "NONE", "birthDate": "2000-01-01",
-                         "interestCategoryCodes": ["VOUCHER", "LIVING", "BEAUTY", "FASHION", "FOOD", "DIGITAL"]}
+                         "interestCategoryCodes": ["FASHION", "BEAUTY", "TRAVEL", "GAME", "MUSIC", "PET"]}
                         """))
                 .andExpect(status().isUnprocessableContent());
     }
