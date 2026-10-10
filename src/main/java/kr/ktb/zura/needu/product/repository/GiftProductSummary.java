@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.product.repository;
 import java.math.BigDecimal;
 import java.util.List;
 import kr.ktb.zura.needu.product.type.ProductCategory;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 
 public record GiftProductSummary(
         Long id,
@@ -14,6 +15,7 @@ public record GiftProductSummary(
         BigDecimal price,
         BigDecimal score,
         String reason,
-        List<String> tasteKeywords
+        List<String> tasteKeywords,
+        ProductFeedbackType feedback
 ) {
 }

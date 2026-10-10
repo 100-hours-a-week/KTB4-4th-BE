@@ -20,7 +20,6 @@ public record MyGiftProductResponse(
         ProductFeedbackType myFeedback
 ) {
 
-    // TODO: myFeedback을 채울 것 (DISLIKE한 상품은 추천 행이 삭제되어 목록에 오지 않는다)
     public static MyGiftProductResponse from(GiftProductSummary giftProduct) {
         GiftProductResponse response = GiftProductResponse.from(giftProduct);
         return new MyGiftProductResponse(
@@ -34,7 +33,7 @@ public record MyGiftProductResponse(
                 response.score(),
                 response.matchingKeywords(),
                 response.reason(),
-                null
+                giftProduct.feedback()
         );
     }
 }
