@@ -27,8 +27,8 @@ public class UserControllerDocs implements ControllerDocs {
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(OnboardingController.class, "completeOnboarding")
-                        .errors(UserErrorCode.USER_REQUIRED_CONSENT_MISSING, UserErrorCode.USER_NOT_FOUND,
-                                UserErrorCode.USER_ONBOARDING_ALREADY_COMPLETED)
+                        .errors(UserErrorCode.USER_REQUIRED_CONSENT_MISSING, UserErrorCode.USER_BLOCKED,
+                                UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_ONBOARDING_ALREADY_COMPLETED)
                         .build(),
                 OperationDoc.of(ConsentController.class, "findConsents")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)

@@ -80,7 +80,9 @@ public class User {
         this.birthDate = birthDate;
     }
 
-    public void completeOnboarding() {
+    public void completeOnboarding(Gender gender, LocalDate birthDate) {
+        this.gender = gender;
+        this.birthDate = birthDate;
         this.onboardingCompleted = true;
         this.status = UserStatus.ACTIVE;
     }
