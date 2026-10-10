@@ -250,6 +250,41 @@ class UserServiceTest {
     }
 
     @Test
+    void onboardingUser_completeOnboarding_savesProfileAndTastesAndActivates() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        ReflectionTestUtils.setField(user, "status", UserStatus.ONBOARDING);
+        ReflectionTestUtils.setField(user, "onboardingCompleted", false);
+        Map<String, Object> tastes = Map.of("interestCategoryCodes", List.of("BEAUTY"));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        userService.completeOnboarding(1L, Gender.FEMALE, LocalDate.of(2000, 1, 1), tastes);
+
+        assertEquals(Gender.FEMALE, user.getGender());
+        assertEquals(LocalDate.of(2000, 1, 1), user.getBirthDate());
+        assertTrue(user.isOnboardingCompleted());
+        assertEquals(UserStatus.ACTIVE, user.getStatus());
+        ArgumentCaptor<UserTasteProfile> profileCaptor = ArgumentCaptor.forClass(UserTasteProfile.class);
+        verify(userTasteProfileRepository).save(profileCaptor.capture());
+        assertEquals(tastes, profileCaptor.getValue().getOnboardingTastes());
+    }
+
+    @Test
+    void tasteProfileExists_completeOnboarding_replacesOnboardingTastesOnly() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        profile.updateAnalysis("요약", "[\"취향\"]", "[\"관심\"]");
+        Map<String, Object> tastes = Map.of("allergyCodes", List.of("MILK"));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        userService.completeOnboarding(1L, Gender.MALE, LocalDate.of(1999, 12, 31), tastes);
+
+        assertEquals(tastes, profile.getOnboardingTastes());
+        assertEquals("요약", profile.getAiSummary());
+    }
+
+    @Test
     void missingUser_findUserById_returnsEmpty() {
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
