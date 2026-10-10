@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
@@ -26,6 +27,20 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
               AND notification.expiresAt > CURRENT_TIMESTAMP
             """)
     long countUnreadByReceiverUserId(@Param("receiverUserId") Long receiverUserId);
+
+    @Transactional(readOnly = true)
+    @Query("""
+            SELECT notification.receiverUserId AS receiverUserId, COUNT(notification) AS unreadCount
+            FROM Notification notification
+            WHERE notification.receiverUserId IN :receiverUserIds
+              AND notification.readAt IS NULL
+              AND notification.deletedAt IS NULL
+              AND notification.expiresAt > CURRENT_TIMESTAMP
+            GROUP BY notification.receiverUserId
+            """)
+    List<NotificationUnreadCount> findAllUnreadCountsByReceiverUserIdIn(
+            @Param("receiverUserIds") Collection<Long> receiverUserIds
+    );
 
     @Query("""
             SELECT notification

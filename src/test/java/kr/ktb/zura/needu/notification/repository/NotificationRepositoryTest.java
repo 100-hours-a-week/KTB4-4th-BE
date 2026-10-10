@@ -46,6 +46,27 @@ class NotificationRepositoryTest {
     }
 
     @Test
+    void multipleUsersHaveUnreadNotifications_findAllUnreadCounts_returnsCountsByUser() {
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
+        notificationRepository.saveAllAndFlush(List.of(
+                createNotification(1L, "user-1-first", expiresAt),
+                createNotification(1L, "user-1-second", expiresAt),
+                createNotification(2L, "user-2", expiresAt),
+                createNotification(3L, "excluded-user", expiresAt)
+        ));
+
+        assertThat(notificationRepository.findAllUnreadCountsByReceiverUserIdIn(List.of(1L, 2L)))
+                .extracting(
+                        NotificationUnreadCount::getReceiverUserId,
+                        NotificationUnreadCount::getUnreadCount
+                )
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(1L, 2L),
+                        org.assertj.core.groups.Tuple.tuple(2L, 1L)
+                );
+    }
+
+    @Test
     void conditionsGiven_findAllVisibleByReceiverUserId_filtersAndOrdersNotifications() {
         LocalDateTime now = LocalDateTime.now();
         Notification olderPoke = createNotification(USER_ID, "older-poke", now.plusDays(1), NotificationType.POKE);

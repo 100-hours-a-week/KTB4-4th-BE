@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.notification.service;
 
+import kr.ktb.zura.needu.notification.sse.NotificationRedisEvent;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,5 +18,10 @@ public class NotificationStreamService {
     public SseEmitter connect(Long userId) {
         userService.validateActiveUser(userId);
         throw new UnsupportedOperationException("알림 스트림 연결 미구현");
+    }
+
+    // TODO: receiverUserId의 로컬 emitter들에 notification 이벤트(data, unreadCount) 전송, 실패한 emitter 정리
+    //  connect 구현 전에는 이 인스턴스에 연결된 emitter가 없으므로 전달할 대상이 없다.
+    public void sendNotification(NotificationRedisEvent event) {
     }
 }
