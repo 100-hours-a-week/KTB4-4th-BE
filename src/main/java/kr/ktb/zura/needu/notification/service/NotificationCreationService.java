@@ -14,6 +14,7 @@ import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ public class NotificationCreationService {
     private final NotificationEventRepository notificationEventRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * @param actorUserId 시스템이 발생시킨 알림이면 {@code null}
@@ -76,6 +78,8 @@ public class NotificationCreationService {
                 .map(userId -> Notification.create(event, userId, expiresAt))
                 .toList();
 
-        return notificationRepository.saveAll(notifications);
+        List<Notification> savedNotifications = notificationRepository.saveAll(notifications);
+        eventPublisher.publishEvent(NotificationsCreatedEvent.from(savedNotifications));
+        return savedNotifications;
     }
 }
