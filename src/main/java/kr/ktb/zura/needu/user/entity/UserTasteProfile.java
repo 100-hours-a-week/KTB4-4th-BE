@@ -53,6 +53,10 @@ public class UserTasteProfile {
         this.onboardingTastes = onboardingTastes;
     }
 
+    public void updateOnboardingTastes(Map<String, Object> onboardingTastes) {
+        this.onboardingTastes = onboardingTastes;
+    }
+
     public void updateAnalysis(String aiSummary, String recentTastes, String recentInterests) {
         this.aiSummary = aiSummary;
         this.recentTastes = recentTastes;
