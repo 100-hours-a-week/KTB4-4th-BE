@@ -1,10 +1,12 @@
 package kr.ktb.zura.needu.product.service;
 
+import java.util.Arrays;
 import java.util.List;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductDetailResponse;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,10 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ProductService {
 
-    // TODO: products.category 자유 문자열을 코드로 정리한 뒤 코드와 탭 이름을 내려주도록 구현
-    //  전체 카테고리 조회 API
     public List<ProductCategoryResponse> findAllCategories() {
-        throw new UnsupportedOperationException("전체 카테고리 조회 로직 미구현");
+        return Arrays.stream(ProductCategory.values())
+                .map(ProductCategoryResponse::from)
+                .toList();
     }
 
     // TODO: context별 추천 목록에서 상품을 찾고 없으면 PRODUCT_RECOMMENDATION_NOT_FOUND.
