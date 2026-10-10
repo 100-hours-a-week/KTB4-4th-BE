@@ -38,6 +38,7 @@ public class NotificationControllerDocs implements ControllerDocs {
                                 UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
                 OperationDoc.of(NotificationController.class, "connectStream")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .error(NotificationErrorCode.NOTIFICATION_STREAM_LIMIT_EXCEEDED,
                                 new RetryAfterResponse(EXAMPLE_RETRY_AFTER_SECONDS))
                         .errors(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
@@ -45,8 +46,15 @@ public class NotificationControllerDocs implements ControllerDocs {
                 OperationDoc.of(NotificationSettingController.class, "findAllNotificationSettings")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
+                OperationDoc.of(NotificationSettingController.class, "updateNotificationSetting")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .build(),
+                OperationDoc.of(PushSubscriptionController.class, "subscribe")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .build(),
                 OperationDoc.of(PushSubscriptionController.class, "unsubscribe")
                         .successStatus(HttpStatus.NO_CONTENT)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build()
         );
     }

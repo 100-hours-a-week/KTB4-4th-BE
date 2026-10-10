@@ -79,11 +79,13 @@ class AuthFlowIntegrationTest {
                 .isNotEqualTo(refreshCookie.getValue().getBytes(StandardCharsets.UTF_8));
 
         mockMvc.perform(get("/api/v1/guidance").cookie(accessCookie))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("온보딩 진행이 필요합니다."));
         mockMvc.perform(get("/api/v1/auth/session").cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("로그인 유효성을 조회했습니다."))
                 .andExpect(jsonPath("$.data.user.nickname").value("tester"))
+                .andExpect(jsonPath("$.data.user.onboardingCompleted").value(false))
                 .andExpect(jsonPath("$.data.birthday").doesNotExist());
         mockMvc.perform(post("/api/v1/auth/refresh").cookie(refreshCookie, csrfCookie))
                 .andExpect(status().isForbidden())

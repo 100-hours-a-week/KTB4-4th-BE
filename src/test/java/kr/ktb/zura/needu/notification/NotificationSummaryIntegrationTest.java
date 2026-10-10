@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import kr.ktb.zura.needu.notification.entity.Notification;
@@ -136,8 +137,10 @@ class NotificationSummaryIntegrationTest {
     }
 
     private User saveUser(Long externalId) {
-        return userRepository.saveAndFlush(new User(
-                externalId, "사용자", null, Gender.NONE, LocalDateTime.now().toLocalDate()));
+        LocalDate birthDate = LocalDateTime.now().toLocalDate();
+        User user = new User(externalId, "사용자", null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.saveAndFlush(user);
     }
 
     private RequestPostProcessor authenticatedUser(Long userId) {

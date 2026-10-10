@@ -61,12 +61,14 @@ class UserServiceTest {
         assertEquals(42L, user.externalId());
         assertEquals("사용자", user.nickname());
         assertEquals(Gender.NONE, userCaptor.getValue().getGender());
+        assertFalse(user.onboardingCompleted());
+        assertEquals(UserStatus.ONBOARDING, userCaptor.getValue().getStatus());
         assertNotNull(userCaptor.getValue().getLastLoginAt());
     }
 
     @Test
     void returningUser_reusesExistingUser() {
-        User existing = new User(42L, "기존회원", null, Gender.FEMALE, null);
+        User existing = createActiveUser("기존회원");
         when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(existing));
 
         UserResponse user = userService.findOrCreateKakaoUser(42L, "카카오닉네임", null);
@@ -132,7 +134,7 @@ class UserServiceTest {
 
     @Test
     void activeUser_findUserSummary_returnsSummary() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
 
         assertEquals("니듀", userService.findUserSummary(1L).nickname());
     }
@@ -150,7 +152,7 @@ class UserServiceTest {
     @Test
     void onboardingIncompleteActiveUser_validateActiveUser_throwsOnboardingRequired() {
         User user = new User(42L, "온보딩회원", null, Gender.NONE, null);
-        ReflectionTestUtils.setField(user, "onboardingCompleted", false);
+        ReflectionTestUtils.setField(user, "status", UserStatus.ACTIVE);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         BusinessException exception = assertThrows(BusinessException.class,
@@ -171,7 +173,7 @@ class UserServiceTest {
 
     @Test
     void activeUser_validateActiveUser_passes() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
 
         assertDoesNotThrow(() -> userService.validateActiveUser(1L));
     }
@@ -216,7 +218,7 @@ class UserServiceTest {
 
     @Test
     void activeUser_findUserById_returnsDetails() {
-        User user = new User(42L, "친구", "https://example.com/profile.jpg", Gender.NONE, LocalDate.of(2000, 2, 29));
+        User user = createActiveUser("친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29));
         user.completeTasteAnalysis();
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
@@ -303,7 +305,7 @@ class UserServiceTest {
 
     @Test
     void tasteAnalysisCompleted_findMyPage_returnsKeywordsAndSummary() {
-        User user = new User(42L, "니듀", "https://example.com/profile.jpg", Gender.NONE, LocalDate.of(2000, 1, 1));
+        User user = createActiveUser("니듀", "https://example.com/profile.jpg", LocalDate.of(2000, 1, 1));
         user.completeTasteAnalysis();
         UserTasteProfile profile = new UserTasteProfile(user, Map.of());
         profile.updateAnalysis("홈카페를 좋아해요.", "[\"미니멀\",\"홈카페\"]", "[\"야구\"]");
@@ -323,7 +325,7 @@ class UserServiceTest {
 
     @Test
     void tasteAnalysisNotStarted_findMyPage_returnsEmptyTasteProfile() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
 
         MyPageResponse response = userService.findMyPage(1L);
 
@@ -352,9 +354,16 @@ class UserServiceTest {
     }
 
     private User createOnboardingUser() {
-        User user = new User(42L, "온보딩회원", null, Gender.NONE, null);
-        // 현재 User 기본 상태는 ACTIVE이고 ONBOARDING으로 바꾸는 도메인 메서드가 없어 테스트에서만 직접 설정한다.
-        ReflectionTestUtils.setField(user, "status", UserStatus.ONBOARDING);
+        return new User(42L, "온보딩회원", null, Gender.NONE, null);
+    }
+
+    private User createActiveUser(String nickname) {
+        return createActiveUser(nickname, null, null);
+    }
+
+    private User createActiveUser(String nickname, String profileImageUrl, LocalDate birthDate) {
+        User user = new User(42L, nickname, profileImageUrl, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
         return user;
     }
 }

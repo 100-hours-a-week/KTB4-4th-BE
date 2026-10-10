@@ -173,7 +173,10 @@ class PersonalProductIntegrationTest {
     }
 
     private User createUser() {
-        return new User(externalIdSequence.incrementAndGet(), "니듀", null, Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        LocalDate birthDate = LocalDate.of(2000, 1, 1);
+        User user = new User(externalIdSequence.incrementAndGet(), "니듀", null, Gender.FEMALE, birthDate);
+        user.completeOnboarding(Gender.FEMALE, birthDate);
+        return user;
     }
 
     private PersonalProduct savePersonalProduct(Long userId, String score, String name, String price) {

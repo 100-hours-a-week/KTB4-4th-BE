@@ -18,9 +18,13 @@ public class UserControllerDocs implements ControllerDocs {
                                 UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(UserController.class, "withdraw")
-                        .errors(UserErrorCode.USER_WITHDRAWAL_IN_PROGRESS, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_WITHDRAWN,
+                                UserErrorCode.USER_WITHDRAWAL_IN_PROGRESS, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
                         .build(),
                 OperationDoc.of(GiftPreferenceController.class, "findGiftPreference")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .build(),
+                OperationDoc.of(GiftPreferenceController.class, "updateGiftPreference")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
                 OperationDoc.of(OnboardingController.class, "findOnboardingStatus")

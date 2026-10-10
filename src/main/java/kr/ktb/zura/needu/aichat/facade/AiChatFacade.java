@@ -77,6 +77,7 @@ public class AiChatFacade {
     }
 
     public AiConversationStartResult startOrResumeConversation(Long userId) {
+        userService.validateActiveUser(userId);
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
         boolean hasShortCooldown = hasShortCompletionCooldown(userId);
         AiChatRoom room = hasShortCooldown
@@ -103,6 +104,7 @@ public class AiChatFacade {
 
     public CursorPageResponse<AiMessageSummaryResponse> findAllMessages(
             Long userId, Long conversationId, String cursor, int size) {
+        userService.validateActiveUser(userId);
         boolean hasShortCooldown = hasShortCompletionCooldown(userId);
 
         if (hasShortCooldown) {
@@ -119,10 +121,12 @@ public class AiChatFacade {
     //  연결 직후 connected(status, inputLocked, generating, pendingUserMessageId)를 보내고,
     //  턴마다 accepted → delta → completed(또는 error) → done을 보내게 구현. AI 서버 스트리밍 규격이 먼저 필요
     public SseEmitter connectStream(Long userId, Long conversationId) {
+        userService.validateActiveUser(userId);
         throw new UnsupportedOperationException("AI 대화 스트림 연결 미구현");
     }
 
     public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
+        userService.validateActiveUser(userId);
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
         aiChatRoomService.validateMessageSendableRoom(userId, conversationId);
         if (!aiConversationLock.tryLock(conversationId)) {
@@ -252,6 +256,7 @@ public class AiChatFacade {
 
 
     public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
+        userService.validateActiveUser(userId);
         aiChatRoomService.validateAnalyzableRoom(userId, conversationId);
         try {
             return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
@@ -273,6 +278,7 @@ public class AiChatFacade {
     }
 
     public AnalysisResultResponse patchAnalyze(Long userId, Long conversationId, PatchAnalyzeMessageRequest request) {
+        userService.validateActiveUser(userId);
         aiChatRoomService.validateActiveRoom(userId, conversationId);
         try {
             return toAnalysisResult(aiChatClient.patchAnalyze(conversationId,
@@ -288,6 +294,7 @@ public class AiChatFacade {
     }
 
     public ProductRecommendationStatusResponse confirmAnalysis(Long userId, Long conversationId) {
+        userService.validateActiveUser(userId);
         aiChatRoomService.validateActiveRoom(userId, conversationId);
         // AI 세션 종료는 되돌릴 수 없으므로 같은 대화방의 확정 요청이 겹쳐 AI를 두 번 호출하지 않게 막는다
         if (!aiConversationLock.tryLock(conversationId)) {
