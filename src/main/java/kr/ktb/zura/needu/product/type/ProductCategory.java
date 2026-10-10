@@ -5,7 +5,6 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import lombok.Getter;
 
-// 추천 목록의 category 필터와 온보딩 관심 카테고리가 같은 코드 사용
 @Getter
 public enum ProductCategory {
     VOUCHER("교환권"),

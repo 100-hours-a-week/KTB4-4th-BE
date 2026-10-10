@@ -1,16 +1,17 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.user.type.AllergyType;
 import kr.ktb.zura.needu.user.type.GiftExclusionType;
+import kr.ktb.zura.needu.user.type.InterestCategoryType;
 
 public record GiftPreference(
-        List<ProductCategory> interestCategories,
+        List<InterestCategoryType> interestCategories,
         List<AllergyType> allergies,
         List<GiftExclusionType> giftExclusions
 ) {
@@ -23,7 +24,7 @@ public record GiftPreference(
     static GiftPreference from(
             List<String> interestCategoryCodes, List<String> allergyCodes, List<String> giftExclusionCodes) {
         GiftPreference preference = new GiftPreference(
-                toTypes(interestCategoryCodes, ProductCategory::fromCode),
+                toTypes(interestCategoryCodes, InterestCategoryType::fromCode),
                 toTypes(allergyCodes, AllergyType::fromCode),
                 toTypes(giftExclusionCodes, GiftExclusionType::fromCode));
         preference.validate();
@@ -32,7 +33,7 @@ public record GiftPreference(
 
     static GiftPreference fromOnboardingTastes(Map<String, Object> onboardingTastes) {
         return new GiftPreference(
-                toStoredTypes(onboardingTastes.get(INTEREST_CATEGORY_CODES_KEY), ProductCategory.class),
+                toStoredTypes(onboardingTastes.get(INTEREST_CATEGORY_CODES_KEY), InterestCategoryType.class),
                 toStoredTypes(onboardingTastes.get(ALLERGY_CODES_KEY), AllergyType.class),
                 toStoredTypes(onboardingTastes.get(GIFT_EXCLUSION_CODES_KEY), GiftExclusionType.class));
     }
@@ -74,7 +75,9 @@ public record GiftPreference(
             return List.of();
         }
         return codeList.stream()
-                .map(code -> Enum.valueOf(type, String.valueOf(code)))
+                .map(String::valueOf)
+                .flatMap(code -> Arrays.stream(type.getEnumConstants())
+                        .filter(constant -> constant.name().equals(code)))
                 .toList();
     }
 
