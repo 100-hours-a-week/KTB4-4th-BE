@@ -4,13 +4,14 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import kr.ktb.zura.needu.product.repository.GiftProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 
 public record GiftProductResponse(
         Long recommendationId,
         Long productId,
         String productImageUrl,
         String purchaseUrl,
-        String category,
+        ProductCategory category,
         String name,
         Long price,
         BigDecimal score,

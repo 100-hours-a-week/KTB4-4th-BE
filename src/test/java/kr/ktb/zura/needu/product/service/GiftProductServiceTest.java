@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.GiftProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -284,7 +285,7 @@ class GiftProductServiceTest {
 
     private GiftProductSummary createGiftProduct(Long id, String score, long price) {
         return new GiftProductSummary(
-                id, id + 1000, "상품" + id, null, null, "FASHION",
+                id, id + 1000, "상품" + id, null, null, ProductCategory.FASHION,
                 BigDecimal.valueOf(price), new BigDecimal(score), null, List.of("미니멀", "데일리"));
     }
 }

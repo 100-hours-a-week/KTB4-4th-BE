@@ -18,6 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -43,7 +44,7 @@ class PersonalProductControllerTest {
                     "미니멀 테이블 램프",
                     "https://image.test/lamp.png",
                     "https://shop.test/lamp",
-                    "LIVING",
+                    ProductCategory.LIVING,
                     52000L,
                     new BigDecimal("0.900000"),
                     "미니멀한 취향과 잘 맞아요.",
