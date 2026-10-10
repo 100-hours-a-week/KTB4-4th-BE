@@ -40,7 +40,8 @@ public class ProductControllerDocs implements ControllerDocs {
                         .build(),
                 OperationDoc.of(ProductController.class, "updateFeedback")
                         .errors(ACTIVE_USER_ERRORS)
-                        .errors(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND)
+                        .errors(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND,
+                                ProductErrorCode.PRODUCT_FEEDBACK_ALREADY_DISLIKED)
                         .build(),
                 OperationDoc.of(ProductLinkClickController.class, "createLinkClick")
                         .successStatus(HttpStatus.NO_CONTENT)
