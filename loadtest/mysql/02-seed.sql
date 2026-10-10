@@ -60,7 +60,8 @@ SELECT
         ELSE CONCAT('loadtest-', number)
     END,
     CONCAT('loadtest-product-', LPAD(number, 4, '0')),
-    CONCAT('category-', MOD(number, 10)),
+    ELT(MOD(number, 10) + 1, 'VOUCHER', 'LIVING', 'BEAUTY', 'FASHION', 'FOOD',
+        'DIGITAL', 'HEALTH', 'LUXURY', 'BOOKS_TICKETS', 'SPORTS'),
     'Local load test product',
     1000 + number * 100,
     NULL,
