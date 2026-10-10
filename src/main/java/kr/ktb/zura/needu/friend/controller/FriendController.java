@@ -111,7 +111,7 @@ public class FriendController {
         session.setAttribute(KAKAO_FRIEND_USER_ID, userId);
         session.setAttribute(KAKAO_FRIEND_RETURN_URL, returnUri);
         return ResponseEntity.status(HttpStatus.FOUND)
-                .location(kakaoFriendSyncService.createAuthorizationUri(state))
+                .location(kakaoFriendSyncService.createAuthorizationUri(userId, state))
                 .build();
     }
 

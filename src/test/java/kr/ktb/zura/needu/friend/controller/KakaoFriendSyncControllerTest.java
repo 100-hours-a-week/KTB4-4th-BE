@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -36,7 +37,7 @@ class KakaoFriendSyncControllerTest {
 
     @Test
     void validReturnUrl_authorize_redirectsWithStoredState() throws Exception {
-        when(syncService.createAuthorizationUri(anyString()))
+        when(syncService.createAuthorizationUri(nullable(Long.class), anyString()))
                 .thenReturn(URI.create("https://kauth.kakao.com/oauth/authorize?scope=friends"));
 
         MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/friends/kakao/authorize")

@@ -130,7 +130,9 @@ class FriendListIntegrationTest {
     }
 
     private User saveUser(String name, LocalDate birthDate) {
-        return userRepository.save(new User(nextExternalId(), name, null, Gender.NONE, birthDate));
+        User user = new User(nextExternalId(), name, null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.save(user);
     }
 
     private long nextExternalId() {

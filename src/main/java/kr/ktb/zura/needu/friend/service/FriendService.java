@@ -52,6 +52,7 @@ public class FriendService {
 
     @Transactional
     public FriendFavoriteResponse updateFavorite(Long ownerUserId, Long friendUserId, boolean isFavorite) {
+        userService.validateActiveUser(ownerUserId);
         Friend friend = findFriendRelation(ownerUserId, friendUserId);
         findActiveFriendUser(friendUserId);
         if (isFavorite) {

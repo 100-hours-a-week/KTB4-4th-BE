@@ -109,7 +109,9 @@ class FriendDetailIntegrationTest {
     }
 
     private User saveUser(String nickname, LocalDate birthDate) {
-        return userRepository.save(new User(null, nickname, null, Gender.NONE, birthDate));
+        User user = new User(null, nickname, null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.save(user);
     }
 
     private RequestPostProcessor authenticatedUser(Long userId) {

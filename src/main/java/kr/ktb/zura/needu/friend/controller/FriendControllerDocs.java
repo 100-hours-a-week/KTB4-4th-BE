@@ -27,6 +27,7 @@ public class FriendControllerDocs implements ControllerDocs {
                         .errors(FriendErrorCode.FRIEND_NOT_FOUND)
                         .build(),
                 OperationDoc.of(FriendController.class, "updateFavorite")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .errors(FriendErrorCode.FRIEND_NOT_FOUND)
                         .build(),
                 OperationDoc.of(FriendController.class, "createPoke")
@@ -38,6 +39,7 @@ public class FriendControllerDocs implements ControllerDocs {
                         .build(),
                 OperationDoc.of(FriendController.class, "authorize")
                         .successStatus(HttpStatus.FOUND)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .errors(FriendErrorCode.FRIEND_KAKAO_INVALID_RETURN_URL)
                         .build(),
                 OperationDoc.of(FriendController.class, "callback")
