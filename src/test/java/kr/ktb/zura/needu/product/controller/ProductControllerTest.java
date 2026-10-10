@@ -99,15 +99,23 @@ class ProductControllerTest {
     }
 
     @Test
-    void nullFeedback_updateFeedback_passesCancellation() throws Exception {
-        given(productFeedbackService.updateFeedback(LOGIN_USER_ID, PRODUCT_ID, ProductContext.MY_GIFT, null))
-                .willReturn(new ProductFeedbackResponse(PRODUCT_ID, ProductContext.MY_GIFT, null));
-
+    void nullFeedback_updateFeedback_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(put(FEEDBACK_URL, PRODUCT_ID).with(authenticatedUser()).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"context\": \"MY_GIFT\", \"feedback\": null}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.feedback").isEmpty());
+                .andExpect(status().isUnprocessableContent());
+
+        verify(productFeedbackService, never()).updateFeedback(anyLong(), anyLong(), any(), any());
+    }
+
+    @Test
+    void missingFeedback_updateFeedback_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(put(FEEDBACK_URL, PRODUCT_ID).with(authenticatedUser()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"context\": \"PERSONAL\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(productFeedbackService, never()).updateFeedback(anyLong(), anyLong(), any(), any());
     }
 
     @Test
