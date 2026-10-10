@@ -102,6 +102,57 @@ class NotificationCreationServiceTest {
     }
 
     @Test
+    void duplicateDedupKey_skipsCreationAndReturnsEmptyList() {
+        given(notificationEventRepository.existsByDedupKey("friend-birthday:10:2026-10-09")).willReturn(true);
+
+        List<Notification> result = notificationCreationService.createNotifications(
+                Set.of(1L),
+                NotificationType.FRIEND_BIRTHDAY,
+                null,
+                "친구의 생일이에요.",
+                "선물을 준비해 보세요.",
+                NotificationResourceType.USER,
+                10L,
+                "friend-birthday:10:2026-10-09",
+                LocalDateTime.of(2026, 11, 9, 0, 0)
+        );
+
+        assertThat(result).isEmpty();
+        verify(notificationSettingRepository, never())
+                .findAllByUserIdInAndType(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void nullDedupKey_createsWithoutDuplicateCheck() {
+        Set<Long> receiverUserIds = Set.of(1L);
+        given(notificationSettingRepository.findAllByUserIdInAndType(
+                receiverUserIds, NotificationSettingType.POKE)).willReturn(List.of());
+        given(notificationEventRepository.save(org.mockito.ArgumentMatchers.any(NotificationEvent.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+        given(notificationRepository.saveAll(org.mockito.ArgumentMatchers.<List<Notification>>any()))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        List<Notification> result = notificationCreationService.createNotifications(
+                receiverUserIds,
+                NotificationType.POKE,
+                2L,
+                "친구가 콕 찔렀어요.",
+                "AI 대화를 시작해 보세요.",
+                NotificationResourceType.USER,
+                2L,
+                null,
+                LocalDateTime.of(2026, 11, 9, 0, 0)
+        );
+
+        assertThat(result).extracting(Notification::getReceiverUserId).containsExactly(1L);
+        verify(notificationEventRepository, never()).existsByDedupKey(org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(NotificationsCreatedEvent.class));
+    }
+
+    @Test
     void receiversMissing_createNotifications_doesNotAccessRepositories() {
         List<Notification> result = notificationCreationService.createNotifications(
                 Set.of(),

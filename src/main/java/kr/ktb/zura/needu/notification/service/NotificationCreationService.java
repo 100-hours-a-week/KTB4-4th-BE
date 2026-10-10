@@ -14,10 +14,12 @@ import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationCreationService {
@@ -46,6 +48,13 @@ public class NotificationCreationService {
             LocalDateTime expiresAt
     ) {
         if (receiverUserIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 동시 요청이 함께 통과하면 UNIQUE 제약 위반은 그대로 전파된다.
+        // 제약 위반 시점에 트랜잭션이 rollback-only가 되어 catch로는 조용히 넘길 수 없다.
+        if (dedupKey != null && notificationEventRepository.existsByDedupKey(dedupKey)) {
+            log.info("Notification creation skipped by duplicate dedupKey. type={}, dedupKey={}", type, dedupKey);
             return List.of();
         }
 
