@@ -6,8 +6,11 @@ import java.util.List;
 
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.Product;
+import kr.ktb.zura.needu.product.entity.ProductFeedback;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductCategory;
+import kr.ktb.zura.needu.product.type.ProductContext;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 import kr.ktb.zura.needu.product.type.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +20,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @DataJpaTest
 class GiftProductRepositoryTest {
@@ -42,7 +46,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         List<GiftProductSummary> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
         assertThat(result).extracting(GiftProductSummary::id)
                 .containsExactly(high.getId(), sameScoreSecond.getId(), sameScoreFirst.getId(), low.getId());
@@ -57,7 +61,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         List<GiftProductSummary> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
         assertThat(result).extracting(GiftProductSummary::id).containsExactly(maxBoundary.getId(), minBoundary.getId());
     }
@@ -93,7 +97,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         List<GiftProductSummary> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
         assertThat(result).extracting(GiftProductSummary::id).containsExactly(active.getId());
     }
@@ -107,7 +111,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
-                USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.500000"), sameScoreSecond.getId(), Limit.of(10));
+                USER_ID, MIN_PRICE, MAX_PRICE, null, new BigDecimal("0.500000"), sameScoreSecond.getId(), Limit.of(10));
 
         assertThat(result).extracting(GiftProductSummary::id).containsExactly(sameScoreFirst.getId(), low.getId());
     }
@@ -119,7 +123,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         GiftProductSummary result = giftProductRepository
-                .findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(1)).getFirst();
+                .findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(1)).getFirst();
 
         assertThat(result.id()).isEqualTo(saved.getId());
         assertThat(result.productId()).isEqualTo(lamp.getId());
@@ -140,7 +144,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         List<GiftProductSummary> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
         assertThat(result).extracting(GiftProductSummary::id).containsExactly(kept.getId());
     }
@@ -155,7 +159,7 @@ class GiftProductRepositoryTest {
         entityManager.clear();
 
         List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
-                USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.900000"), cursorItem.getId(), Limit.of(10));
+                USER_ID, MIN_PRICE, MAX_PRICE, null, new BigDecimal("0.900000"), cursorItem.getId(), Limit.of(10));
 
         assertThat(result).extracting(GiftProductSummary::id).containsExactly(next.getId());
     }
@@ -209,10 +213,72 @@ class GiftProductRepositoryTest {
         assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, deleted.getId())).isFalse();
     }
 
+    @Test
+    void categoryGiven_findAllByUserIdAndPriceRange_returnsOnlyThatCategory() {
+        GiftProduct living = saveGiftProduct(USER_ID, "0.900000", saveProduct("램프", ProductCategory.LIVING));
+        saveGiftProduct(USER_ID, "0.800000", saveProduct("립밤", ProductCategory.BEAUTY));
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.LIVING, Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(living.getId());
+    }
+
+    @Test
+    void categoryAndDeletedRecommendation_findAllByUserIdAndPriceRangeAfterCursor_paginatesFilteredItems() {
+        GiftProduct cursorItem = saveGiftProduct(USER_ID, "0.900000", saveProduct("커서", ProductCategory.LIVING));
+        GiftProduct disliked = saveGiftProduct(USER_ID, "0.800000", saveProduct("별로예요", ProductCategory.LIVING));
+        saveGiftProduct(USER_ID, "0.700000", saveProduct("다른 카테고리", ProductCategory.BEAUTY));
+        GiftProduct next = saveGiftProduct(USER_ID, "0.600000", saveProduct("다음", ProductCategory.LIVING));
+        disliked.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.LIVING,
+                new BigDecimal("0.900000"), cursorItem.getId(), Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(next.getId());
+    }
+
+    @Test
+    void feedbackSaved_findAllByUserIdAndPriceRange_returnsOnlyOwnersMyGiftFeedback() {
+        Product liked = saveProduct("마음에 들어요", "40000.00");
+        Product likedInPersonal = saveProduct("개인 추천에서만 마음에 들어요", "40000.00");
+        Product likedByOther = saveProduct("다른 사용자만 마음에 들어요", "40000.00");
+        GiftProduct likedItem = saveGiftProduct(USER_ID, "0.900000", liked);
+        GiftProduct likedInPersonalItem = saveGiftProduct(USER_ID, "0.800000", likedInPersonal);
+        GiftProduct likedByOtherItem = saveGiftProduct(USER_ID, "0.700000", likedByOther);
+        saveFeedback(USER_ID, liked, ProductContext.MY_GIFT);
+        saveFeedback(USER_ID, likedInPersonal, ProductContext.PERSONAL);
+        saveFeedback(OTHER_USER_ID, likedByOther, ProductContext.MY_GIFT);
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id, GiftProductSummary::feedback)
+                .containsExactly(
+                        tuple(likedItem.getId(), ProductFeedbackType.LIKE),
+                        tuple(likedInPersonalItem.getId(), null),
+                        tuple(likedByOtherItem.getId(), null));
+    }
+
     private Product saveProduct(String name, String price) {
         return entityManager.persist(new Product(
                 PlatformType.COUPANG, name, name, ProductCategory.LIVING, null,
                 new BigDecimal(price), null, null, null));
+    }
+
+    private Product saveProduct(String name, ProductCategory category) {
+        return entityManager.persist(new Product(
+                PlatformType.COUPANG, name, name, category, null,
+                new BigDecimal("40000.00"), null, null, null));
+    }
+
+    private void saveFeedback(Long userId, Product product, ProductContext context) {
+        entityManager.persistAndFlush(new ProductFeedback(userId, product, context, ProductFeedbackType.LIKE));
     }
 
     private GiftProduct saveGiftProduct(Long userId, String score, Product product) {
