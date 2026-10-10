@@ -7,4 +7,8 @@ public record OnboardingStatusResponse(boolean completed, OnboardingStep current
     public static OnboardingStatusResponse completedStatus() {
         return new OnboardingStatusResponse(true, null);
     }
+
+    public static OnboardingStatusResponse inProgressStatus(OnboardingStep currentStep) {
+        return new OnboardingStatusResponse(false, currentStep);
+    }
 }

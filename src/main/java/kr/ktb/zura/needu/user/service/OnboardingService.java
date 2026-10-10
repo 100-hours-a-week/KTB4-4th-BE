@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.user.service;
 
 import kr.ktb.zura.needu.user.dto.request.CompleteOnboardingRequest;
 import kr.ktb.zura.needu.user.dto.response.OnboardingStatusResponse;
+import kr.ktb.zura.needu.user.type.OnboardingStep;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,13 +13,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class OnboardingService {
 
     private final UserService userService;
+    private final ConsentService consentService;
 
     public OnboardingStatusResponse findOnboardingStatus(Long userId) {
         if (userService.isOnboardingCompleted(userId)) {
             return OnboardingStatusResponse.completedStatus();
         }
-        // TODO: 필수 동의를 마쳤는지로 CONSENTS와 PROFILE을 구분, 동의 이력이 먼저 필요
-        throw new UnsupportedOperationException("온보딩 완료 여부 로직 미구현");
+
+        OnboardingStep currentStep = consentService.hasAgreedToRequiredConsents(userId)
+                ? OnboardingStep.PROFILE
+                : OnboardingStep.CONSENTS;
+        return OnboardingStatusResponse.inProgressStatus(currentStep);
     }
 
     // TODO: 필수 동의가 없으면 USER_REQUIRED_CONSENT_MISSING, 이미 완료했으면 USER_ONBOARDING_ALREADY_COMPLETED
