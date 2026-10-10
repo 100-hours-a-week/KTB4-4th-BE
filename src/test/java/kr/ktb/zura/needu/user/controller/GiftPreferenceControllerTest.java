@@ -45,13 +45,13 @@ class GiftPreferenceControllerTest {
     @Test
     void savedPreference_findGiftPreference_returnsCodes() throws Exception {
         given(giftPreferenceService.findGiftPreference(LOGIN_USER_ID)).willReturn(new GiftPreferenceResponse(
-                true, List.of("BEAUTY", "LIVING"), List.of("NUTS"), List.of("PERFUME")));
+                true, List.of("BEAUTY", "HOME_INTERIOR"), List.of("NUTS"), List.of("PERFUME")));
 
         mockMvc.perform(get(URL).with(authenticatedUser()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("저장된 취향 정보를 조회했습니다."))
                 .andExpect(jsonPath("$.data.exists").value(true))
-                .andExpect(jsonPath("$.data.interestCategoryCodes[1]").value("LIVING"))
+                .andExpect(jsonPath("$.data.interestCategoryCodes[1]").value("HOME_INTERIOR"))
                 .andExpect(jsonPath("$.data.allergyCodes[0]").value("NUTS"))
                 .andExpect(jsonPath("$.data.giftExclusionCodes[0]").value("PERFUME"))
                 .andExpect(jsonPath("$.data.updatedAt").doesNotExist());
@@ -107,7 +107,7 @@ class GiftPreferenceControllerTest {
     @Test
     void moreThanFiveInterestCategories_updateGiftPreference_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(updateGiftPreference("""
-                        {"interestCategoryCodes": ["VOUCHER", "LIVING", "BEAUTY", "FASHION", "FOOD", "DIGITAL"],
+                        {"interestCategoryCodes": ["FASHION", "BEAUTY", "TRAVEL", "GAME", "MUSIC", "PET"],
                          "allergyCodes": [], "giftExclusionCodes": []}
                         """))
                 .andExpect(status().isUnprocessableContent());

@@ -27,7 +27,7 @@ class UserTasteProfileRepositoryTest {
         entityManager.persist(user);
         UserTasteProfile profile = new UserTasteProfile(user, Map.of());
         profile.updateOnboardingTastes(Map.of(
-                "interestCategoryCodes", List.of("BEAUTY", "LIVING"),
+                "interestCategoryCodes", List.of("BEAUTY", "HOME_INTERIOR"),
                 "allergyCodes", List.of(),
                 "giftExclusionCodes", List.of("PERFUME")));
         userTasteProfileRepository.saveAndFlush(profile);
@@ -37,7 +37,7 @@ class UserTasteProfileRepositoryTest {
 
         assertThat(found.hasOnboardingTastes()).isTrue();
         assertThat(found.getOnboardingTastes())
-                .containsEntry("interestCategoryCodes", List.of("BEAUTY", "LIVING"))
+                .containsEntry("interestCategoryCodes", List.of("BEAUTY", "HOME_INTERIOR"))
                 .containsEntry("allergyCodes", List.of())
                 .containsEntry("giftExclusionCodes", List.of("PERFUME"));
     }

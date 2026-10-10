@@ -64,7 +64,7 @@ class GiftPreferenceServiceTest {
     @Test
     void onboardingTastesSaved_findGiftPreference_returnsCodes() {
         UserTasteProfile profile = new UserTasteProfile(user, Map.of(
-                "interestCategoryCodes", List.of("BEAUTY", "LIVING"),
+                "interestCategoryCodes", List.of("BEAUTY", "HOME_INTERIOR"),
                 "allergyCodes", List.of("NUTS"),
                 "giftExclusionCodes", List.of("PERFUME")));
         when(userTasteProfileRepository.findById(USER_ID)).thenReturn(Optional.of(profile));
@@ -72,7 +72,7 @@ class GiftPreferenceServiceTest {
         GiftPreferenceResponse response = giftPreferenceService.findGiftPreference(USER_ID);
 
         assertThat(response.exists()).isTrue();
-        assertThat(response.interestCategoryCodes()).containsExactly("BEAUTY", "LIVING");
+        assertThat(response.interestCategoryCodes()).containsExactly("BEAUTY", "HOME_INTERIOR");
         assertThat(response.allergyCodes()).containsExactly("NUTS");
         assertThat(response.giftExclusionCodes()).containsExactly("PERFUME");
     }
@@ -121,7 +121,7 @@ class GiftPreferenceServiceTest {
     @Test
     void unknownCode_updateGiftPreference_throwsInvalidInputWithoutSaving() {
         UpdateGiftPreferenceRequest request = new UpdateGiftPreferenceRequest(
-                List.of("HOME_INTERIOR"), List.of(), List.of());
+                List.of("LIVING"), List.of(), List.of());
 
         assertThatThrownBy(() -> giftPreferenceService.updateGiftPreference(USER_ID, request))
                 .isInstanceOf(BusinessException.class)

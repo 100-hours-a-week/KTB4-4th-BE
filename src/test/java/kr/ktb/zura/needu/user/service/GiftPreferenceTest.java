@@ -4,9 +4,9 @@ import java.util.List;
 import java.util.Map;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
-import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.user.type.AllergyType;
 import kr.ktb.zura.needu.user.type.GiftExclusionType;
+import kr.ktb.zura.needu.user.type.InterestCategoryType;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +21,7 @@ class GiftPreferenceTest {
                 List.of("FASHION", "BEAUTY"), List.of("PEANUT"), List.of("PERFUME", "ALCOHOL"));
 
         assertThat(preference.interestCategories())
-                .containsExactly(ProductCategory.FASHION, ProductCategory.BEAUTY);
+                .containsExactly(InterestCategoryType.FASHION, InterestCategoryType.BEAUTY);
         assertThat(preference.allergies()).containsExactly(AllergyType.PEANUT);
         assertThat(preference.giftExclusions())
                 .containsExactly(GiftExclusionType.PERFUME, GiftExclusionType.ALCOHOL);
@@ -43,9 +43,9 @@ class GiftPreferenceTest {
     @Test
     void duplicatedCodes_from_keepsOnlyOnce() {
         GiftPreference preference = GiftPreference.from(
-                List.of("FOOD", "FOOD"), List.of("MILK", "MILK"), List.of("PERFUME", "PERFUME"));
+                List.of("COOKING", "COOKING"), List.of("MILK", "MILK"), List.of("PERFUME", "PERFUME"));
 
-        assertThat(preference.interestCategories()).containsExactly(ProductCategory.FOOD);
+        assertThat(preference.interestCategories()).containsExactly(InterestCategoryType.COOKING);
         assertThat(preference.allergies()).containsExactly(AllergyType.MILK);
         assertThat(preference.giftExclusions()).containsExactly(GiftExclusionType.PERFUME);
     }
@@ -59,12 +59,18 @@ class GiftPreferenceTest {
     @Test
     void moreThanFiveInterestCategories_from_throwsInvalidInput() {
         assertInvalidInput(() -> GiftPreference.from(
-                List.of("VOUCHER", "LIVING", "BEAUTY", "FASHION", "FOOD", "DIGITAL"), List.of(), List.of()));
+                List.of("FASHION", "BEAUTY", "TRAVEL", "GAME", "MUSIC", "PET"), List.of(), List.of()));
     }
 
     @Test
     void unknownInterestCategory_from_throwsInvalidInput() {
-        assertInvalidInput(() -> GiftPreference.from(List.of("HOME_INTERIOR"), List.of(), List.of()));
+        assertInvalidInput(() -> GiftPreference.from(List.of("CAMPING"), List.of(), List.of()));
+    }
+
+    @Test
+    void productCategoryCode_from_throwsInvalidInput() {
+        // 관심사는 상품 분류(ProductCategory)와 다른 코드표를 쓴다
+        assertInvalidInput(() -> GiftPreference.from(List.of("LIVING"), List.of(), List.of()));
     }
 
     @Test
@@ -80,13 +86,25 @@ class GiftPreferenceTest {
     @Test
     void savedTastes_fromOnboardingTastes_readsCodeLists() {
         GiftPreference preference = GiftPreference.fromOnboardingTastes(Map.of(
-                "interestCategoryCodes", List.of("BEAUTY", "LIVING"),
+                "interestCategoryCodes", List.of("BEAUTY", "HOME_INTERIOR"),
                 "allergyCodes", List.of("NUTS"),
                 "giftExclusionCodes", List.of()));
 
-        assertThat(preference.interestCategoryCodes()).containsExactly("BEAUTY", "LIVING");
+        assertThat(preference.interestCategoryCodes()).containsExactly("BEAUTY", "HOME_INTERIOR");
         assertThat(preference.allergyCodes()).containsExactly("NUTS");
         assertThat(preference.giftExclusionCodes()).isEmpty();
+    }
+
+    @Test
+    void removedCodeSaved_fromOnboardingTastes_skipsOnlyRemovedCode() {
+        GiftPreference preference = GiftPreference.fromOnboardingTastes(Map.of(
+                "interestCategoryCodes", List.of("LIVING", "BEAUTY"),
+                "allergyCodes", List.of("POLLEN", "NUTS"),
+                "giftExclusionCodes", List.of("PERFUME")));
+
+        assertThat(preference.interestCategoryCodes()).containsExactly("BEAUTY");
+        assertThat(preference.allergyCodes()).containsExactly("NUTS");
+        assertThat(preference.giftExclusionCodes()).containsExactly("PERFUME");
     }
 
     @Test
