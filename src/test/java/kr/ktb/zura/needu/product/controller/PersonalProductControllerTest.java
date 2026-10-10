@@ -100,6 +100,23 @@ class PersonalProductControllerTest {
     }
 
     @Test
+    void categoryGiven_findAllPersonalProducts_passesItToService() throws Exception {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "LIVING", null, 20);
+        given(personalProductService.findAllPersonalProducts(USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(LAMP), new PriceRangeResponse(30000L, 60000L), null, false));
+
+        mockMvc.perform(get(URL)
+                        .param("minPrice", "30000")
+                        .param("maxPrice", "60000")
+                        .param("category", "LIVING")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].category").value("LIVING"))
+                .andExpect(jsonPath("$.data.items[0].myFeedback").isEmpty());
+    }
+
+    @Test
     void priceRangeOmitted_findAllPersonalProducts_usesDefaults() throws Exception {
         PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, null, 20);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
