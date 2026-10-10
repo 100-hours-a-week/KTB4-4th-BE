@@ -107,7 +107,7 @@ class ErrorReportControllerTest {
     void requiredFieldMissing_createErrorReport_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(postErrorReport(VALID_BODY.replace("\"detail\": \"추천 목록이 열리지 않아요.\"", "\"detail\": \" \"")))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
 
         mockMvc.perform(postErrorReport(VALID_BODY.replace("\"problemType\": \"SCREEN_NOT_DISPLAYED\",", "")))
                 .andExpect(status().isUnprocessableContent());

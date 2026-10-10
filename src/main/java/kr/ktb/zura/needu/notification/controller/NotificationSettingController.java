@@ -29,7 +29,7 @@ public class NotificationSettingController {
             @AuthenticationPrincipal Long userId
     ) {
         return ResponseEntity.ok(ApiResponse.of(
-                NotificationResponseMessages.NOTIFICATION_SETTING_FOUND,
+                NotificationResponseMessage.NOTIFICATION_SETTING_FOUND.getMessage(),
                 notificationSettingService.findAllNotificationSettings(userId)
         ));
     }
@@ -41,7 +41,7 @@ public class NotificationSettingController {
             @Valid @RequestBody UpdateNotificationSettingRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.of(
-                NotificationResponseMessages.NOTIFICATION_SETTING_UPDATED,
+                NotificationResponseMessage.NOTIFICATION_SETTING_UPDATED.getMessage(),
                 notificationSettingService.updateNotificationSetting(userId, settingType, request)
         ));
     }

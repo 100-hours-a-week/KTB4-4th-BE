@@ -14,6 +14,7 @@ import org.springframework.validation.BindException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.ServletRequestBindingException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
@@ -48,6 +49,15 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ApiResponse<Void>> handleInvalidRequest(Exception e) {
         return toErrorResponse(CommonErrorCode.COMMON_INVALID_REQUEST);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleModelAttributeValidation(MethodArgumentNotValidException e) {
+        boolean hasBindingFailure = e.getBindingResult().getFieldErrors().stream()
+                .anyMatch(fieldError -> fieldError.isBindingFailure());
+        return toErrorResponse(hasBindingFailure
+                ? CommonErrorCode.COMMON_INVALID_REQUEST
+                : CommonErrorCode.COMMON_INVALID_INPUT);
     }
 
     @ExceptionHandler({

@@ -148,6 +148,18 @@ class UserServiceTest {
     }
 
     @Test
+    void onboardingIncompleteActiveUser_validateActiveUser_throwsOnboardingRequired() {
+        User user = new User(42L, "온보딩회원", null, Gender.NONE, null);
+        ReflectionTestUtils.setField(user, "onboardingCompleted", false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.validateActiveUser(1L));
+
+        assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
     void missingUser_validateActiveUser_throwsUserNotFound() {
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 

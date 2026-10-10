@@ -174,7 +174,7 @@ public class UserService {
 
     private void validateActiveUser(User user) {
         validateLoginAvailableUser(user);
-        if (user.getStatus() == UserStatus.ONBOARDING) {
+        if (user.getStatus() == UserStatus.ONBOARDING || !user.isOnboardingCompleted()) {
             throw new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED);
         }
     }

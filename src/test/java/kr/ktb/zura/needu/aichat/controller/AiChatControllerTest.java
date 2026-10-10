@@ -158,7 +158,7 @@ class AiChatControllerTest {
     void blankContent_sendMessage_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), " ")))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
         verifyNoInteractions(aiChatFacade);
     }
@@ -335,7 +335,7 @@ class AiChatControllerTest {
     void sizeOverMax_findAllMessages_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(getMessages("?size=51"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
         verifyNoInteractions(aiChatFacade);
     }
 
