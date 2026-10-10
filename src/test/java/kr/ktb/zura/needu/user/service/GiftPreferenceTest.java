@@ -77,6 +77,27 @@ class GiftPreferenceTest {
         assertInvalidInput(() -> GiftPreference.from(List.of(), List.of(), List.of("perfume")));
     }
 
+    @Test
+    void savedTastes_fromOnboardingTastes_readsCodeLists() {
+        GiftPreference preference = GiftPreference.fromOnboardingTastes(Map.of(
+                "interestCategoryCodes", List.of("BEAUTY", "LIVING"),
+                "allergyCodes", List.of("NUTS"),
+                "giftExclusionCodes", List.of()));
+
+        assertThat(preference.interestCategoryCodes()).containsExactly("BEAUTY", "LIVING");
+        assertThat(preference.allergyCodes()).containsExactly("NUTS");
+        assertThat(preference.giftExclusionCodes()).isEmpty();
+    }
+
+    @Test
+    void missingKeys_fromOnboardingTastes_returnsEmptyLists() {
+        GiftPreference preference = GiftPreference.fromOnboardingTastes(Map.of("allergyCodes", "MILK"));
+
+        assertThat(preference.interestCategoryCodes()).isEmpty();
+        assertThat(preference.allergyCodes()).isEmpty();
+        assertThat(preference.giftExclusionCodes()).isEmpty();
+    }
+
     private static void assertInvalidInput(ThrowingCallable callable) {
         assertThatThrownBy(callable)
                 .isInstanceOf(BusinessException.class)
