@@ -1,8 +1,12 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.util.Map;
 import kr.ktb.zura.needu.user.dto.request.UpdateGiftPreferenceRequest;
 import kr.ktb.zura.needu.user.dto.response.GiftPreferenceResponse;
 import kr.ktb.zura.needu.user.dto.response.GiftPreferenceResultResponse;
+import kr.ktb.zura.needu.user.entity.UserTasteProfile;
+import kr.ktb.zura.needu.user.repository.UserRepository;
+import kr.ktb.zura.needu.user.repository.UserTasteProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,17 +17,29 @@ import org.springframework.transaction.annotation.Transactional;
 public class GiftPreferenceService {
 
     private final UserService userService;
+    private final UserRepository userRepository;
+    private final UserTasteProfileRepository userTasteProfileRepository;
 
-    // TODO: 온보딩 취향 저장 구조를 정한 뒤 조회
     public GiftPreferenceResponse findGiftPreference(Long userId) {
         userService.validateActiveUser(userId);
-        throw new UnsupportedOperationException("온보딩 취향 정보 조회 로직 미구현");
+        return userTasteProfileRepository.findById(userId)
+                .filter(UserTasteProfile::hasOnboardingTastes)
+                .map(profile -> GiftPreferenceResponse.from(
+                        GiftPreference.fromOnboardingTastes(profile.getOnboardingTastes())))
+                .orElseGet(GiftPreferenceResponse::empty);
     }
 
-    // TODO: 온보딩 취향 정보 업데이트 로직 구현
     @Transactional
     public GiftPreferenceResultResponse updateGiftPreference(Long userId, UpdateGiftPreferenceRequest request) {
         userService.validateActiveUser(userId);
-        throw new UnsupportedOperationException("온보딩 취향 정보 업데이트 로직 미구현");
+        GiftPreference preference = GiftPreference.from(
+                request.interestCategoryCodes(), request.allergyCodes(), request.giftExclusionCodes());
+
+        // V1부터 있던 회원은 취향 프로필 행이 없을 수 있음
+        UserTasteProfile profile = userTasteProfileRepository.findById(userId)
+                .orElseGet(() -> new UserTasteProfile(userRepository.getReferenceById(userId), Map.of()));
+        profile.updateOnboardingTastes(preference.toOnboardingTastes());
+        userTasteProfileRepository.save(profile);
+        return GiftPreferenceResultResponse.from(preference);
     }
 }

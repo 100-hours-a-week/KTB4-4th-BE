@@ -9,7 +9,7 @@ import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.user.type.AllergyType;
 import kr.ktb.zura.needu.user.type.GiftExclusionType;
 
-record GiftPreference(
+public record GiftPreference(
         List<ProductCategory> interestCategories,
         List<AllergyType> allergies,
         List<GiftExclusionType> giftExclusions
@@ -30,11 +30,30 @@ record GiftPreference(
         return preference;
     }
 
+    static GiftPreference fromOnboardingTastes(Map<String, Object> onboardingTastes) {
+        return new GiftPreference(
+                toStoredTypes(onboardingTastes.get(INTEREST_CATEGORY_CODES_KEY), ProductCategory.class),
+                toStoredTypes(onboardingTastes.get(ALLERGY_CODES_KEY), AllergyType.class),
+                toStoredTypes(onboardingTastes.get(GIFT_EXCLUSION_CODES_KEY), GiftExclusionType.class));
+    }
+
     Map<String, Object> toOnboardingTastes() {
         return Map.of(
-                INTEREST_CATEGORY_CODES_KEY, toCodes(interestCategories),
-                ALLERGY_CODES_KEY, toCodes(allergies),
-                GIFT_EXCLUSION_CODES_KEY, toCodes(giftExclusions));
+                INTEREST_CATEGORY_CODES_KEY, interestCategoryCodes(),
+                ALLERGY_CODES_KEY, allergyCodes(),
+                GIFT_EXCLUSION_CODES_KEY, giftExclusionCodes());
+    }
+
+    public List<String> interestCategoryCodes() {
+        return toCodes(interestCategories);
+    }
+
+    public List<String> allergyCodes() {
+        return toCodes(allergies);
+    }
+
+    public List<String> giftExclusionCodes() {
+        return toCodes(giftExclusions);
     }
 
     private void validate() {
@@ -48,6 +67,15 @@ record GiftPreference(
             return List.of();
         }
         return codes.stream().distinct().map(fromCode).toList();
+    }
+
+    private static <E extends Enum<E>> List<E> toStoredTypes(Object codes, Class<E> type) {
+        if (!(codes instanceof List<?> codeList)) {
+            return List.of();
+        }
+        return codeList.stream()
+                .map(code -> Enum.valueOf(type, String.valueOf(code)))
+                .toList();
     }
 
     private static List<String> toCodes(List<? extends Enum<?>> types) {
