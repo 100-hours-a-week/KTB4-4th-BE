@@ -13,6 +13,7 @@ import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.GiftProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -33,25 +34,28 @@ public class GiftProductService {
     public ProductCursorPageResponse<GiftProductResponse> findAllGiftProducts(
             Long userId, Long friendUserId, GiftProductSearchCondition condition) {
         validatePriceRange(condition);
-        validateCategory(condition);
+        ProductCategory category = toCategory(condition.category());
         userService.validateActiveUser(userId);
         validateTasteAnalysisCompleted(friendService.findFriendUser(userId, friendUserId));
-        return findGiftProductPage(friendUserId, condition, GiftProductResponse::from);
+        return findGiftProductPage(friendUserId, condition, category, GiftProductResponse::from);
     }
 
     public ProductCursorPageResponse<MyGiftProductResponse> findAllMyGiftProducts(
             Long userId, GiftProductSearchCondition condition) {
         validatePriceRange(condition);
-        validateCategory(condition);
+        ProductCategory category = toCategory(condition.category());
         userService.validateActiveUser(userId);
-        return findGiftProductPage(userId, condition, MyGiftProductResponse::from);
+
+        return findGiftProductPage(userId, condition, category, MyGiftProductResponse::from);
     }
 
     private <T> ProductCursorPageResponse<T> findGiftProductPage(
-            Long ownerUserId, GiftProductSearchCondition condition, Function<GiftProductSummary, T> mapper) {
+            Long ownerUserId, GiftProductSearchCondition condition, ProductCategory category,
+            Function<GiftProductSummary, T> mapper) {
         int size = condition.size();
         // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회한다.
-        List<GiftProductSummary> giftProducts = findGiftProducts(ownerUserId, condition, Limit.of(size + 1));
+        List<GiftProductSummary> giftProducts =
+                findGiftProducts(ownerUserId, condition, category, Limit.of(size + 1));
         boolean hasNext = giftProducts.size() > size;
         List<GiftProductSummary> pageItems = hasNext ? giftProducts.subList(0, size) : giftProducts;
 
@@ -70,11 +74,8 @@ public class GiftProductService {
         }
     }
 
-    // TODO: 카테고리 코드를 정한 뒤 없는 코드는 COMMON_INVALID_INPUT, 있는 코드는 조회 조건에 넣을 것
-    private void validateCategory(GiftProductSearchCondition condition) {
-        if (condition.category() != null) {
-            throw new UnsupportedOperationException("PROD-1 미구현");
-        }
+    private ProductCategory toCategory(String category) {
+        return category == null ? null : ProductCategory.fromCode(category);
     }
 
     // 추천 상품은 친구의 취향 분석 결과로 만들어지므로, 분석이 끝나지 않은 친구는 조회할 수 없다.
@@ -85,14 +86,15 @@ public class GiftProductService {
     }
 
     private List<GiftProductSummary> findGiftProducts(
-            Long ownerUserId, GiftProductSearchCondition condition, Limit limit) {
+            Long ownerUserId, GiftProductSearchCondition condition, ProductCategory category, Limit limit) {
         BigDecimal minPrice = BigDecimal.valueOf(condition.minPrice());
         BigDecimal maxPrice = BigDecimal.valueOf(condition.maxPrice());
         if (condition.cursor() == null) {
-            return giftProductRepository.findAllByUserIdAndPriceRange(ownerUserId, minPrice, maxPrice, limit);
+            return giftProductRepository.findAllByUserIdAndPriceRange(
+                    ownerUserId, minPrice, maxPrice, category, limit);
         }
         GiftProductCursor decodedCursor = GiftProductCursor.decode(condition.cursor());
         return giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
-                ownerUserId, minPrice, maxPrice, decodedCursor.score(), decodedCursor.id(), limit);
+                ownerUserId, minPrice, maxPrice, category, decodedCursor.score(), decodedCursor.id(), limit);
     }
 }
