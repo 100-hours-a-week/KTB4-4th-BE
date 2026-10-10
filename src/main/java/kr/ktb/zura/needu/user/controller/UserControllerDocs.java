@@ -29,9 +29,6 @@ public class UserControllerDocs implements ControllerDocs {
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
                                 UserErrorCode.USER_NOT_FOUND)
                         .build(),
-                OperationDoc.of(GiftPreferenceController.class, "updateGiftPreference")
-                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
-                        .build(),
                 OperationDoc.of(OnboardingController.class, "findOnboardingStatus")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build(),
