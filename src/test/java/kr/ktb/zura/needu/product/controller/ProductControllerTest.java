@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.product.controller;
 
 import java.util.List;
+import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductFeedbackResponse;
 import kr.ktb.zura.needu.product.service.ProductFeedbackService;
 import kr.ktb.zura.needu.product.service.ProductService;
@@ -32,6 +33,7 @@ class ProductControllerTest {
 
     private static final Long LOGIN_USER_ID = 1L;
     private static final Long PRODUCT_ID = 2992L;
+    private static final String CATEGORIES_URL = "/api/v1/products/categories";
     private static final String DETAIL_URL = "/api/v1/products/{productId}";
     private static final String FEEDBACK_URL = "/api/v1/products/{productId}/feedback";
 
@@ -43,6 +45,20 @@ class ProductControllerTest {
 
     @MockitoBean
     private ProductFeedbackService productFeedbackService;
+
+    @Test
+    void loggedInUser_findAllCategories_returnsCodeAndNameItems() throws Exception {
+        given(productService.findAllCategories()).willReturn(List.of(
+                new ProductCategoryResponse("VOUCHER", "교환권"),
+                new ProductCategoryResponse("LIVING", "리빙")));
+
+        mockMvc.perform(get(CATEGORIES_URL).with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("카테고리 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].code").value("VOUCHER"))
+                .andExpect(jsonPath("$.data.items[0].name").value("교환권"))
+                .andExpect(jsonPath("$.data.items[1].code").value("LIVING"));
+    }
 
     @Test
     void contextMissing_findProduct_returnsUnprocessableContent() throws Exception {

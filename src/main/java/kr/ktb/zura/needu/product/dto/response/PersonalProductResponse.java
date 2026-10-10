@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.product.dto.response;
 import java.math.BigDecimal;
 
 import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 
 public record PersonalProductResponse(
@@ -11,7 +12,7 @@ public record PersonalProductResponse(
         String name,
         String productImageUrl,
         String purchaseUrl,
-        String category,
+        ProductCategory category,
         Long price,
         BigDecimal score,
         String reason,
