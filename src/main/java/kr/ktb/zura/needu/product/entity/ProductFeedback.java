@@ -83,10 +83,6 @@ public class ProductFeedback {
         }
     }
 
-    public boolean isDisliked() {
-        return feedbackType == ProductFeedbackType.DISLIKE;
-    }
-
     public boolean isDeleted() {
         return deletedAt != null;
     }

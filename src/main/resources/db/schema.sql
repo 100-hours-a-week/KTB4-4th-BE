@@ -282,7 +282,7 @@ CREATE TABLE IF NOT EXISTS gift_recommendations (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 추천 상품 만족도. (user, product, context)마다 한 행이고 값을 바꾸면 같은 행을 갱신한다
--- DISLIKE하면 해당 context의 추천 행(personal_recommendations / gift_recommendations)의 deleted_at을 채운다
+-- DISLIKE하면 context와 관계없이 그 상품의 추천 행(personal_recommendations, gift_recommendations) deleted_at을 모두 채운다
 CREATE TABLE IF NOT EXISTS product_feedbacks (
     id            BIGINT      NOT NULL AUTO_INCREMENT,
     user_id       BIGINT      NOT NULL,

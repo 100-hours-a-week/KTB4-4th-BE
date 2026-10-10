@@ -36,13 +36,14 @@ public class ProductFeedbackService {
             Long userId, Long productId, ProductContext context, ProductFeedbackType feedback) {
         userService.validateActiveUser(userId);
         validateRecommended(userId, productId, context);
+        validateNotDisliked(userId, productId, feedback);
 
         productFeedbackRepository.findByUserIdAndProductIdAndContext(userId, productId, context)
                 .ifPresentOrElse(
-                        productFeedback -> updateSavedFeedback(productFeedback, feedback),
+                        productFeedback -> productFeedback.updateFeedback(feedback),
                         () -> createFeedback(userId, productId, context, feedback));
         if (feedback == ProductFeedbackType.DISLIKE) {
-            deleteRecommendations(userId, productId, context);
+            deleteRecommendations(userId, productId);
         }
         return new ProductFeedbackResponse(productId, context, feedback);
     }
@@ -58,21 +59,16 @@ public class ProductFeedbackService {
         }
     }
 
-    private void updateSavedFeedback(ProductFeedback productFeedback, ProductFeedbackType feedback) {
-        if (productFeedback.isDisliked() && feedback != ProductFeedbackType.DISLIKE) {
+    private void validateNotDisliked(Long userId, Long productId, ProductFeedbackType feedback) {
+        if (feedback != ProductFeedbackType.DISLIKE && productFeedbackRepository
+                .existsByUserIdAndProductIdAndFeedbackType(userId, productId, ProductFeedbackType.DISLIKE)) {
             throw new BusinessException(ProductErrorCode.PRODUCT_FEEDBACK_ALREADY_DISLIKED);
         }
-        productFeedback.updateFeedback(feedback);
     }
 
-    private void deleteRecommendations(Long userId, Long productId, ProductContext context) {
-        switch (context) {
-            case PERSONAL -> personalProductRepository.findAllByUserIdAndProductId(userId, productId)
-                    .forEach(PersonalProduct::delete);
-            case MY_GIFT -> giftProductRepository.findAllByUserIdAndProductId(userId, productId)
-                    .forEach(GiftProduct::delete);
-            case FRIEND_GIFT -> throw new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT);
-        }
+    private void deleteRecommendations(Long userId, Long productId) {
+        personalProductRepository.findAllByUserIdAndProductId(userId, productId).forEach(PersonalProduct::delete);
+        giftProductRepository.findAllByUserIdAndProductId(userId, productId).forEach(GiftProduct::delete);
 
         eventPublisher.publishEvent(new ProductRecommendationsUpdatedEvent(userId));
     }
