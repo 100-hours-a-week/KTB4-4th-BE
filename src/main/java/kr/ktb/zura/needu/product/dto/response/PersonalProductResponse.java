@@ -18,7 +18,6 @@ public record PersonalProductResponse(
         String reason,
         ProductFeedbackType myFeedback) {
 
-    // TODO: myFeedback을 채울 것 (DISLIKE한 상품은 추천 행이 삭제되어 목록에 오지 않는다)
     public static PersonalProductResponse from(PersonalProductSummary personalProduct) {
         return new PersonalProductResponse(
                 personalProduct.id(),
@@ -30,7 +29,7 @@ public record PersonalProductResponse(
                 toPrice(personalProduct.price()),
                 personalProduct.score(),
                 personalProduct.reason(),
-                null
+                personalProduct.feedback()
         );
     }
 
