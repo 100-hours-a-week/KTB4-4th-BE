@@ -59,12 +59,12 @@ public class ProductController {
             @PathVariable Long productId,
             @Valid @RequestBody UpdateProductFeedbackRequest request
     ) {
-        ProductFeedbackType feedback =
-                request.feedback() == null ? null : ProductFeedbackType.valueOf(request.feedback());
         return ResponseEntity.ok(ApiResponse.of(
                 ProductResponseMessages.FEEDBACK_SAVED,
                 productFeedbackService.updateFeedback(
-                        userId, productId, ProductContext.valueOf(request.context()), feedback)
+                        userId, productId,
+                        ProductContext.valueOf(request.context()),
+                        ProductFeedbackType.valueOf(request.feedback()))
         ));
     }
 }

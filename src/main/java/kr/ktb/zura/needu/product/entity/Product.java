@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -47,8 +48,9 @@ public class Product {
     @Column(nullable = false, length = 300)
     private String name;
 
+    @Enumerated(EnumType.STRING)
     @Column(length = 100)
-    private String category;
+    private ProductCategory category;
 
     @Column(columnDefinition = "TEXT")
     private String description;
@@ -76,7 +78,7 @@ public class Product {
 
     private LocalDateTime deletedAt;
 
-    public Product(PlatformType platformType, String externalId, String name, String category,
+    public Product(PlatformType platformType, String externalId, String name, ProductCategory category,
                    String description, BigDecimal price,
                    String imageUrl, String sellerName, String purchaseUrl) {
         this.platformType = platformType;

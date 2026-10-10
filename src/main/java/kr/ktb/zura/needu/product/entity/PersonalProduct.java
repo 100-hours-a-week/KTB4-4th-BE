@@ -29,7 +29,7 @@ public class PersonalProduct {
     private Long id;
 
     @Column(nullable = false)
-    private Long userId; //user도메인 연결 필요
+    private Long userId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
@@ -49,6 +49,8 @@ public class PersonalProduct {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    private LocalDateTime deletedAt;
+
     public PersonalProduct(Long userId, Product product, BigDecimal score, String reason) {
         this.userId = userId;
         this.product = product;
@@ -58,5 +60,15 @@ public class PersonalProduct {
 
     public void updateScore(BigDecimal score) {
         this.score = score;
+    }
+
+    public void delete() {
+        if (!isDeleted()) {
+            deletedAt = LocalDateTime.now();
+        }
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 }

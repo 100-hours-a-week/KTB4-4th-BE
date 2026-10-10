@@ -5,6 +5,6 @@ import jakarta.validation.constraints.Pattern;
 
 public record UpdateProductFeedbackRequest(
         @NotNull @Pattern(regexp = "PERSONAL|MY_GIFT") String context,
-        @Pattern(regexp = "LIKE|DISLIKE") String feedback
+        @NotNull @Pattern(regexp = "LIKE|DISLIKE") String feedback
 ) {
 }

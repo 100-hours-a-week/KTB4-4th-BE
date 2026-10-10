@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +113,16 @@ public class UserService {
     @Transactional
     public void completeKakaoFriendSync(Long userId) {
         findUser(userId).completeKakaoFriendSync();
+    }
+
+    @Transactional
+    public void completeOnboarding(Long userId, Gender gender, LocalDate birthDate, Map<String, Object> onboardingTastes) {
+        User user = findUser(userId);
+        UserTasteProfile profile = userTasteProfileRepository.findById(userId)
+                .orElseGet(() -> new UserTasteProfile(user, onboardingTastes));
+        profile.updateOnboardingTastes(onboardingTastes);
+        userTasteProfileRepository.save(profile);
+        user.completeOnboarding(gender, birthDate);
     }
 
     @Transactional

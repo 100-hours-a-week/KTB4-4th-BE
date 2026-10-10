@@ -13,6 +13,7 @@ import kr.ktb.zura.needu.notification.dto.response.NotificationSettingsResponse;
 import kr.ktb.zura.needu.notification.entity.NotificationSetting;
 import kr.ktb.zura.needu.notification.repository.NotificationSettingRepository;
 import kr.ktb.zura.needu.notification.type.NotificationSettingType;
+import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
 
 class NotificationSettingServiceTest {
@@ -21,8 +22,9 @@ class NotificationSettingServiceTest {
 
     private final NotificationSettingRepository notificationSettingRepository =
             mock(NotificationSettingRepository.class);
+    private final UserService userService = mock(UserService.class);
     private final NotificationSettingService notificationSettingService =
-            new NotificationSettingService(notificationSettingRepository);
+            new NotificationSettingService(notificationSettingRepository, userService);
 
     @Test
     void someSettingsMissing_findAllNotificationSettings_usesDefaults() {
@@ -33,6 +35,7 @@ class NotificationSettingServiceTest {
         NotificationSettingsResponse response =
                 notificationSettingService.findAllNotificationSettings(USER_ID);
 
+        verify(userService).validateActiveUser(USER_ID);
         assertThat(response.settings()).containsExactly(
                 new NotificationSettingResponse(NotificationSettingType.CHAT, true, null),
                 new NotificationSettingResponse(NotificationSettingType.POKE, true, null),
@@ -56,6 +59,7 @@ class NotificationSettingServiceTest {
         NotificationSettingResponse response = notificationSettingService.updateNotificationSetting(
                 USER_ID, NotificationSettingType.MARKETING, new UpdateNotificationSettingRequest(true));
 
+        verify(userService).validateActiveUser(USER_ID);
         assertThat(response).isEqualTo(
                 new NotificationSettingResponse(NotificationSettingType.MARKETING, true, null));
         verify(notificationSettingRepository).saveAndFlush(org.mockito.ArgumentMatchers.argThat(setting ->

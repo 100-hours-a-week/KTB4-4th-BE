@@ -16,11 +16,13 @@ public class KakaoFriendSyncService {
     private final KakaoFriendClient kakaoFriendClient;
     private final FriendService friendService;
 
-    public URI createAuthorizationUri(String state) {
+    public URI createAuthorizationUri(Long userId, String state) {
+        userService.validateActiveUser(userId);
         return authService.createKakaoFriendAuthorizationUri(state);
     }
 
     public void sync(Long userId, String code) {
+        userService.validateActiveUser(userId);
         AuthService.KakaoAuthorization authorization = authService.authorizeKakaoFriend(code);
         userService.validateKakaoIdentity(userId, authorization.kakaoUserId());
         friendService.syncKakaoFriends(userId,

@@ -11,6 +11,8 @@ import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -57,7 +59,7 @@ class PersonalProductServiceTest {
                 createPersonalProduct(10L, "0.700000", 1000)
         );
         given(personalProductRepository.findAllByUserIdAndPriceRange(
-                USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3))).willReturn(personalProducts);
+                USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(3))).willReturn(personalProducts);
         given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID)).willReturn(priceRange());
 
         ProductCursorPageResponse<PersonalProductResponse> response =
@@ -74,7 +76,7 @@ class PersonalProductServiceTest {
 
     @Test
     void itemsNotExceedingSize_findAllPersonalProducts_returnsLastPage() {
-        given(personalProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(3)))
+        given(personalProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(3)))
                 .willReturn(List.of(createPersonalProduct(30L, "0.900000", 5200)));
         given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID)).willReturn(priceRange());
 
@@ -91,7 +93,7 @@ class PersonalProductServiceTest {
     void cursorGiven_findAllPersonalProducts_findsItemsAfterCursor() {
         String cursor = new PersonalProductCursor(new BigDecimal("0.800000"), 20L).encode();
         given(personalProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
-                USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.800000"), 20L, Limit.of(3)))
+                USER_ID, MIN_PRICE, MAX_PRICE, null, new BigDecimal("0.800000"), 20L, Limit.of(3)))
                 .willReturn(List.of(createPersonalProduct(10L, "0.700000", 1000)));
         given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID)).willReturn(priceRange());
 
@@ -100,13 +102,13 @@ class PersonalProductServiceTest {
 
         assertThat(response.items()).extracting(PersonalProductResponse::recommendationId).containsExactly(10L);
         assertThat(response.hasNext()).isFalse();
-        verify(personalProductRepository, never()).findAllByUserIdAndPriceRange(anyLong(), any(), any(), any());
+        verify(personalProductRepository, never()).findAllByUserIdAndPriceRange(anyLong(), any(), any(), any(), any());
     }
 
     @Test
     void noPersonalProducts_findAllPersonalProducts_returnsEmptyItems() {
         given(personalProductRepository.findAllByUserIdAndPriceRange(
-                USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(21))).willReturn(List.of());
+                USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(21))).willReturn(List.of());
         given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID))
                 .willReturn(new PriceRangeResponse(null, null));
 
@@ -153,6 +155,67 @@ class PersonalProductServiceTest {
         verifyNoInteractions(personalProductRepository, productPriceRangeCacheService);
     }
 
+    @Test
+    void categoryGiven_findAllPersonalProducts_findsOnlyThatCategory() {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(
+                MIN_PRICE.longValue(), MAX_PRICE.longValue(), "LIVING", null, 2);
+        given(personalProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.LIVING, Limit.of(3)))
+                .willReturn(List.of(createPersonalProduct(30L, "0.900000", 5200)));
+        given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID)).willReturn(priceRange());
+
+        ProductCursorPageResponse<PersonalProductResponse> response =
+                personalProductService.findAllPersonalProducts(USER_ID, condition);
+
+        assertThat(response.items()).extracting(PersonalProductResponse::recommendationId).containsExactly(30L);
+        assertThat(response.priceRange()).isEqualTo(priceRange());
+    }
+
+    @Test
+    void categoryAndCursorGiven_findAllPersonalProducts_findsThatCategoryAfterCursor() {
+        String cursor = new PersonalProductCursor(new BigDecimal("0.800000"), 20L).encode();
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(
+                MIN_PRICE.longValue(), MAX_PRICE.longValue(), "BEAUTY", cursor, 2);
+        given(personalProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.BEAUTY, new BigDecimal("0.800000"), 20L, Limit.of(3)))
+                .willReturn(List.of(createPersonalProduct(10L, "0.700000", 1000)));
+        given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID)).willReturn(priceRange());
+
+        ProductCursorPageResponse<PersonalProductResponse> response =
+                personalProductService.findAllPersonalProducts(USER_ID, condition);
+
+        assertThat(response.items()).extracting(PersonalProductResponse::recommendationId).containsExactly(10L);
+    }
+
+    @Test
+    void unknownCategory_findAllPersonalProducts_throwsInvalidInput() {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(
+                MIN_PRICE.longValue(), MAX_PRICE.longValue(), "living", null, 20);
+
+        assertThatThrownBy(() -> personalProductService.findAllPersonalProducts(USER_ID, condition))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
+        verifyNoInteractions(userService, personalProductRepository, productPriceRangeCacheService);
+    }
+
+    @Test
+    void feedbackSaved_findAllPersonalProducts_returnsMyFeedback() {
+        PersonalProductSummary liked = new PersonalProductSummary(
+                30L, 1030L, "상품30", null, null, ProductCategory.LIVING,
+                BigDecimal.valueOf(5200), new BigDecimal("0.900000"), null, ProductFeedbackType.LIKE);
+        given(personalProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(3)))
+                .willReturn(List.of(liked, createPersonalProduct(20L, "0.800000", 3100)));
+        given(productPriceRangeCacheService.findPersonalPriceRange(USER_ID)).willReturn(priceRange());
+
+        ProductCursorPageResponse<PersonalProductResponse> response =
+                personalProductService.findAllPersonalProducts(USER_ID, condition(null, 2));
+
+        assertThat(response.items()).extracting(PersonalProductResponse::myFeedback)
+                .containsExactly(ProductFeedbackType.LIKE, null);
+    }
+
     private PersonalProductSearchCondition condition(String cursor, int size) {
         return new PersonalProductSearchCondition(MIN_PRICE.longValue(), MAX_PRICE.longValue(), null, cursor, size);
     }
@@ -164,6 +227,6 @@ class PersonalProductServiceTest {
     private PersonalProductSummary createPersonalProduct(Long id, String score, long price) {
         return new PersonalProductSummary(
                 id, id + 1000, "상품" + id, null, null, null,
-                BigDecimal.valueOf(price), new BigDecimal(score), null);
+                BigDecimal.valueOf(price), new BigDecimal(score), null, null);
     }
 }

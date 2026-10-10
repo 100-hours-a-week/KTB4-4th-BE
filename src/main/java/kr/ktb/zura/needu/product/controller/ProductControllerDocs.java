@@ -39,12 +39,16 @@ public class ProductControllerDocs implements ControllerDocs {
                                 ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND, FriendErrorCode.FRIEND_NOT_FOUND)
                         .build(),
                 OperationDoc.of(ProductController.class, "updateFeedback")
-                        .errors(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND)
+                        .errors(ACTIVE_USER_ERRORS)
+                        .errors(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND,
+                                ProductErrorCode.PRODUCT_FEEDBACK_ALREADY_DISLIKED)
                         .build(),
                 OperationDoc.of(ProductLinkClickController.class, "createLinkClick")
                         .successStatus(HttpStatus.NO_CONTENT)
+                        .errors(ACTIVE_USER_ERRORS)
                         .build(),
                 OperationDoc.of(PurchaseCheckController.class, "answerPurchaseCheck")
+                        .errors(ACTIVE_USER_ERRORS)
                         .errors(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND,
                                 ProductErrorCode.PURCHASE_CHECK_ALREADY_ANSWERED)
                         .build()

@@ -17,6 +17,7 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
             from GiftProduct gp
             join gp.product p
             where gp.userId = :userId
+              and gp.deletedAt is null
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
             """)
@@ -29,6 +30,7 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
             from GiftProduct gp
             join gp.product p
             where gp.userId = :userId
+              and gp.deletedAt is null
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and p.price between :minPrice and :maxPrice
@@ -48,6 +50,7 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
             from GiftProduct gp
             join gp.product p
             where gp.userId = :userId
+              and gp.deletedAt is null
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and p.price between :minPrice and :maxPrice
@@ -64,4 +67,17 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
     );
 
     List<GiftProduct> findAllByUserIdAndProductIdIn(Long userId, Collection<Long> productIds);
+
+    List<GiftProduct> findAllByUserIdAndProductId(Long userId, Long productId);
+
+    @Query("""
+            select count(gp) > 0
+            from GiftProduct gp
+            join gp.product p
+            where gp.userId = :userId
+              and p.id = :productId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            """)
+    boolean existsActiveByUserIdAndProductId(@Param("userId") Long userId, @Param("productId") Long productId);
 }

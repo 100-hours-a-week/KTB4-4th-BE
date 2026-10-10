@@ -20,6 +20,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -41,7 +42,7 @@ class GiftProductControllerTest {
             new GiftProductSearchCondition(30000L, 50000L, null, null, 20);
     private static final GiftProductResponse CROSS_BAG = new GiftProductResponse(
             101L, 1001L, "https://example.com/products/1001.jpg", "https://example.com/products/1001",
-            "FASHION", "미니 크로스백", 49000L,
+            ProductCategory.FASHION, "미니 크로스백", 49000L,
             new BigDecimal("0.900000"),
             List.of("미니멀", "데일리"), "데일리룩을 즐겨 입어요.");
 

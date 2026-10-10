@@ -3,12 +3,17 @@ package kr.ktb.zura.needu.notification.service;
 import kr.ktb.zura.needu.notification.dto.request.CreatePushSubscriptionRequest;
 import kr.ktb.zura.needu.notification.dto.request.DeletePushSubscriptionRequest;
 import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionResponse;
+import kr.ktb.zura.needu.user.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class PushSubscriptionService {
+
+    private final UserService userService;
 
     // TODO: 허용된 푸시 서비스 도메인만 받도록(SSRF 방지, 아니면 COMMON_INVALID_INPUT)
     //  endpoint 기준 upsert: 새 endpoint는 등록, 내 구독은 keys 갱신, 다른 사용자의 구독은 현재 사용자로 옮기도록
@@ -16,6 +21,7 @@ public class PushSubscriptionService {
     //  기기 웹 푸시 구독 API
     @Transactional
     public PushSubscriptionResponse subscribe(Long userId, CreatePushSubscriptionRequest request) {
+        userService.validateActiveUser(userId);
         throw new UnsupportedOperationException("기기 웹 푸시 구독 로직 미구현");
     }
 
@@ -23,6 +29,7 @@ public class PushSubscriptionService {
     //  기기 웹 푸시 구독 해제 API
     @Transactional
     public void unsubscribe(Long userId, DeletePushSubscriptionRequest request) {
+        userService.validateActiveUser(userId);
         throw new UnsupportedOperationException("기기 웹 푸시 구독 해제 미구현");
     }
 }

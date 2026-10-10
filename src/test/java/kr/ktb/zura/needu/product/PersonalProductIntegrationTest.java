@@ -8,8 +8,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
+import kr.ktb.zura.needu.product.entity.ProductFeedback;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.product.type.ProductCategory;
+import kr.ktb.zura.needu.product.type.ProductContext;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.type.Gender;
@@ -72,8 +76,10 @@ class PersonalProductIntegrationTest {
     void tearDown() {
         personalProductRepository.deleteAll();
         // product 도메인에 아직 ProductRepository가 없어 테스트 데이터 정리에만 EntityManager를 사용한다.
-        transactionTemplate.executeWithoutResult(status ->
-                entityManager.createQuery("delete from Product").executeUpdate());
+        transactionTemplate.executeWithoutResult(status -> {
+            entityManager.createQuery("delete from ProductFeedback").executeUpdate();
+            entityManager.createQuery("delete from Product").executeUpdate();
+        });
         userRepository.deleteAll();
     }
 
@@ -106,6 +112,51 @@ class PersonalProductIntegrationTest {
                 .andExpect(jsonPath("$.data.items[0].recommendationId").value(mug.getId()))
                 .andExpect(jsonPath("$.nextCursor").isEmpty())
                 .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void categoryGiven_findAllPersonalProducts_paginatesWithoutDislikedOrOtherCategory() throws Exception {
+        User user = userRepository.save(createUser());
+        PersonalProduct lamp = savePersonalProduct(user.getId(), "0.900000", "램프", ProductCategory.LIVING);
+        PersonalProduct disliked = savePersonalProduct(user.getId(), "0.850000", "별로예요", ProductCategory.LIVING);
+        savePersonalProduct(user.getId(), "0.800000", "립밤", ProductCategory.BEAUTY);
+        PersonalProduct chair = savePersonalProduct(user.getId(), "0.700000", "의자", ProductCategory.LIVING);
+        PersonalProduct mug = savePersonalProduct(user.getId(), "0.600000", "머그컵", ProductCategory.LIVING);
+        transactionTemplate.executeWithoutResult(status -> {
+            entityManager.find(PersonalProduct.class, disliked.getId()).delete();
+            entityManager.persist(new ProductFeedback(
+                    user.getId(), disliked.getProduct(), ProductContext.PERSONAL, ProductFeedbackType.DISLIKE));
+            entityManager.persist(new ProductFeedback(
+                    user.getId(), lamp.getProduct(), ProductContext.PERSONAL, ProductFeedbackType.LIKE));
+        });
+
+        String firstPage = mockMvc.perform(personalProductsRequest(user.getId())
+                        .param("category", "LIVING").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].recommendationId").value(lamp.getId()))
+                .andExpect(jsonPath("$.data.items[0].category").value("LIVING"))
+                .andExpect(jsonPath("$.data.items[0].myFeedback").value("LIKE"))
+                .andExpect(jsonPath("$.data.items[1].recommendationId").value(chair.getId()))
+                .andExpect(jsonPath("$.data.items[1].myFeedback").isEmpty())
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String nextCursor = jsonMapper.readTree(firstPage).get("nextCursor").asString();
+
+        mockMvc.perform(personalProductsRequest(user.getId())
+                        .param("category", "LIVING").param("cursor", nextCursor).param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].recommendationId").value(mug.getId()))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void unknownCategory_findAllPersonalProducts_returnsUnprocessableContent() throws Exception {
+        User user = userRepository.save(createUser());
+
+        mockMvc.perform(personalProductsRequest(user.getId()).param("category", "UNKNOWN"))
+                .andExpect(status().isUnprocessableContent());
     }
 
     @Test
@@ -173,12 +224,24 @@ class PersonalProductIntegrationTest {
     }
 
     private User createUser() {
-        return new User(externalIdSequence.incrementAndGet(), "니듀", null, Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        LocalDate birthDate = LocalDate.of(2000, 1, 1);
+        User user = new User(externalIdSequence.incrementAndGet(), "니듀", null, Gender.FEMALE, birthDate);
+        user.completeOnboarding(Gender.FEMALE, birthDate);
+        return user;
     }
 
     private PersonalProduct savePersonalProduct(Long userId, String score, String name, String price) {
+        return savePersonalProduct(userId, score, name, price, null);
+    }
+
+    private PersonalProduct savePersonalProduct(Long userId, String score, String name, ProductCategory category) {
+        return savePersonalProduct(userId, score, name, "40000.00", category);
+    }
+
+    private PersonalProduct savePersonalProduct(
+            Long userId, String score, String name, String price, ProductCategory category) {
         Product product = new Product(
-                PlatformType.COUPANG, name, name, null, null, new BigDecimal(price),
+                PlatformType.COUPANG, name, name, category, null, new BigDecimal(price),
                 "https://image.test/product.png", null, null);
         transactionTemplate.executeWithoutResult(status -> entityManager.persist(product));
         return personalProductRepository.save(new PersonalProduct(userId, product, new BigDecimal(score), null));

@@ -18,23 +18,29 @@ public class UserControllerDocs implements ControllerDocs {
                                 UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(UserController.class, "withdraw")
-                        .errors(UserErrorCode.USER_WITHDRAWAL_IN_PROGRESS, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_WITHDRAWN,
+                                UserErrorCode.USER_WITHDRAWAL_IN_PROGRESS, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
                         .build(),
                 OperationDoc.of(GiftPreferenceController.class, "findGiftPreference")
-                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
+                                UserErrorCode.USER_NOT_FOUND)
+                        .build(),
+                OperationDoc.of(GiftPreferenceController.class, "updateGiftPreference")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
+                                UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(OnboardingController.class, "findOnboardingStatus")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(OnboardingController.class, "completeOnboarding")
-                        .errors(UserErrorCode.USER_REQUIRED_CONSENT_MISSING, UserErrorCode.USER_NOT_FOUND,
-                                UserErrorCode.USER_ONBOARDING_ALREADY_COMPLETED)
+                        .errors(UserErrorCode.USER_REQUIRED_CONSENT_MISSING, UserErrorCode.USER_BLOCKED,
+                                UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_ONBOARDING_ALREADY_COMPLETED)
                         .build(),
                 OperationDoc.of(ConsentController.class, "findConsents")
-                        .errors(UserErrorCode.USER_BLOCKED)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build(),
                 OperationDoc.of(ConsentController.class, "updateConsents")
-                        .errors(UserErrorCode.USER_NOT_FOUND)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_NOT_FOUND)
                         .build()
         );
     }

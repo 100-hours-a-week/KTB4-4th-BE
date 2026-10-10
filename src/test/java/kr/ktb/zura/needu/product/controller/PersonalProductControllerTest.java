@@ -18,6 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -43,7 +44,7 @@ class PersonalProductControllerTest {
                     "미니멀 테이블 램프",
                     "https://image.test/lamp.png",
                     "https://shop.test/lamp",
-                    "LIVING",
+                    ProductCategory.LIVING,
                     52000L,
                     new BigDecimal("0.900000"),
                     "미니멀한 취향과 잘 맞아요.",
@@ -96,6 +97,23 @@ class PersonalProductControllerTest {
                 .andExpect(jsonPath("$.data.items").isEmpty())
                 .andExpect(jsonPath("$.nextCursor").isEmpty())
                 .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void categoryGiven_findAllPersonalProducts_passesItToService() throws Exception {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "LIVING", null, 20);
+        given(personalProductService.findAllPersonalProducts(USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(LAMP), new PriceRangeResponse(30000L, 60000L), null, false));
+
+        mockMvc.perform(get(URL)
+                        .param("minPrice", "30000")
+                        .param("maxPrice", "60000")
+                        .param("category", "LIVING")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].category").value("LIVING"))
+                .andExpect(jsonPath("$.data.items[0].myFeedback").isEmpty());
     }
 
     @Test
