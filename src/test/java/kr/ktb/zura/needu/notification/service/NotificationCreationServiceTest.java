@@ -19,6 +19,8 @@ import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 class NotificationCreationServiceTest {
 
@@ -26,10 +28,12 @@ class NotificationCreationServiceTest {
     private final NotificationRepository notificationRepository = mock(NotificationRepository.class);
     private final NotificationSettingRepository notificationSettingRepository =
             mock(NotificationSettingRepository.class);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final NotificationCreationService notificationCreationService = new NotificationCreationService(
             notificationEventRepository,
             notificationRepository,
-            notificationSettingRepository
+            notificationSettingRepository,
+            eventPublisher
     );
 
     @Test
@@ -64,6 +68,12 @@ class NotificationCreationServiceTest {
                 .extracting(Notification::getEvent)
                 .containsOnly(result.getFirst().getEvent());
         verify(notificationRepository).saveAll(org.mockito.ArgumentMatchers.any());
+        ArgumentCaptor<NotificationsCreatedEvent> eventCaptor =
+                ArgumentCaptor.forClass(NotificationsCreatedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().notifications())
+                .extracting(NotificationsCreatedEvent.CreatedNotification::receiverUserId)
+                .containsExactlyInAnyOrder(1L, 3L);
     }
 
     @Test
@@ -88,6 +98,7 @@ class NotificationCreationServiceTest {
         assertThat(result).isEmpty();
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
         verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -109,5 +120,6 @@ class NotificationCreationServiceTest {
                 .findAllByUserIdInAndType(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
         verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 }
