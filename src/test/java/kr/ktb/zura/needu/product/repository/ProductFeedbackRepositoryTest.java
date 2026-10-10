@@ -64,6 +64,21 @@ class ProductFeedbackRepositoryTest {
                 .isEmpty();
     }
 
+    @Test
+    void dislikeInAnyContext_existsByUserIdAndProductIdAndFeedbackType_returnsTrue() {
+        Product lamp = saveProduct();
+        productFeedbackRepository.saveAndFlush(
+                new ProductFeedback(USER_ID, lamp, ProductContext.MY_GIFT, ProductFeedbackType.DISLIKE));
+        entityManager.clear();
+
+        assertThat(productFeedbackRepository.existsByUserIdAndProductIdAndFeedbackType(
+                USER_ID, lamp.getId(), ProductFeedbackType.DISLIKE)).isTrue();
+        assertThat(productFeedbackRepository.existsByUserIdAndProductIdAndFeedbackType(
+                USER_ID, lamp.getId(), ProductFeedbackType.LIKE)).isFalse();
+        assertThat(productFeedbackRepository.existsByUserIdAndProductIdAndFeedbackType(
+                2L, lamp.getId(), ProductFeedbackType.DISLIKE)).isFalse();
+    }
+
     private Product saveProduct() {
         return entityManager.persist(new Product(
                 PlatformType.COUPANG, "램프", "램프", null, null,

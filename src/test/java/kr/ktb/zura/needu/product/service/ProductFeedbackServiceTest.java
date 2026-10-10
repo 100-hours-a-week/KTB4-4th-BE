@@ -30,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.BDDMockito.willThrow;
 
 // upsert·멱등성은 유일 제약과 실제 저장 결과로 확인해야 해서 실제 JPA(H2) 위에서 검증한다.
@@ -103,25 +104,36 @@ class ProductFeedbackServiceTest {
     }
 
     @Test
-    void dislike_updateFeedback_deletesOnlyRecommendationInSameContext() {
-        Product lamp = saveProduct("램프");
-        entityManager.persist(new PersonalProduct(USER_ID, lamp, new BigDecimal("0.500000"), null));
-        entityManager.persist(new GiftProduct(USER_ID, lamp, new BigDecimal("0.500000"), null, List.of()));
-        flushAndClear();
+    void personalDislike_updateFeedback_deletesRecommendationsInBothTables() {
+        Product lamp = savePersonalAndGiftRecommendation(USER_ID);
 
         productFeedbackService.updateFeedback(
                 USER_ID, lamp.getId(), ProductContext.PERSONAL, ProductFeedbackType.DISLIKE);
         flushAndClear();
 
         assertThat(findPersonalProduct(USER_ID, lamp).isDeleted()).isTrue();
-        assertThat(findGiftProduct(USER_ID, lamp).isDeleted()).isFalse();
+        assertThat(findGiftProduct(USER_ID, lamp).isDeleted()).isTrue();
         assertThat(entityManager.find(Product.class, lamp.getId()).getDeletedAt()).isNull();
+        assertThat(findAllFeedbacks()).singleElement()
+                .extracting(ProductFeedback::getContext).isEqualTo(ProductContext.PERSONAL);
         assertThat(applicationEvents.stream(ProductRecommendationsUpdatedEvent.class))
                 .containsExactly(new ProductRecommendationsUpdatedEvent(USER_ID));
     }
 
     @Test
-    void myGiftDislike_updateFeedback_deletesGiftRecommendation() {
+    void myGiftDislike_updateFeedback_deletesRecommendationsInBothTables() {
+        Product lamp = savePersonalAndGiftRecommendation(USER_ID);
+
+        productFeedbackService.updateFeedback(
+                USER_ID, lamp.getId(), ProductContext.MY_GIFT, ProductFeedbackType.DISLIKE);
+        flushAndClear();
+
+        assertThat(findPersonalProduct(USER_ID, lamp).isDeleted()).isTrue();
+        assertThat(findGiftProduct(USER_ID, lamp).isDeleted()).isTrue();
+    }
+
+    @Test
+    void dislikeOnlyInOneTable_updateFeedback_deletesExistingRecommendation() {
         Product mug = saveProduct("머그컵");
         entityManager.persist(new GiftProduct(USER_ID, mug, new BigDecimal("0.500000"), null, List.of()));
         flushAndClear();
@@ -130,6 +142,44 @@ class ProductFeedbackServiceTest {
         flushAndClear();
 
         assertThat(findGiftProduct(USER_ID, mug).isDeleted()).isTrue();
+    }
+
+    @Test
+    void likeInOtherContextAfterDislike_updateFeedback_throwsAlreadyDisliked() {
+        Product lamp = savePersonalAndGiftRecommendation(USER_ID);
+        productFeedbackService.updateFeedback(
+                USER_ID, lamp.getId(), ProductContext.PERSONAL, ProductFeedbackType.DISLIKE);
+        flushAndClear();
+
+        assertThatThrownBy(() -> productFeedbackService.updateFeedback(
+                USER_ID, lamp.getId(), ProductContext.MY_GIFT, ProductFeedbackType.LIKE))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_FEEDBACK_ALREADY_DISLIKED);
+        entityManager.clear();
+
+        assertThat(findGiftProduct(USER_ID, lamp).isDeleted()).isTrue();
+        assertThat(findAllFeedbacks()).singleElement()
+                .extracting(ProductFeedback::getContext).isEqualTo(ProductContext.PERSONAL);
+    }
+
+    @Test
+    void dislikeInOtherContextAfterDislike_updateFeedback_savesDislike() {
+        Product lamp = savePersonalAndGiftRecommendation(USER_ID);
+        productFeedbackService.updateFeedback(
+                USER_ID, lamp.getId(), ProductContext.PERSONAL, ProductFeedbackType.DISLIKE);
+        flushAndClear();
+
+        ProductFeedbackResponse response = productFeedbackService.updateFeedback(
+                USER_ID, lamp.getId(), ProductContext.MY_GIFT, ProductFeedbackType.DISLIKE);
+        flushAndClear();
+
+        assertThat(response.feedback()).isEqualTo(ProductFeedbackType.DISLIKE);
+        assertThat(findAllFeedbacks())
+                .extracting(ProductFeedback::getContext, ProductFeedback::getFeedbackType)
+                .containsExactlyInAnyOrder(
+                        tuple(ProductContext.PERSONAL, ProductFeedbackType.DISLIKE),
+                        tuple(ProductContext.MY_GIFT, ProductFeedbackType.DISLIKE));
     }
 
     @Test
@@ -258,6 +308,14 @@ class ProductFeedbackServiceTest {
     private Product savePersonalRecommendation(Long userId) {
         Product product = saveProduct("램프");
         entityManager.persist(new PersonalProduct(userId, product, new BigDecimal("0.500000"), null));
+        flushAndClear();
+        return product;
+    }
+
+    private Product savePersonalAndGiftRecommendation(Long userId) {
+        Product product = saveProduct("램프");
+        entityManager.persist(new PersonalProduct(userId, product, new BigDecimal("0.500000"), null));
+        entityManager.persist(new GiftProduct(userId, product, new BigDecimal("0.500000"), null, List.of()));
         flushAndClear();
         return product;
     }
