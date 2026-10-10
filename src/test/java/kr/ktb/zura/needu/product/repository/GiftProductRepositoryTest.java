@@ -131,6 +131,84 @@ class GiftProductRepositoryTest {
         assertThat(result.tasteKeywords()).containsExactly("인테리어", "감성");
     }
 
+    @Test
+    void deletedRecommendation_findAllByUserIdAndPriceRange_excludesItem() {
+        GiftProduct kept = saveGiftProduct(USER_ID, "0.900000", saveProduct("유지", "40000.00"));
+        GiftProduct deleted = saveGiftProduct(USER_ID, "0.800000", saveProduct("별로예요", "40000.00"));
+        deleted.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GiftProductSummary> result =
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(kept.getId());
+    }
+
+    @Test
+    void deletedRecommendation_findAllByUserIdAndPriceRangeAfterCursor_excludesItem() {
+        GiftProduct cursorItem = saveGiftProduct(USER_ID, "0.900000", saveProduct("커서", "40000.00"));
+        GiftProduct deleted = saveGiftProduct(USER_ID, "0.700000", saveProduct("별로예요", "40000.00"));
+        GiftProduct next = saveGiftProduct(USER_ID, "0.500000", saveProduct("다음", "40000.00"));
+        deleted.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.900000"), cursorItem.getId(), Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(next.getId());
+    }
+
+    @Test
+    void deletedRecommendation_findPriceRangeByUserId_excludesItemPrice() {
+        saveGiftProduct(USER_ID, "0.100000", saveProduct("최저가", "10000.00"));
+        saveGiftProduct(USER_ID, "0.200000", saveProduct("최고가", "90000.00"));
+        GiftProduct deleted = saveGiftProduct(USER_ID, "0.300000", saveProduct("별로예요", "100000.00"));
+        deleted.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        ProductPriceRange result = giftProductRepository.findPriceRangeByUserId(USER_ID);
+
+        assertThat(result.minPrice()).isEqualByComparingTo("10000.00");
+        assertThat(result.maxPrice()).isEqualByComparingTo("90000.00");
+    }
+
+    @Test
+    void deletedRecommendation_existsActiveByUserIdAndProductId_returnsTrue() {
+        Product disliked = saveProduct("별로예요", "40000.00");
+        saveGiftProduct(USER_ID, "0.100000", disliked).delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, disliked.getId())).isTrue();
+    }
+
+    @Test
+    void ownActiveRecommendation_existsActiveByUserIdAndProductId_returnsTrue() {
+        Product lamp = saveProduct("램프", "40000.00");
+        saveGiftProduct(USER_ID, "0.100000", lamp);
+        entityManager.clear();
+
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, lamp.getId())).isTrue();
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(OTHER_USER_ID, lamp.getId())).isFalse();
+    }
+
+    @Test
+    void inactiveOrDeletedProduct_existsActiveByUserIdAndProductId_returnsFalse() {
+        Product soldOut = saveProduct("품절", "40000.00");
+        Product deleted = saveProduct("삭제됨", "40000.00");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
+        saveGiftProduct(USER_ID, "0.100000", soldOut);
+        saveGiftProduct(USER_ID, "0.200000", deleted);
+        entityManager.clear();
+
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, soldOut.getId())).isFalse();
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, deleted.getId())).isFalse();
+    }
+
     private Product saveProduct(String name, String price) {
         return entityManager.persist(new Product(
                 PlatformType.COUPANG, name, name, ProductCategory.LIVING, null,

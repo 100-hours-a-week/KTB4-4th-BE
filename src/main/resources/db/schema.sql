@@ -258,6 +258,7 @@ CREATE TABLE IF NOT EXISTS personal_recommendations (
     reason     VARCHAR(500)  NULL,
     created_at DATETIME(6)   NOT NULL,
     updated_at DATETIME(6)   NOT NULL,
+    deleted_at DATETIME(6)   NULL COMMENT '사용자가 DISLIKE하면 채운다',
     PRIMARY KEY (id),
     -- 커서 페이지네이션(order by score desc, id desc)은 이 인덱스를 역방향으로 스캔한다
     KEY idx_personal_recommendations_user_id_score_id (user_id, score, id),
@@ -274,12 +275,14 @@ CREATE TABLE IF NOT EXISTS gift_recommendations (
     taste_keywords JSON          NULL,
     created_at     DATETIME(6)   NOT NULL,
     updated_at     DATETIME(6)   NOT NULL,
+    deleted_at     DATETIME(6)   NULL COMMENT '사용자가 DISLIKE하면 채운다',
     PRIMARY KEY (id),
     KEY idx_gift_recommendations_user_id_score_id (user_id, score, id),
     CONSTRAINT fk_gift_recommendations_product FOREIGN KEY (product_id) REFERENCES products (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 추천 상품 만족도. 선택을 취소하면 deleted_at을 채우고, 다시 선택하면 같은 행을 되살린다
+-- 추천 상품 만족도. (user, product, context)마다 한 행이고 값을 바꾸면 같은 행을 갱신한다
+-- DISLIKE하면 context와 관계없이 그 상품의 추천 행(personal_recommendations, gift_recommendations) deleted_at을 모두 채운다
 CREATE TABLE IF NOT EXISTS product_feedbacks (
     id            BIGINT      NOT NULL AUTO_INCREMENT,
     user_id       BIGINT      NOT NULL,

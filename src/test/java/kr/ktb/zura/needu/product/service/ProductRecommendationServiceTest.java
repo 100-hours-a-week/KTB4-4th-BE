@@ -129,6 +129,24 @@ class ProductRecommendationServiceTest {
     }
 
     @Test
+    void dislikedPersonalProductRecommendedAgain_saveRecommendations_keepsItDeleted() {
+        Product selfProduct = product("self-1");
+        givenProduct("self-1", selfProduct);
+        PersonalProduct disliked = new PersonalProduct(USER_ID, selfProduct, new BigDecimal("1.0"), "이전 추천");
+        disliked.delete();
+        given(personalProductRepository.findAllByUserIdAndProductIdIn(eq(USER_ID), anyCollection()))
+                .willReturn(List.of(disliked));
+
+        productRecommendationService.saveRecommendations(
+                USER_ID, recommendations(item("self-1", "새 추천")), recommendations(), List.of());
+
+        verify(personalProductRepository).saveAll(personalProductsCaptor.capture());
+        assertThat(personalProductsCaptor.getValue()).isEmpty();
+        assertThat(disliked.isDeleted()).isTrue();
+        assertThat(disliked.getScore()).isEqualTo(new BigDecimal("9.2"));
+    }
+
+    @Test
     void giftProductAlreadyRecommended_saveRecommendations_updatesScoreAndSavesOnlyNewProducts() {
         Product existingGiftProduct = product("self-1");
         Product newGiftProduct = product("gift-1");

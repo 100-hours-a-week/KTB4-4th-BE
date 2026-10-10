@@ -18,7 +18,7 @@ public record PersonalProductResponse(
         String reason,
         ProductFeedbackType myFeedback) {
 
-    // TODO: 만족도 테이블을 추가한 뒤 myFeedback을 채우고 DISLIKE 상품은 목록에서 뺄 것
+    // TODO: myFeedback을 채울 것 (DISLIKE한 상품은 추천 행이 삭제되어 목록에 오지 않는다)
     public static PersonalProductResponse from(PersonalProductSummary personalProduct) {
         return new PersonalProductResponse(
                 personalProduct.id(),
