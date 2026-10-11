@@ -2,9 +2,11 @@ package kr.ktb.zura.needu.product.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendationResult;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerRecommendedItem;
@@ -13,6 +15,7 @@ import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
+import kr.ktb.zura.needu.product.repository.ProductFeedbackRepository;
 import kr.ktb.zura.needu.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,7 @@ public class ProductRecommendationService {
     private final ProductRepository productRepository;
     private final PersonalProductRepository personalProductRepository;
     private final GiftProductRepository giftProductRepository;
+    private final ProductFeedbackRepository productFeedbackRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -40,8 +44,12 @@ public class ProductRecommendationService {
     ) {
         List<RecommendedProduct> personalProducts = toRecommendedProducts(self);
         List<RecommendedProduct> giftProducts = toRecommendedProducts(gift);
-        savePersonalProducts(userId, personalProducts);
-        saveGiftProducts(userId, giftProducts, tasteKeywords);
+
+        Set<Long> dislikedProductIds = findDislikedProductIds(userId, personalProducts, giftProducts);
+
+        savePersonalProducts(userId, excludeDisliked(personalProducts, dislikedProductIds));
+        saveGiftProducts(userId, excludeDisliked(giftProducts, dislikedProductIds), tasteKeywords);
+
         eventPublisher.publishEvent(new ProductRecommendationsUpdatedEvent(userId));
     }
 
@@ -82,6 +90,23 @@ public class ProductRecommendationService {
             existingProducts.put(recommended.product().getId(), List.of(giftProduct));
         }
         giftProductRepository.saveAll(newProducts);
+    }
+
+    private Set<Long> findDislikedProductIds(
+            Long userId, List<RecommendedProduct> personalProducts, List<RecommendedProduct> giftProducts) {
+        Set<Long> productIds = new HashSet<>(toProductIds(personalProducts));
+        productIds.addAll(toProductIds(giftProducts));
+        if (productIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(productFeedbackRepository.findAllDislikedProductIds(userId, productIds));
+    }
+
+    private List<RecommendedProduct> excludeDisliked(
+            List<RecommendedProduct> recommendedProducts, Set<Long> dislikedProductIds) {
+        return recommendedProducts.stream()
+                .filter(recommended -> !dislikedProductIds.contains(recommended.product().getId()))
+                .toList();
     }
 
     private List<RecommendedProduct> toRecommendedProducts(AiServerRecommendationResult recommendation) {

@@ -86,6 +86,19 @@ public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> 
     List<GiftProduct> findAllByUserIdAndProductId(Long userId, Long productId);
 
     @Query("""
+            select gp
+            from GiftProduct gp
+            join fetch gp.product p
+            where gp.userId = :userId
+              and gp.deletedAt is null
+              and p.id = :productId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            order by gp.score desc, gp.id desc
+            """)
+    List<GiftProduct> findAllActiveByUserIdAndProductId(@Param("userId") Long userId, @Param("productId") Long productId);
+
+    @Query("""
             select count(gp) > 0
             from GiftProduct gp
             join gp.product p

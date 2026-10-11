@@ -265,6 +265,44 @@ class GiftProductRepositoryTest {
                         tuple(likedByOtherItem.getId(), null));
     }
 
+    @Test
+    void recommendationsSaved_findAllActiveByUserIdAndProductId_returnsOwnRowsByScoreDesc() {
+        Product lamp = saveProduct("램프", "40000.00");
+        GiftProduct low = saveGiftProduct(USER_ID, "0.100000", lamp);
+        GiftProduct high = saveGiftProduct(USER_ID, "0.900000", lamp);
+        saveGiftProduct(OTHER_USER_ID, "0.990000", lamp);
+        entityManager.clear();
+
+        List<GiftProduct> result = giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, lamp.getId());
+
+        assertThat(result).extracting(GiftProduct::getId).containsExactly(high.getId(), low.getId());
+        assertThat(result.getFirst().getProduct().getName()).isEqualTo("램프");
+    }
+
+    @Test
+    void deletedRecommendation_findAllActiveByUserIdAndProductId_returnsEmpty() {
+        Product disliked = saveProduct("별로예요", "40000.00");
+        saveGiftProduct(USER_ID, "0.100000", disliked).delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, disliked.getId())).isEmpty();
+    }
+
+    @Test
+    void inactiveOrDeletedProduct_findAllActiveByUserIdAndProductId_returnsEmpty() {
+        Product soldOut = saveProduct("품절", "40000.00");
+        Product deleted = saveProduct("삭제됨", "40000.00");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
+        saveGiftProduct(USER_ID, "0.100000", soldOut);
+        saveGiftProduct(USER_ID, "0.200000", deleted);
+        entityManager.clear();
+
+        assertThat(giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, soldOut.getId())).isEmpty();
+        assertThat(giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, deleted.getId())).isEmpty();
+    }
+
     private Product saveProduct(String name, String price) {
         return entityManager.persist(new Product(
                 PlatformType.COUPANG, name, name, ProductCategory.LIVING, null,

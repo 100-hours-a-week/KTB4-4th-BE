@@ -34,8 +34,8 @@ public class ProductControllerDocs implements ControllerDocs {
                         .errors(ACTIVE_USER_ERRORS)
                         .build(),
                 OperationDoc.of(ProductController.class, "findProduct")
-                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
-                                ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN,
+                        .errors(ACTIVE_USER_ERRORS)
+                        .errors(ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN,
                                 ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND, FriendErrorCode.FRIEND_NOT_FOUND)
                         .build(),
                 OperationDoc.of(ProductController.class, "updateFeedback")

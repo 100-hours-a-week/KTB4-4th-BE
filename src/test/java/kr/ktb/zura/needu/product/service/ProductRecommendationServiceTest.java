@@ -10,6 +10,7 @@ import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
+import kr.ktb.zura.needu.product.repository.ProductFeedbackRepository;
 import kr.ktb.zura.needu.product.repository.ProductRepository;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class ProductRecommendationServiceTest {
@@ -43,6 +45,9 @@ class ProductRecommendationServiceTest {
 
     @Mock
     private GiftProductRepository giftProductRepository;
+
+    @Mock
+    private ProductFeedbackRepository productFeedbackRepository;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -129,21 +134,47 @@ class ProductRecommendationServiceTest {
     }
 
     @Test
-    void dislikedPersonalProductRecommendedAgain_saveRecommendations_keepsItDeleted() {
+    void dislikedProductRecommendedAgain_saveRecommendations_savesNoRowInEitherList() {
+        Product disliked = product("self-1");
+        Product liked = product("gift-1");
+        givenProduct("self-1", disliked);
+        givenProduct("gift-1", liked);
+        given(productFeedbackRepository.findAllDislikedProductIds(eq(USER_ID), anyCollection()))
+                .willReturn(List.of(disliked.getId()));
+
+        productRecommendationService.saveRecommendations(
+                USER_ID,
+                recommendations(item("self-1", "다시 추천")),
+                recommendations(item("self-1", "선물로 다시 추천"), item("gift-1", "선물 추천")),
+                List.of());
+
+        verify(personalProductRepository).saveAll(personalProductsCaptor.capture());
+        verify(giftProductRepository).saveAll(giftProductsCaptor.capture());
+        assertThat(personalProductsCaptor.getValue()).isEmpty();
+        assertThat(giftProductsCaptor.getValue()).extracting(GiftProduct::getProduct).containsExactly(liked);
+    }
+
+    @Test
+    void dislikedProductAlreadyDeleted_saveRecommendations_keepsDeletedRowUntouched() {
         Product selfProduct = product("self-1");
         givenProduct("self-1", selfProduct);
         PersonalProduct disliked = new PersonalProduct(USER_ID, selfProduct, new BigDecimal("1.0"), "이전 추천");
         disliked.delete();
-        given(personalProductRepository.findAllByUserIdAndProductIdIn(eq(USER_ID), anyCollection()))
-                .willReturn(List.of(disliked));
+        given(productFeedbackRepository.findAllDislikedProductIds(eq(USER_ID), anyCollection()))
+                .willReturn(List.of(selfProduct.getId()));
 
         productRecommendationService.saveRecommendations(
                 USER_ID, recommendations(item("self-1", "새 추천")), recommendations(), List.of());
 
-        verify(personalProductRepository).saveAll(personalProductsCaptor.capture());
-        assertThat(personalProductsCaptor.getValue()).isEmpty();
         assertThat(disliked.isDeleted()).isTrue();
-        assertThat(disliked.getScore()).isEqualTo(new BigDecimal("9.2"));
+        assertThat(disliked.getScore()).isEqualTo(new BigDecimal("1.0"));
+    }
+
+    @Test
+    void noRecommendedProducts_saveRecommendations_skipsDislikeLookup() {
+        productRecommendationService.saveRecommendations(USER_ID, recommendations(), recommendations(), List.of());
+
+        verifyNoInteractions(productFeedbackRepository);
     }
 
     @Test
