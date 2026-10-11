@@ -4,4 +4,6 @@ import kr.ktb.zura.needu.notification.entity.NotificationEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificationEventRepository extends JpaRepository<NotificationEvent, Long> {
+
+    boolean existsByDedupKey(String dedupKey);
 }
