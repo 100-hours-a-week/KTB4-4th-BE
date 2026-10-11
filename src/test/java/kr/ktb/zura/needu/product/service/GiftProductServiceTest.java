@@ -272,9 +272,7 @@ class GiftProductServiceTest {
     }
 
     @Test
-    @DisplayName("내 GiftProduct 목록은 MY_GIFT로 남긴 내 만족도와 추천 키워드·이유를 함께 내려준다.")
     void feedbackSaved_findAllMyGiftProducts_returnsMyFeedback() {
-        //given
         GiftProductSummary liked = new GiftProductSummary(
                 30L, 1030L, "상품30", null, null, ProductCategory.FASHION,
                 BigDecimal.valueOf(49000), new BigDecimal("0.900000"), "데일리룩과 잘 어울려요.",
@@ -283,11 +281,9 @@ class GiftProductServiceTest {
                 .willReturn(List.of(liked, createGiftProduct(20L, "0.800000", 39000)));
         given(productPriceRangeCacheService.findGiftPriceRange(USER_ID)).willReturn(priceRange());
 
-        //when
         ProductCursorPageResponse<MyGiftProductResponse> response =
                 giftProductService.findAllMyGiftProducts(USER_ID, condition(null, 2));
 
-        //then
         assertThat(response.items()).extracting(MyGiftProductResponse::myFeedback)
                 .containsExactly(ProductFeedbackType.LIKE, null);
         assertThat(response.items().getFirst().matchingKeywords()).containsExactly("미니멀");
@@ -295,45 +291,35 @@ class GiftProductServiceTest {
     }
 
     @Test
-    @DisplayName("취향 분석 전이라 추천이 없으면 내 GiftProduct 목록은 빈 목록이다.")
     void noRecommendationsBeforeAnalysis_findAllMyGiftProducts_returnsEmptyItems() {
-        //given
         given(giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(21)))
                 .willReturn(List.of());
         given(productPriceRangeCacheService.findGiftPriceRange(USER_ID)).willReturn(new PriceRangeResponse(null, null));
 
-        //when
         ProductCursorPageResponse<MyGiftProductResponse> response =
                 giftProductService.findAllMyGiftProducts(USER_ID, condition(null, 20));
 
-        //then
         assertThat(response.items()).isEmpty();
         assertThat(response.hasNext()).isFalse();
         verifyNoInteractions(friendService);
     }
 
     @Test
-    @DisplayName("카테고리와 커서가 있으면 내 GiftProduct 목록을 그 카테고리의 커서 이후로 조회한다.")
     void categoryAndCursorGiven_findAllMyGiftProducts_findsThatCategoryAfterCursor() {
-        //given
         String cursor = new GiftProductCursor(new BigDecimal("0.800000"), 20L).encode();
         given(giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
                 USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.FASHION, new BigDecimal("0.800000"), 20L, Limit.of(3)))
                 .willReturn(List.of(createGiftProduct(10L, "0.700000", 31000)));
         given(productPriceRangeCacheService.findGiftPriceRange(USER_ID)).willReturn(priceRange());
 
-        //when
         ProductCursorPageResponse<MyGiftProductResponse> response =
                 giftProductService.findAllMyGiftProducts(USER_ID, condition("FASHION", cursor, 2));
 
-        //then
         assertThat(response.items()).extracting(MyGiftProductResponse::recommendationId).containsExactly(10L);
     }
 
     @Test
-    @DisplayName("없는 카테고리 코드로 내 GiftProduct 목록을 조회하면 입력값 오류다.")
     void unknownCategory_findAllMyGiftProducts_throwsInvalidInput() {
-        //when & then
         assertThatThrownBy(() -> giftProductService.findAllMyGiftProducts(USER_ID, condition("fashion", null, 20)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -342,21 +328,43 @@ class GiftProductServiceTest {
     }
 
     @Test
-    @DisplayName("친구 GiftProduct 목록도 같은 조회 로직으로 카테고리를 거른다.")
     void categoryGiven_findAllGiftProducts_findsOnlyThatCategory() {
-        //given
         givenFriend(true);
         given(giftProductRepository.findAllByUserIdAndPriceRange(
                 FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.FASHION, Limit.of(3)))
                 .willReturn(List.of(createGiftProduct(30L, "0.900000", 49000)));
         given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID)).willReturn(priceRange());
 
-        //when
         ProductCursorPageResponse<GiftProductResponse> response =
                 giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition("FASHION", null, 2));
 
-        //then
         assertThat(response.items()).extracting(GiftProductResponse::recommendationId).containsExactly(30L);
+    }
+
+    @Test
+    void unknownCategory_findAllGiftProducts_throwsInvalidInputWithoutFriendCheck() {
+        assertThatThrownBy(() -> giftProductService.findAllGiftProducts(
+                USER_ID, FRIEND_USER_ID, condition("UNKNOWN", null, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
+        verifyNoInteractions(userService, friendService, giftProductRepository, productPriceRangeCacheService);
+    }
+
+    @Test
+    void categoryAndCursorGiven_findAllGiftProducts_findsThatCategoryAfterCursor() {
+        givenFriend(true);
+        String cursor = new GiftProductCursor(new BigDecimal("0.800000"), 20L).encode();
+        given(giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                FRIEND_USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.FASHION,
+                new BigDecimal("0.800000"), 20L, Limit.of(3)))
+                .willReturn(List.of(createGiftProduct(10L, "0.700000", 31000)));
+        given(productPriceRangeCacheService.findGiftPriceRange(FRIEND_USER_ID)).willReturn(priceRange());
+
+        ProductCursorPageResponse<GiftProductResponse> response =
+                giftProductService.findAllGiftProducts(USER_ID, FRIEND_USER_ID, condition("FASHION", cursor, 2));
+
+        assertThat(response.items()).extracting(GiftProductResponse::recommendationId).containsExactly(10L);
     }
 
     private void givenFriend(boolean tasteAnalysisCompleted) {

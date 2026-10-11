@@ -144,6 +144,44 @@ class GiftProductControllerTest {
     }
 
     @Test
+    void allQueryOmitted_findAllGiftProducts_usesSameDefaultsAsPersonalProducts() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
+
+        mockMvc.perform(get(URL, FRIEND_USER_ID).with(authenticatedUser()))
+                .andExpect(status().isOk());
+
+        verify(giftProductService).findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition);
+    }
+
+    @Test
+    void categoryGiven_findAllGiftProducts_passesItAndKeepsResponseWithoutMyFeedback() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "FASHION", null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(CROSS_BAG), new PriceRangeResponse(15000L, 230000L), null, false));
+
+        mockMvc.perform(firstPageRequest().param("category", "FASHION"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].category").value("FASHION"))
+                .andExpect(jsonPath("$.data.items[0].matchingKeywords[0]").value("미니멀"))
+                .andExpect(jsonPath("$.data.items[0].myFeedback").doesNotExist());
+    }
+
+    @Test
+    void unknownCategory_findAllGiftProducts_returnsUnprocessableContent() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "UNKNOWN", null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willThrow(new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT));
+
+        mockMvc.perform(firstPageRequest().param("category", "UNKNOWN"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
     void nonNumericParameter_findAllGiftProducts_returnsBadRequest() throws Exception {
         mockMvc.perform(get(URL, "abc")
                         .param("minPrice", "30000")
