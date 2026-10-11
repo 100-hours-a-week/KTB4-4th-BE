@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
@@ -13,8 +14,10 @@ import kr.ktb.zura.needu.notification.exception.NotificationErrorCode;
 import kr.ktb.zura.needu.notification.sse.NotificationRedisEvent;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class NotificationStreamService {
@@ -75,10 +78,44 @@ public class NotificationStreamService {
         });
     }
 
-    // TODO: receiverUserId의 로컬 emitter들에 notification 이벤트(data, unreadCount) 전송, 실패한 emitter 정리
     public void sendNotification(NotificationRedisEvent event) {
+        // notificationId를 가진 JSON 객체인지는 NotificationEventSubscriber에서 검증한다.
+        ObjectNode responseData = ((ObjectNode) event.data()).deepCopy();
+        responseData.put("unreadCount", event.unreadCount());
+        String notificationId = responseData.get("notificationId").asString();
+        sendToUser(event.receiverUserId(), () -> SseEmitter.event()
+                .id(notificationId)
+                .name("notification.created")
+                .data(responseData));
+    }
+
+    @Scheduled(fixedRateString = "${needu.notification.heartbeat-interval}")
+    void sendHeartbeat() {
+        HeartbeatEvent heartbeat = new HeartbeatEvent(LocalDateTime.now(ZoneOffset.UTC));
+        emittersByUserId.keySet().forEach(userId -> sendToUser(userId, () -> SseEmitter.event()
+                .name("heartbeat")
+                .data(heartbeat)));
+    }
+
+    private void sendToUser(Long userId, Supplier<SseEmitter.SseEventBuilder> eventSupplier) {
+        Set<SseEmitter> emitters = emittersByUserId.get(userId);
+        if (emitters == null) {
+            return;
+        }
+
+        emitters.forEach(emitter -> {
+            try {
+                emitter.send(eventSupplier.get());
+            } catch (IOException | IllegalStateException exception) {
+                emitter.completeWithError(exception);
+                removeEmitter(userId, emitter);
+            }
+        });
     }
 
     private record ConnectedEvent(LocalDateTime connectedAt) {
+    }
+
+    private record HeartbeatEvent(LocalDateTime serverTime) {
     }
 }
