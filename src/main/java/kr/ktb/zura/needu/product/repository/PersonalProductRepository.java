@@ -86,6 +86,19 @@ public interface PersonalProductRepository extends JpaRepository<PersonalProduct
     List<PersonalProduct> findAllByUserIdAndProductId(Long userId, Long productId);
 
     @Query("""
+            select pp
+            from PersonalProduct pp
+            join fetch pp.product p
+            where pp.userId = :userId
+              and pp.deletedAt is null
+              and p.id = :productId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            order by pp.score desc, pp.id desc
+            """)
+    List<PersonalProduct> findAllActiveByUserIdAndProductId(@Param("userId") Long userId, @Param("productId") Long productId);
+
+    @Query("""
             select count(pp) > 0
             from PersonalProduct pp
             join pp.product p

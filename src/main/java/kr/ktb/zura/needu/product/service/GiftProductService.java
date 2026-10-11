@@ -36,7 +36,7 @@ public class GiftProductService {
         validatePriceRange(condition);
         ProductCategory category = toCategory(condition.category());
         userService.validateActiveUser(userId);
-        validateTasteAnalysisCompleted(friendService.findFriendUser(userId, friendUserId));
+        validateFriendGiftViewable(userId, friendUserId);
         return findGiftProductPage(friendUserId, condition, category, GiftProductResponse::from);
     }
 
@@ -47,6 +47,13 @@ public class GiftProductService {
         userService.validateActiveUser(userId);
 
         return findGiftProductPage(userId, condition, category, MyGiftProductResponse::from);
+    }
+
+    public void validateFriendGiftViewable(Long userId, Long friendUserId) {
+        UserDetailResponse friend = friendService.findFriendUser(userId, friendUserId);
+        if (!friend.tasteAnalysisCompleted()) {
+            throw new BusinessException(ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN);
+        }
     }
 
     private <T> ProductCursorPageResponse<T> findGiftProductPage(
@@ -78,12 +85,6 @@ public class GiftProductService {
         return category == null ? null : ProductCategory.fromCode(category);
     }
 
-    // 추천 상품은 친구의 취향 분석 결과로 만들어지므로, 분석이 끝나지 않은 친구는 조회할 수 없다.
-    private void validateTasteAnalysisCompleted(UserDetailResponse friend) {
-        if (!friend.tasteAnalysisCompleted()) {
-            throw new BusinessException(ProductErrorCode.PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN);
-        }
-    }
 
     private List<GiftProductSummary> findGiftProducts(
             Long ownerUserId, GiftProductSearchCondition condition, ProductCategory category, Limit limit) {
