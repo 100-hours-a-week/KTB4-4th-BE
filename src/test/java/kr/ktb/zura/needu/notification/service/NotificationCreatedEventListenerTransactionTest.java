@@ -55,7 +55,8 @@ class NotificationCreatedEventListenerTransactionTest {
                     .publish(org.mockito.ArgumentMatchers.argThat(event ->
                             event.receiverUserId().equals(RECEIVER_USER_ID)
                                     && event.unreadCount() == 3L
-                                    && event.data().get("notificationId").asLong() == 10L));
+                                    && event.data().get("notificationId").asLong() == 10L
+                                    && event.data().get("targetAvailable").asBoolean()));
         }
     }
 
@@ -81,12 +82,12 @@ class NotificationCreatedEventListenerTransactionTest {
         return new NotificationsCreatedEvent(List.of(new NotificationsCreatedEvent.CreatedNotification(
                 10L,
                 RECEIVER_USER_ID,
-                NotificationCategory.CHAT,
-                NotificationType.CHAT,
-                "새로운 답변이 도착했어요.",
-                "친구가 상품에 대한 의견을 남겼어요.",
+                NotificationCategory.POKE,
+                NotificationType.POKE,
+                "친구가 콕 찔렀어요.",
+                "AI대화를 통해 취향 분석을 해보세요!",
                 NotificationResourceType.AI_CONVERSATION,
-                20L,
+                null,
                 LocalDateTime.of(2026, 10, 10, 12, 0)
         )));
     }

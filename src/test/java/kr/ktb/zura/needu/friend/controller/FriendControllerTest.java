@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.friend.controller;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -9,10 +10,12 @@ import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
+import kr.ktb.zura.needu.friend.dto.response.PokeResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
 import kr.ktb.zura.needu.friend.service.PokeService;
+import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -42,6 +46,7 @@ class FriendControllerTest {
     private static final String URL = "/api/v1/friends/{userId}";
     private static final String LIST_URL = "/api/v1/friends";
     private static final String FAVORITE_URL = "/api/v1/friends/{userId}/favorite";
+    private static final String POKE_URL = "/api/v1/friends/{userId}/pokes";
 
     @Autowired
     private MockMvc mockMvc;
@@ -183,6 +188,61 @@ class FriendControllerTest {
                 .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
 
         verify(friendService, never()).findFriend(anyLong(), anyLong());
+    }
+
+    @Test
+    void friendExists_createPoke_returnsCreated() throws Exception {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 11, 12, 0);
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID)).willReturn(new PokeResponse(createdAt));
+
+        mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("친구를 콕 찔렀어요."))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-11T12:00:00"));
+    }
+
+    @Test
+    void blockedUser_createPoke_returnsForbidden() throws Exception {
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID))
+                .willThrow(new BusinessException(UserErrorCode.USER_BLOCKED));
+
+        mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("이용이 제한된 계정입니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void onboardingUser_createPoke_returnsForbidden() throws Exception {
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID))
+                .willThrow(new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED));
+
+        mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("온보딩 진행이 필요합니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void notFriend_createPoke_returnsNotFound() throws Exception {
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID))
+                .willThrow(new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
+
+        mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("친구를 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void unexpectedError_createPoke_returnsInternalServerError() throws Exception {
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID))
+                .willThrow(new IllegalStateException("unexpected"));
+
+        mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     private static RequestPostProcessor authenticatedUser() {

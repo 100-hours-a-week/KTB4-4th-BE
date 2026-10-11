@@ -1,6 +1,17 @@
 package kr.ktb.zura.needu.friend.service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Set;
+import java.util.UUID;
+import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.friend.dto.response.PokeResponse;
+import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
+import kr.ktb.zura.needu.friend.repository.FriendRepository;
+import kr.ktb.zura.needu.notification.service.NotificationCreationService;
+import kr.ktb.zura.needu.notification.type.NotificationResourceType;
+import kr.ktb.zura.needu.notification.type.NotificationType;
+import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -11,14 +22,31 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class PokeService {
 
-    private final UserService userService;
+    private static final long NOTIFICATION_EXPIRATION_DAYS = 30;
 
-    // TODO: 내 친구가 아니면 FRIEND_NOT_FOUND. 같은 친구에게 제한 시간(미결) 안에 다시 보내면
-    //  FRIEND_POKE_TOO_FREQUENT와 남은 시간(retryAfterSeconds). pokes 테이블에 저장하고 POKE 알림을 보내도록 구현
-    //  콕 찌르기 API
+    private final UserService userService;
+    private final FriendRepository friendRepository;
+    private final NotificationCreationService notificationCreationService;
+
     @Transactional
     public PokeResponse createPoke(Long userId, Long friendUserId) {
-        userService.validateActiveUser(userId);
-        throw new UnsupportedOperationException("콕 찌르기 처리 로직 미구현");
+        UserSummaryResponse user = userService.findUserSummary(userId);
+        if (!friendRepository.existsByOwnerUserIdAndFriendUserId(userId, friendUserId)) {
+            throw new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND);
+        }
+
+        LocalDateTime createdAt = LocalDateTime.now(ZoneOffset.UTC);
+        notificationCreationService.createNotifications(
+                Set.of(friendUserId),
+                NotificationType.POKE,
+                userId,
+                user.nickname() + "님이 나를 콕 찔렀어요!",
+                "AI대화를 통해 취향 분석을 해보세요!",
+                NotificationResourceType.AI_CONVERSATION,
+                null,
+                UUID.randomUUID().toString(),
+                createdAt.plusDays(NOTIFICATION_EXPIRATION_DAYS)
+        );
+        return new PokeResponse(createdAt);
     }
 }

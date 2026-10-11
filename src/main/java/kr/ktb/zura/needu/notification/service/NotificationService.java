@@ -72,8 +72,10 @@ public class NotificationService {
     }
 
     private boolean isTargetAvailable(Notification notification) {
-        // shortcut: 대상 도메인별 존재 확인 API가 준비되기 전까지 식별자가 있으면 접근 가능한 대상으로 본다.
-        return notification.getEvent().getResourceType() != null && notification.getEvent().getResourceId() != null;
+        // 콕찌르기는 기존 리소스가 아니라 새 AI 대화를 시작하므로 식별자 없이도 이동할 수 있다.
+        return notification.getEvent().getType() == NotificationType.POKE
+                || (notification.getEvent().getResourceType() != null
+                        && notification.getEvent().getResourceId() != null);
     }
 
     @Transactional
