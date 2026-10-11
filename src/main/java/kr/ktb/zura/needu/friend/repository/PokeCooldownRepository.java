@@ -4,11 +4,13 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class PokeCooldownRepository {
 
     private static final DefaultRedisScript<Long> RELEASE_SCRIPT = new DefaultRedisScript<>("""
@@ -20,11 +22,6 @@ public class PokeCooldownRepository {
 
     private final StringRedisTemplate redisTemplate;
     private final RedisKeyGenerator keyGenerator;
-
-    public PokeCooldownRepository(StringRedisTemplate redisTemplate, RedisKeyGenerator keyGenerator) {
-        this.redisTemplate = redisTemplate;
-        this.keyGenerator = keyGenerator;
-    }
 
     public boolean create(Long senderUserId, Long receiverUserId, String requestId, Duration cooldown) {
         return Boolean.TRUE.equals(redisTemplate.opsForValue()
