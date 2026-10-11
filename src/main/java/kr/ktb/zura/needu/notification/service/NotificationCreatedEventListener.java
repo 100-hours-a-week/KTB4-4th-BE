@@ -90,7 +90,8 @@ public class NotificationCreatedEventListener {
                     notification.body(),
                     notification.resourceType(),
                     notification.resourceId(),
-                    notification.resourceType() != null && notification.resourceId() != null,
+                    notification.type() == NotificationType.POKE
+                            || (notification.resourceType() != null && notification.resourceId() != null),
                     notification.createdAt()
             );
         }

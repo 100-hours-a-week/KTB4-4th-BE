@@ -38,6 +38,8 @@ public class NotificationEventSubscriber implements MessageListener {
             return;
         }
 
+
+        log.info("Notification Redis event received. receiverUserId={}, data={}", event.receiverUserId(), event.data());
         notificationStreamService.sendNotification(event);
     }
 }

@@ -80,6 +80,21 @@ class NotificationServiceTest {
     }
 
     @Test
+    void pokeWithoutResourceId_findAllNotifications_marksTargetAvailable() {
+        Notification notification = createNotification(501L, NotificationType.POKE);
+        given(notification.getEvent().getResourceType()).willReturn(NotificationResourceType.AI_CONVERSATION);
+        given(notification.getEvent().getResourceId()).willReturn(null);
+        given(notificationRepository.findAllVisibleByReceiverUserId(
+                USER_ID, List.of(NotificationType.POKE), null, null, Limit.of(2)))
+                .willReturn(List.of(notification));
+
+        NotificationListResponse response = notificationService.findAllNotifications(
+                USER_ID, new NotificationSearchCondition(NotificationCategory.POKE, null, 1, null));
+
+        assertThat(response.page().items().getFirst().targetAvailable()).isTrue();
+    }
+
+    @Test
     void ownedUnreadNotification_readNotification_marksReadAndReturnsRemainingCount() {
         LocalDateTime readAt = LocalDateTime.of(2026, 9, 5, 14, 31);
         Notification notification = createNotification(501L, NotificationType.FRIEND_BIRTHDAY);
