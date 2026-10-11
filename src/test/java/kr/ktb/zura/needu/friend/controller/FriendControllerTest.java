@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
@@ -193,12 +194,15 @@ class FriendControllerTest {
     @Test
     void friendExists_createPoke_returnsCreated() throws Exception {
         LocalDateTime createdAt = LocalDateTime.of(2026, 10, 11, 12, 0);
-        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID)).willReturn(new PokeResponse(createdAt));
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID))
+                .willReturn(new PokeResponse(FRIEND_USER_ID, createdAt, createdAt.plusHours(1)));
 
         mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("친구를 콕 찔렀어요."))
-                .andExpect(jsonPath("$.data.createdAt").value("2026-10-11T12:00:00"));
+                .andExpect(jsonPath("$.data.friendUserId").value(FRIEND_USER_ID))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-11T12:00:00"))
+                .andExpect(jsonPath("$.data.nextPokeAvailableAt").value("2026-10-11T13:00:00"));
     }
 
     @Test
@@ -243,6 +247,20 @@ class FriendControllerTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."))
                 .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void cooldownExists_createPoke_returnsTooManyRequests() throws Exception {
+        given(pokeService.createPoke(LOGIN_USER_ID, FRIEND_USER_ID))
+                .willThrow(new BusinessException(
+                        FriendErrorCode.FRIEND_POKE_TOO_FREQUENT,
+                        new RetryAfterResponse(3540L)
+                ));
+
+        mockMvc.perform(post(POKE_URL, FRIEND_USER_ID).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message").value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."))
+                .andExpect(jsonPath("$.data.retryAfterSeconds").value(3540));
     }
 
     private static RequestPostProcessor authenticatedUser() {
