@@ -33,13 +33,13 @@ public class NotificationEventSubscriber implements MessageListener {
             return;
         }
 
-        if (event.receiverUserId() == null || event.data() == null) {
+        if (event.receiverUserId() == null || event.data() == null || !event.data().hasNonNull("notificationId")) {
             log.warn("Notification Redis event ignored by missing field. receiverUserId={}", event.receiverUserId());
             return;
         }
 
-
-        log.info("Notification Redis event received. receiverUserId={}, data={}", event.receiverUserId(), event.data());
+        log.info("Notification Redis event received. notificationId={}, receiverUserId={}",
+                event.data().get("notificationId").asString(), event.receiverUserId());
         notificationStreamService.sendNotification(event);
     }
 }

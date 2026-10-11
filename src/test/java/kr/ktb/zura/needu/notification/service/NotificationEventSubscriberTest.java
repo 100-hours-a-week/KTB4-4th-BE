@@ -52,6 +52,13 @@ class NotificationEventSubscriberTest {
         verify(notificationStreamService, never()).sendNotification(any());
     }
 
+    @Test
+    void notificationIdMissing_onMessage_doesNotSend() {
+        subscriber.onMessage(toMessage("{\"receiverUserId\":1,\"data\":{\"title\":\"알림\"},\"unreadCount\":3}"), CHANNEL);
+
+        verify(notificationStreamService, never()).sendNotification(any());
+    }
+
     private Message toMessage(String body) {
         return new DefaultMessage(CHANNEL, body.getBytes(StandardCharsets.UTF_8));
     }
