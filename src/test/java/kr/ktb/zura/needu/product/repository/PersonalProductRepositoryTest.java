@@ -292,6 +292,44 @@ class PersonalProductRepositoryTest {
                         tuple(likedByOtherItem.getId(), null));
     }
 
+    @Test
+    void recommendationsSaved_findAllActiveByUserIdAndProductId_returnsOwnRowsByScoreDesc() {
+        Product lamp = saveProduct("램프");
+        PersonalProduct low = savePersonalProduct(USER_ID, "0.100000", lamp);
+        PersonalProduct high = savePersonalProduct(USER_ID, "0.900000", lamp);
+        savePersonalProduct(OTHER_USER_ID, "0.990000", lamp);
+        entityManager.clear();
+
+        List<PersonalProduct> result = personalProductRepository.findAllActiveByUserIdAndProductId(USER_ID, lamp.getId());
+
+        assertThat(result).extracting(PersonalProduct::getId).containsExactly(high.getId(), low.getId());
+        assertThat(result.getFirst().getProduct().getName()).isEqualTo("램프");
+    }
+
+    @Test
+    void deletedRecommendation_findAllActiveByUserIdAndProductId_returnsEmpty() {
+        Product disliked = saveProduct("별로예요");
+        savePersonalProduct(USER_ID, "0.100000", disliked).delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(personalProductRepository.findAllActiveByUserIdAndProductId(USER_ID, disliked.getId())).isEmpty();
+    }
+
+    @Test
+    void inactiveOrDeletedProduct_findAllActiveByUserIdAndProductId_returnsEmpty() {
+        Product soldOut = saveProduct("품절");
+        Product deleted = saveProduct("삭제됨");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
+        savePersonalProduct(USER_ID, "0.100000", soldOut);
+        savePersonalProduct(USER_ID, "0.200000", deleted);
+        entityManager.clear();
+
+        assertThat(personalProductRepository.findAllActiveByUserIdAndProductId(USER_ID, soldOut.getId())).isEmpty();
+        assertThat(personalProductRepository.findAllActiveByUserIdAndProductId(USER_ID, deleted.getId())).isEmpty();
+    }
+
     private Product saveProduct(String name) {
         return saveProduct(name, "40000.00");
     }

@@ -1,10 +1,15 @@
 package kr.ktb.zura.needu.product.controller;
 
 import java.util.List;
+import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductDetailResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductFeedbackResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductRecommendationResponse;
+import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.service.ProductFeedbackService;
 import kr.ktb.zura.needu.product.service.ProductService;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 import org.junit.jupiter.api.Test;
@@ -33,6 +38,7 @@ class ProductControllerTest {
 
     private static final Long LOGIN_USER_ID = 1L;
     private static final Long PRODUCT_ID = 2992L;
+    private static final Long FRIEND_USER_ID = 123L;
     private static final String CATEGORIES_URL = "/api/v1/products/categories";
     private static final String DETAIL_URL = "/api/v1/products/{productId}";
     private static final String FEEDBACK_URL = "/api/v1/products/{productId}/feedback";
@@ -58,6 +64,53 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.data.items[0].code").value("VOUCHER"))
                 .andExpect(jsonPath("$.data.items[0].name").value("교환권"))
                 .andExpect(jsonPath("$.data.items[1].code").value("LIVING"));
+    }
+
+    @Test
+    void friendGiftContext_findProduct_returnsDetailWithRecommendation() throws Exception {
+        given(productService.findProduct(LOGIN_USER_ID, PRODUCT_ID, ProductContext.FRIEND_GIFT, FRIEND_USER_ID))
+                .willReturn(new ProductDetailResponse(
+                        PRODUCT_ID, "섬유유연제", ProductCategory.LIVING, "상품 설명", 16500L,
+                        "https://image.test/product.png", "https://shop.test/product",
+                        new ProductRecommendationResponse(55L, "향기 취향과 잘 맞아요.", List.of("향기", "홈케어")),
+                        null));
+
+        mockMvc.perform(get(DETAIL_URL, PRODUCT_ID)
+                        .param("context", "FRIEND_GIFT")
+                        .param("userId", String.valueOf(FRIEND_USER_ID))
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("상품 정보를 조회했습니다."))
+                .andExpect(jsonPath("$.data.productId").value(PRODUCT_ID))
+                .andExpect(jsonPath("$.data.category").value("LIVING"))
+                .andExpect(jsonPath("$.data.price").value(16500))
+                .andExpect(jsonPath("$.data.recommendation.recommendationId").value(55))
+                .andExpect(jsonPath("$.data.recommendation.matchingKeywords[1]").value("홈케어"))
+                .andExpect(jsonPath("$.data.myFeedback").isEmpty());
+    }
+
+    @Test
+    void personalContextWithoutUserId_findProduct_passesNullFriendUserId() throws Exception {
+        given(productService.findProduct(LOGIN_USER_ID, PRODUCT_ID, ProductContext.PERSONAL, null))
+                .willReturn(new ProductDetailResponse(
+                        PRODUCT_ID, "섬유유연제", ProductCategory.LIVING, null, 16500L, null, null,
+                        new ProductRecommendationResponse(55L, null, List.of()), ProductFeedbackType.LIKE));
+
+        mockMvc.perform(get(DETAIL_URL, PRODUCT_ID).param("context", "PERSONAL").with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recommendation.matchingKeywords").isEmpty())
+                .andExpect(jsonPath("$.data.myFeedback").value("LIKE"));
+    }
+
+    @Test
+    void recommendationNotFound_findProduct_returnsNotFound() throws Exception {
+        given(productService.findProduct(LOGIN_USER_ID, PRODUCT_ID, ProductContext.MY_GIFT, null))
+                .willThrow(new BusinessException(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND));
+
+        mockMvc.perform(get(DETAIL_URL, PRODUCT_ID).param("context", "MY_GIFT").with(authenticatedUser()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("추천 상품을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
