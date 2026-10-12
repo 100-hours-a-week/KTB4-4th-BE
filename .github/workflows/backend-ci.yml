@@ -173,5 +173,6 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     with:
       environment: dev
+      github_environment: dev
       image_tag: ${{ github.sha }}
     secrets: inherit
