@@ -63,15 +63,16 @@ public class FriendService {
     public FriendListResponse findAllFriends(Long userId, FriendSearchCondition condition) {
         String keyword = normalizeKeyword(condition.keyword());
         userService.validateActiveUser(userId);
-        if (Boolean.TRUE.equals(condition.favorite()) || keyword != null) {
-            // TODO: 즐겨찾기 필터, 이름 검색과 조건에 묶인 커서를 구현
+        if (keyword != null) {
+            // TODO: 이름 검색과 조건에 묶인 커서를 구현
             throw new UnsupportedOperationException("FRD-1 미구현");
         }
         boolean isKakaoFriendSynced = userService.isKakaoFriendSynced(userId);
 
         String cursor = condition.cursor();
         int size = condition.size();
-        List<FriendSummaryResponse> friends = findAllByName(userId, cursor, Limit.of(size + 1));
+        boolean isFavoriteOnly = Boolean.TRUE.equals(condition.favorite());
+        List<FriendSummaryResponse> friends = findAllByName(userId, isFavoriteOnly, cursor, Limit.of(size + 1));
 
         boolean hasNext = friends.size() > size;
         List<FriendSummaryResponse> pageItems = hasNext ? friends.subList(0, size) : friends;
@@ -101,13 +102,14 @@ public class FriendService {
         return stripped;
     }
 
-    private List<FriendSummaryResponse> findAllByName(Long userId, String cursor, Limit limit) {
+    private List<FriendSummaryResponse> findAllByName(
+            Long userId, boolean isFavoriteOnly, String cursor, Limit limit) {
         if (cursor == null) {
-            return friendRepository.findAllByOwnerUserIdOrderByName(userId, limit);
+            return friendRepository.findAllByOwnerUserIdOrderByName(userId, isFavoriteOnly, limit);
         }
         FriendNameCursor decodedCursor = FriendNameCursor.decode(cursor);
         return friendRepository.findAllByOwnerUserIdAfterNameCursor(
-                userId, decodedCursor.name(), decodedCursor.userId(), limit);
+                userId, isFavoriteOnly, decodedCursor.name(), decodedCursor.userId(), limit);
     }
 
     @Transactional

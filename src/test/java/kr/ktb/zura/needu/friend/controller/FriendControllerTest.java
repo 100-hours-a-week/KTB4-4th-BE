@@ -83,6 +83,39 @@ class FriendControllerTest {
     }
 
     @Test
+    void favoriteFalse_findAllFriends_passesFavoriteConditionAndReturnsNamePage() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "가나", null, null, true);
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(false, null, "cursor", 20)))
+                .willReturn(new FriendListResponse(List.of(friend), false, "next", true));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("favorite", "false")
+                        .param("cursor", "cursor")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].name").value("가나"))
+                .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.nextCursor").value("next"));
+    }
+
+    @Test
+    void favoriteTrue_findAllFriends_passesFavoriteCondition() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "가나", null, null, true);
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(true, null, null, 20)))
+                .willReturn(new FriendListResponse(List.of(friend), false, null, false));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("favorite", "true")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
     void missingFavorite_findAllFriends_returnsDefaultNamePage() throws Exception {
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(), false, null, false));
