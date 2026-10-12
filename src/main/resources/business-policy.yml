@@ -16,6 +16,9 @@ ai:
     message-retry-after: ${AI_CHAT_MESSAGE_RETRY_AFTER:10s}
 
 needu:
+  notification:
+    stream-timeout: ${NOTIFICATION_STREAM_TIMEOUT:30m}
+    heartbeat-interval: ${NOTIFICATION_HEARTBEAT_INTERVAL:25s}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
   product:

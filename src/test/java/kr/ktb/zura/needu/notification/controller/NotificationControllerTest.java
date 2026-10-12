@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
 import kr.ktb.zura.needu.notification.dto.response.NotificationListResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
@@ -22,6 +23,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -35,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(NotificationController.class)
@@ -43,6 +46,7 @@ class NotificationControllerTest {
     private static final Long LOGIN_USER_ID = 1L;
     private static final String LIST_URL = "/api/v1/notifications";
     private static final String SUMMARY_URL = LIST_URL + "/summary";
+    private static final String STREAM_URL = LIST_URL + "/stream";
 
     @Autowired
     private MockMvc mockMvc;
@@ -52,6 +56,32 @@ class NotificationControllerTest {
 
     @MockitoBean
     private NotificationStreamService notificationStreamService;
+
+    @Test
+    void authenticatedUser_connectStream_startsSseConnection() throws Exception {
+        given(notificationStreamService.connect(LOGIN_USER_ID)).willReturn(new SseEmitter());
+
+        mockMvc.perform(get(STREAM_URL).with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        verify(notificationStreamService).connect(LOGIN_USER_ID);
+    }
+
+    @Test
+    void streamLimitExceeded_connectStream_returnsTooManyRequests() throws Exception {
+        given(notificationStreamService.connect(LOGIN_USER_ID))
+                .willThrow(new BusinessException(
+                        NotificationErrorCode.NOTIFICATION_STREAM_LIMIT_EXCEEDED,
+                        new RetryAfterResponse(10)
+                ));
+
+        mockMvc.perform(get(STREAM_URL).with(authenticatedUser()))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message")
+                        .value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."))
+                .andExpect(jsonPath("$.data.retryAfterSeconds").value(10));
+    }
 
     @Test
     void authenticatedUser_findNotificationSummary_returnsUnreadStatus() throws Exception {
