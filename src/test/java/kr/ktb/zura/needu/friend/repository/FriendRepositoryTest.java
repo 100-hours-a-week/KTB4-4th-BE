@@ -95,6 +95,34 @@ class FriendRepositoryTest {
                 .containsExactly(favoriteFirst.getId(), favoriteSecond.getId(), favoriteLater.getId());
     }
 
+    @Test
+    void inactiveFriends_findAllByOwner_returnsOnlyActiveFriendsOnEveryPage() {
+        User active = saveUser("가나", null);
+        User withdrawn = saveUser("다라", null);
+        withdrawn.withdraw();
+        User blockedFavorite = saveUser("마바", null);
+        blockedFavorite.block();
+        User onboarding = userRepository.save(new User(
+                externalIdSequence.incrementAndGet(), "사아", null, Gender.NONE, null));
+        friendRepository.saveAll(List.of(
+                new Friend(1L, active.getId()),
+                new Friend(1L, withdrawn.getId()),
+                favoriteFriend(1L, blockedFavorite),
+                new Friend(1L, onboarding.getId())
+        ));
+
+        List<FriendSummaryResponse> allFriends = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, false, Limit.of(10));
+        List<FriendSummaryResponse> friendsAfterCursor = friendRepository
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "가가", active.getId() - 1, Limit.of(10));
+        List<FriendSummaryResponse> favorites = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, true, Limit.of(10));
+
+        assertThat(allFriends).extracting(FriendSummaryResponse::userId).containsExactly(active.getId());
+        assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId).containsExactly(active.getId());
+        assertThat(favorites).isEmpty();
+    }
+
     private Friend favoriteFriend(Long ownerUserId, User friendUser) {
         Friend friend = new Friend(ownerUserId, friendUser.getId());
         friend.markAsFavorite();
@@ -102,7 +130,8 @@ class FriendRepositoryTest {
     }
 
     private User saveUser(String name, LocalDate birthDate) {
-        return userRepository.save(new User(
-                externalIdSequence.incrementAndGet(), name, null, Gender.NONE, birthDate));
+        User user = new User(externalIdSequence.incrementAndGet(), name, null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.save(user);
     }
 }

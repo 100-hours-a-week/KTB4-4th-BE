@@ -24,6 +24,7 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
             from Friend f
             join User u on u.id = f.friendUserId
             where f.ownerUserId = :ownerUserId
+              and u.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
               and (:isFavoriteOnly = false or f.favorite = true)
             order by u.nickname asc, u.id asc
             """)
@@ -39,6 +40,7 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
             from Friend f
             join User u on u.id = f.friendUserId
             where f.ownerUserId = :ownerUserId
+              and u.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
               and (:isFavoriteOnly = false or f.favorite = true)
               and (u.nickname > :cursorName or (u.nickname = :cursorName and u.id > :cursorUserId))
             order by u.nickname asc, u.id asc

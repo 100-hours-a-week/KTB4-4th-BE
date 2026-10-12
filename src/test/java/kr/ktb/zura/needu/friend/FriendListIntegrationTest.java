@@ -92,6 +92,29 @@ class FriendListIntegrationTest {
     }
 
     @Test
+    void inactiveFriends_findAllFriends_returnsOnlyActiveFriends() throws Exception {
+        User owner = saveUser("사용자", LocalDate.of(2000, 1, 1));
+        User active = saveUser("다라", LocalDate.of(2000, 3, 1));
+        User withdrawn = saveUser("가나", LocalDate.of(2000, 3, 2));
+        withdrawn.withdraw();
+        userRepository.save(withdrawn);
+        User blocked = saveUser("나다", LocalDate.of(2000, 3, 3));
+        blocked.block();
+        userRepository.save(blocked);
+        friendRepository.saveAll(List.of(
+                new Friend(owner.getId(), active.getId()),
+                new Friend(owner.getId(), withdrawn.getId()),
+                new Friend(owner.getId(), blocked.getId())
+        ));
+
+        mockMvc.perform(validRequest().with(authenticatedUser(owner.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("다라"))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
     void unauthenticated_findAllFriends_returnsUnauthorized() throws Exception {
         mockMvc.perform(validRequest())
                 .andExpect(status().isUnauthorized())
