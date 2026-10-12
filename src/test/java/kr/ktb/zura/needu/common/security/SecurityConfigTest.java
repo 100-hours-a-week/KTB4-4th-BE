@@ -18,7 +18,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "management.endpoints.web.exposure.include=health,metrics,prometheus")
+@SpringBootTest(properties = {
+        "management.endpoints.web.exposure.include=health,metrics,prometheus",
+        "needu.rate-limit.enabled=false"
+})
 @AutoConfigureMockMvc
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class SecurityConfigTest {

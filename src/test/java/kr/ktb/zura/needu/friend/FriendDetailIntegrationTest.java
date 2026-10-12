@@ -26,8 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "needu.rate-limit.policies.friend-detail.method=GET",
         "needu.rate-limit.policies.friend-detail.path-pattern=/api/v1/friends/{userId}",
         "needu.rate-limit.policies.friend-detail.limit=120",
-        "needu.rate-limit.policies.friend-detail.window=1m",
-        "needu.rate-limit.policies.friend-detail.maximum-size=100000"
+        "needu.rate-limit.policies.friend-detail.window=1m"
 })
 @AutoConfigureMockMvc
 class FriendDetailIntegrationTest {

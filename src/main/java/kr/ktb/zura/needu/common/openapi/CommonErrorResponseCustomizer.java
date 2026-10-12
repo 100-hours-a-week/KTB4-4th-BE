@@ -54,8 +54,11 @@ public class CommonErrorResponseCustomizer implements OpenApiCustomizer {
                 .filter(policy -> policy.method().name().equals(method.name())
                         && policy.pathPattern().equals(path))
                 .findFirst()
-                .ifPresent(policy -> ErrorResponseDocs.addError(operation, CommonErrorCode.COMMON_TOO_MANY_REQUESTS,
-                        new RetryAfterResponse(policy.window().toSeconds())));
+                .ifPresent(policy -> {
+                    ErrorResponseDocs.addError(operation, CommonErrorCode.COMMON_TOO_MANY_REQUESTS,
+                            new RetryAfterResponse(policy.window().toSeconds()));
+                    ErrorResponseDocs.addError(operation, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE, null);
+                });
         ErrorResponseDocs.addError(operation, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR, null);
         sortByStatus(operation);
     }

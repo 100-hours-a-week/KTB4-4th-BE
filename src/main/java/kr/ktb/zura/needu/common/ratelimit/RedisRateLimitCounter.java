@@ -20,7 +20,12 @@ public class RedisRateLimitCounter implements RateLimitCounter {
 
     @Override
     public RateLimitUsage increment(String policyName, String userId) {
-        // TODO: 정책 조회 후 Redis 키를 생성해 Repository 호출
-        throw new UnsupportedOperationException("Redis rate limit counter is not implemented");
+        RateLimitProperties.Policy policy = properties.policies().get(policyName);
+        if (policy == null) {
+            throw new IllegalArgumentException("Unknown rate limit policy: " + policyName);
+        }
+
+        String key = keyGenerator.generate("ratelimit", "usage", policyName, userId);
+        return repository.increment(key, policy.window());
     }
 }

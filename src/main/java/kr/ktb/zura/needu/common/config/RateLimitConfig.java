@@ -1,10 +1,12 @@
 package kr.ktb.zura.needu.common.config;
 
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
-import kr.ktb.zura.needu.common.ratelimit.CaffeineRateLimitCounter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitCounter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitFilter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitProperties;
+import kr.ktb.zura.needu.common.ratelimit.RateLimitRedisRepository;
+import kr.ktb.zura.needu.common.ratelimit.RedisRateLimitCounter;
+import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -16,10 +18,13 @@ import org.springframework.core.Ordered;
 @EnableConfigurationProperties(RateLimitProperties.class)
 public class RateLimitConfig {
 
-    // TODO: RedisRateLimitCounter 구현 후 이 Bean만 교체
     @Bean
-    public RateLimitCounter rateLimitCounter(RateLimitProperties properties) {
-        return new CaffeineRateLimitCounter(properties);
+    public RateLimitCounter rateLimitCounter(
+            RateLimitProperties properties,
+            RateLimitRedisRepository repository,
+            RedisKeyGenerator keyGenerator
+    ) {
+        return new RedisRateLimitCounter(properties, repository, keyGenerator);
     }
 
     // 인증 사용자 기준으로 제한하려면 SecurityContext가 채워진 뒤여야 하므로 Spring Security 필터 체인보다 뒤에 등록한다.
