@@ -97,12 +97,21 @@ CREATE TABLE IF NOT EXISTS friends (
     is_favorite    TINYINT(1) NOT NULL,
     PRIMARY KEY (id),
     -- owner_user_id 단독 조회도 이 인덱스의 선두 컬럼으로 처리된다
-    UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id)
+    UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id),
+    KEY idx_friends_friend_user_id (friend_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
 -- notification
 -- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS shedlock (
+    name       VARCHAR(64)  NOT NULL,
+    lock_until DATETIME(6)  NOT NULL,
+    locked_at  DATETIME(6)  NOT NULL,
+    locked_by  VARCHAR(255) NOT NULL,
+    PRIMARY KEY (name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 사용자가 변경 요청한 알림 설정. 미저장 항목은 애플리케이션의 enum 기본값을 사용한다.
 CREATE TABLE IF NOT EXISTS notification_settings (
