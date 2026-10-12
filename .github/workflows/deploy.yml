@@ -1,0 +1,163 @@
+name: Deploy Backend to V2 ECS
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "배포할 V2 환경"
+        required: true
+        type: string
+      image_tag:
+        description: "ECR 이미지 태그로 사용할 Git SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: need-u/backend
+  ECR_REPOSITORY_URI: ${{ vars.AWS_ECR_REPOSITORY_URI }}
+
+jobs:
+  deploy:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    concurrency:
+      group: deploy-${{ inputs.environment }}-backend
+      cancel-in-progress: false
+
+    steps:
+      - name: Validate Inputs
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$DEPLOY_ENVIRONMENT" =~ ^(dev|staging|prod)$ ]]; then
+            echo "지원하지 않는 배포 환경입니다: $DEPLOY_ENVIRONMENT"
+            exit 1
+          fi
+
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "이미지 태그는 40자리 Git SHA여야 합니다: $IMAGE_TAG"
+            exit 1
+          fi
+
+          if [[ -z "$ECR_REPOSITORY_URI" ]]; then
+            echo "GitHub Repository Variable AWS_ECR_REPOSITORY_URI가 필요합니다."
+            exit 1
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve Deployment Resources
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "ECS_CLUSTER=needu-${DEPLOY_ENVIRONMENT}-cluster" >> "$GITHUB_ENV"
+          echo "ECS_SERVICE=needu-${DEPLOY_ENVIRONMENT}-backend" >> "$GITHUB_ENV"
+          echo "BASE_TASK_DEFINITION_PARAMETER=/needu/v2/${DEPLOY_ENVIRONMENT}/ecs/backend/base-task-definition-arn" >> "$GITHUB_ENV"
+
+      - name: Verify ECR Image
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION" \
+            >/dev/null
+
+      - name: Create Task Definition Revision
+        id: task-definition
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          BASE_TASK_DEFINITION_ARN=$(aws ssm get-parameter \
+            --name "$BASE_TASK_DEFINITION_PARAMETER" \
+            --region "$AWS_REGION" \
+            --query 'Parameter.Value' \
+            --output text)
+
+          aws ecs describe-task-definition \
+            --task-definition "$BASE_TASK_DEFINITION_ARN" \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition' \
+            > task-definition.json
+
+          jq --arg image "$ECR_REPOSITORY_URI:$IMAGE_TAG" '
+            .containerDefinitions |= map(
+              if .name == "backend" then .image = $image else . end
+            )
+            | del(
+                .taskDefinitionArn,
+                .revision,
+                .status,
+                .requiresAttributes,
+                .compatibilities,
+                .registeredAt,
+                .registeredBy,
+                .deregisteredAt
+              )
+          ' task-definition.json > task-definition-deploy.json
+
+          NEW_TASK_DEFINITION_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://task-definition-deploy.json \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "task_definition_arn=$NEW_TASK_DEFINITION_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ECS Service
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.task-definition.outputs.task_definition_arn }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$TASK_DEFINITION_ARN" \
+            --region "$AWS_REGION" \
+            >/dev/null
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"
+
+      - name: Verify Deployment
+        env:
+          EXPECTED_TASK_DEFINITION_ARN: ${{ steps.task-definition.outputs.task_definition_arn }}
+        run: |
+          SERVICE_STATE=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION")
+
+          CURRENT_TASK_DEFINITION_ARN=$(jq -r '.services[0].taskDefinition' <<< "$SERVICE_STATE")
+          DESIRED_COUNT=$(jq -r '.services[0].desiredCount' <<< "$SERVICE_STATE")
+          RUNNING_COUNT=$(jq -r '.services[0].runningCount' <<< "$SERVICE_STATE")
+
+          if [[ "$CURRENT_TASK_DEFINITION_ARN" != "$EXPECTED_TASK_DEFINITION_ARN" ]]; then
+            echo "ECS Service가 요청한 Task Definition을 사용하지 않습니다."
+            exit 1
+          fi
+
+          if [[ "$RUNNING_COUNT" -lt "$DESIRED_COUNT" ]]; then
+            echo "실행 중인 Task 수가 원하는 수보다 적습니다: $RUNNING_COUNT/$DESIRED_COUNT"
+            exit 1
+          fi
+
+          echo "Backend 배포가 완료되었습니다: $RUNNING_COUNT/$DESIRED_COUNT"
