@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockFilterChain;
@@ -83,6 +84,22 @@ class RateLimitFilterTest {
         assertThat(response.getContentAsString())
                 .contains("\"message\":\"요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.\"")
                 .contains("\"retryAfterSeconds\":10");
+    }
+
+    @Test
+    void redisUnavailable_doFilter_returnsServiceUnavailable() throws Exception {
+        authenticate(USER_ID);
+        given(rateLimitCounter.increment(POLICY_NAME, USER_ID.toString()))
+                .willThrow(new DataAccessResourceFailureException("Redis unavailable"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain filterChain = new MockFilterChain();
+
+        rateLimitFilter.doFilter(new MockHttpServletRequest("GET", PATH), response, filterChain);
+
+        assertThat(filterChain.getRequest()).isNull();
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
+        assertThat(response.getContentAsString())
+                .contains("\"message\":\"일시적으로 서비스를 이용할 수 없습니다.\"");
     }
 
     @Test

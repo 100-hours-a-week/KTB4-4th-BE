@@ -13,6 +13,7 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.server.PathContainer;
@@ -55,7 +56,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         String userId = authentication.getName();
-        RateLimitUsage usage = rateLimitCounter.increment(rule.get().name(), userId);
+        RateLimitUsage usage;
+        try {
+            usage = rateLimitCounter.increment(rule.get().name(), userId);
+        } catch (DataAccessException exception) {
+            log.warn("Rate limit Redis unavailable. policy={}, userId={}", rule.get().name(), userId, exception);
+            errorResponseWriter.write(response, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+            return;
+        }
         if (usage.count() <= rule.get().limit()) {
             filterChain.doFilter(request, response);
             return;

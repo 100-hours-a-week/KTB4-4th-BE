@@ -24,13 +24,13 @@ class CommonErrorResponseCustomizerTest {
                     new RateLimitProperties.Policy(HttpMethod.GET, LIMITED_PATH, 120, Duration.ofMinutes(1)))));
 
     @Test
-    void authenticatedRateLimitedGet_addsUnauthorizedTooManyRequestsAndServerError() {
+    void authenticatedRateLimitedGet_addsUnauthorizedRateLimitAndServerErrors() {
         Operation operation = newOperation();
         OpenAPI openApi = new OpenAPI().paths(new Paths().addPathItem(LIMITED_PATH, new PathItem().get(operation)));
 
         customizer.customise(openApi);
 
-        assertThat(operation.getResponses().keySet()).containsExactly("401", "429", "500");
+        assertThat(operation.getResponses().keySet()).containsExactly("401", "429", "500", "503");
     }
 
     @Test
