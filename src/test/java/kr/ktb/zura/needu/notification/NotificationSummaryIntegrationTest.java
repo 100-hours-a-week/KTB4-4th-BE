@@ -32,8 +32,7 @@ import org.springframework.test.util.ReflectionTestUtils;
         "needu.rate-limit.policies.notification-summary.method=GET",
         "needu.rate-limit.policies.notification-summary.path-pattern=/api/v1/notifications/summary",
         "needu.rate-limit.policies.notification-summary.limit=" + NotificationSummaryIntegrationTest.RATE_LIMIT,
-        "needu.rate-limit.policies.notification-summary.window=1m",
-        "needu.rate-limit.policies.notification-summary.maximum-size=1000"
+        "needu.rate-limit.policies.notification-summary.window=1m"
 })
 @AutoConfigureMockMvc
 class NotificationSummaryIntegrationTest {

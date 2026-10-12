@@ -30,8 +30,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest(properties = {
-        "needu.rate-limit.policies.notification-read.limit=" + NotificationReadIntegrationTest.RATE_LIMIT,
-        "needu.rate-limit.policies.notification-read.maximum-size=1000"
+        "needu.rate-limit.policies.notification-read.limit=" + NotificationReadIntegrationTest.RATE_LIMIT
 })
 @AutoConfigureMockMvc
 class NotificationReadIntegrationTest {

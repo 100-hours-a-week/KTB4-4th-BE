@@ -42,8 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "needu.rate-limit.policies.personal-recommendations.method=GET",
         "needu.rate-limit.policies.personal-recommendations.path-pattern=/api/v1/users/me/personal-recommendations",
         "needu.rate-limit.policies.personal-recommendations.limit=" + PersonalProductIntegrationTest.RATE_LIMIT,
-        "needu.rate-limit.policies.personal-recommendations.window=1m",
-        "needu.rate-limit.policies.personal-recommendations.maximum-size=1000"
+        "needu.rate-limit.policies.personal-recommendations.window=1m"
 })
 @AutoConfigureMockMvc
 class PersonalProductIntegrationTest {

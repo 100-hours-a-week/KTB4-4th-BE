@@ -3,7 +3,6 @@ package kr.ktb.zura.needu.common.ratelimit;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
 import org.junit.jupiter.api.AfterEach;
@@ -19,6 +18,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
 class RateLimitFilterTest {
 
@@ -26,21 +28,20 @@ class RateLimitFilterTest {
     private static final String PATH = "/api/v1/users/me/personal-recommendations";
     private static final Duration WINDOW = Duration.ofMinutes(1);
     private static final long LIMIT = 2;
-    private static final long MAXIMUM_SIZE = 100;
     private static final Long USER_ID = 1L;
-    private static final Long OTHER_USER_ID = 2L;
 
-    private final AtomicLong nanoTime = new AtomicLong();
+    private RateLimitCounter rateLimitCounter;
     private RateLimitFilter rateLimitFilter;
 
     @BeforeEach
     void setUp() {
         RateLimitProperties properties = new RateLimitProperties(Map.of(
-                POLICY_NAME, new RateLimitProperties.Policy(HttpMethod.GET, PATH, LIMIT, WINDOW, MAXIMUM_SIZE)
+                POLICY_NAME, new RateLimitProperties.Policy(HttpMethod.GET, PATH, LIMIT, WINDOW)
         ));
+        rateLimitCounter = mock(RateLimitCounter.class);
         rateLimitFilter = new RateLimitFilter(
                 properties,
-                new CaffeineRateLimitCounter(properties, nanoTime::get),
+                rateLimitCounter,
                 new ErrorResponseWriter(JsonMapper.builder().build()));
     }
 
@@ -52,6 +53,8 @@ class RateLimitFilterTest {
     @Test
     void requestsWithinLimit_doFilter_passesToNextFilter() throws Exception {
         authenticate(USER_ID);
+        given(rateLimitCounter.increment(POLICY_NAME, USER_ID.toString()))
+                .willReturn(new RateLimitUsage(LIMIT, WINDOW));
 
         for (int i = 0; i < LIMIT; i++) {
             MockHttpServletResponse response = new MockHttpServletResponse();
@@ -67,8 +70,8 @@ class RateLimitFilterTest {
     @Test
     void requestOverLimit_doFilter_returnsTooManyRequestsWithRemainingSeconds() throws Exception {
         authenticate(USER_ID);
-        sendRequests(PATH, "GET", LIMIT);
-        nanoTime.addAndGet(Duration.ofSeconds(50).toNanos());
+        given(rateLimitCounter.increment(POLICY_NAME, USER_ID.toString()))
+                .willReturn(new RateLimitUsage(LIMIT + 1, Duration.ofSeconds(10)));
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -80,30 +83,6 @@ class RateLimitFilterTest {
         assertThat(response.getContentAsString())
                 .contains("\"message\":\"요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.\"")
                 .contains("\"retryAfterSeconds\":10");
-    }
-
-    @Test
-    void windowElapsed_doFilter_resetsCounter() throws Exception {
-        authenticate(USER_ID);
-        sendRequests(PATH, "GET", LIMIT);
-        nanoTime.addAndGet(WINDOW.toNanos());
-        MockFilterChain filterChain = new MockFilterChain();
-
-        rateLimitFilter.doFilter(new MockHttpServletRequest("GET", PATH), new MockHttpServletResponse(), filterChain);
-
-        assertThat(filterChain.getRequest()).isNotNull();
-    }
-
-    @Test
-    void otherUserOverLimit_doFilter_countsSeparately() throws Exception {
-        authenticate(OTHER_USER_ID);
-        sendRequests(PATH, "GET", LIMIT + 1);
-        authenticate(USER_ID);
-        MockFilterChain filterChain = new MockFilterChain();
-
-        rateLimitFilter.doFilter(new MockHttpServletRequest("GET", PATH), new MockHttpServletResponse(), filterChain);
-
-        assertThat(filterChain.getRequest()).isNotNull();
     }
 
     @Test
@@ -129,15 +108,19 @@ class RateLimitFilterTest {
     void overlappingPathPatterns_doFilter_appliesMostSpecificPolicy() throws Exception {
         RateLimitProperties properties = new RateLimitProperties(Map.of(
                 "gift-recommendations", new RateLimitProperties.Policy(
-                        HttpMethod.GET, "/api/v1/users/{userId}/gift-recommendations", LIMIT + 10, WINDOW, MAXIMUM_SIZE),
+                        HttpMethod.GET, "/api/v1/users/{userId}/gift-recommendations", LIMIT + 10, WINDOW),
                 "my-gift-recommendations", new RateLimitProperties.Policy(
-                        HttpMethod.GET, "/api/v1/users/me/gift-recommendations", LIMIT, WINDOW, MAXIMUM_SIZE)
+                        HttpMethod.GET, "/api/v1/users/me/gift-recommendations", LIMIT, WINDOW)
         ));
         rateLimitFilter = new RateLimitFilter(
                 properties,
-                new CaffeineRateLimitCounter(properties, nanoTime::get),
+                rateLimitCounter,
                 new ErrorResponseWriter(JsonMapper.builder().build()));
         authenticate(USER_ID);
+        given(rateLimitCounter.increment(anyString(), anyString()))
+                .willReturn(new RateLimitUsage(1, WINDOW));
+        given(rateLimitCounter.increment("my-gift-recommendations", USER_ID.toString()))
+                .willReturn(new RateLimitUsage(LIMIT + 1, WINDOW));
 
         assertThat(sendRequests("/api/v1/users/321/gift-recommendations", "GET", LIMIT + 1))
                 .isEqualTo(HttpStatus.OK.value());
