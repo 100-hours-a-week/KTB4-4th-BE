@@ -129,14 +129,15 @@ public class AiChatFacade {
         userService.validateActiveUser(userId);
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
         aiChatRoomService.validateMessageSendableRoom(userId, conversationId);
-        if (!aiConversationLock.tryLock(conversationId)) {
+        Optional<AiConversationLock.Handle> lock = aiConversationLock.tryLock(conversationId);
+        if (lock.isEmpty()) {
             log.info("AI message already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
         }
         try {
             return replyToUserMessage(userId, conversationId, request);
         } finally {
-            aiConversationLock.unlock(conversationId);
+            aiConversationLock.unlock(lock.get());
         }
     }
 
@@ -297,14 +298,15 @@ public class AiChatFacade {
         userService.validateActiveUser(userId);
         aiChatRoomService.validateActiveRoom(userId, conversationId);
         // AI 세션 종료는 되돌릴 수 없으므로 같은 대화방의 확정 요청이 겹쳐 AI를 두 번 호출하지 않게 막는다
-        if (!aiConversationLock.tryLock(conversationId)) {
+        Optional<AiConversationLock.Handle> lock = aiConversationLock.tryLock(conversationId);
+        if (lock.isEmpty()) {
             log.info("AI analysis confirm already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
         }
         try {
             return closeSessionAndSaveAnalysis(userId, conversationId);
         } finally {
-            aiConversationLock.unlock(conversationId);
+            aiConversationLock.unlock(lock.get());
         }
     }
 
