@@ -62,14 +62,13 @@ class FriendControllerTest {
     private PokeService pokeService;
 
     @Test
-    void friendsExist_findAllFriends_returnsBirthdayPage() throws Exception {
+    void friendsExist_findAllFriends_returnsFriendPage() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(
                 FRIEND_USER_ID, "친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29), true);
-        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition("birthday", null, null, null, 20)))
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(friend), true, "next", true));
 
         mockMvc.perform(get(LIST_URL)
-                        .param("sort", "birthday")
                         .param("size", "20")
                         .with(authenticatedUser()))
                 .andExpect(status().isOk())
@@ -84,8 +83,8 @@ class FriendControllerTest {
     }
 
     @Test
-    void missingSort_findAllFriends_returnsDefaultNamePage() throws Exception {
-        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, null, 20)))
+    void missingFavorite_findAllFriends_returnsDefaultNamePage() throws Exception {
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(), false, null, false));
 
         mockMvc.perform(get(LIST_URL).param("size", "20").with(authenticatedUser()))
@@ -94,20 +93,8 @@ class FriendControllerTest {
     }
 
     @Test
-    void unsupportedSort_findAllFriends_returnsUnprocessableContent() throws Exception {
-        mockMvc.perform(get(LIST_URL)
-                        .param("sort", "name")
-                        .param("size", "20")
-                        .with(authenticatedUser()))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message")
-                        .value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
-    }
-
-    @Test
     void sizeOutOfRange_findAllFriends_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(get(LIST_URL)
-                        .param("sort", "birthday")
                         .param("size", "51")
                         .with(authenticatedUser()))
                 .andExpect(status().isUnprocessableContent());

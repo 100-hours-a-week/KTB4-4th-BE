@@ -72,16 +72,6 @@ class FriendListIntegrationTest {
                 .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(false))
                 .andExpect(jsonPath("$.hasNext").value(true))
                 .andExpect(jsonPath("$.nextCursor").isString());
-
-        owner.completeKakaoFriendSync();
-        userRepository.save(owner);
-
-        mockMvc.perform(validRequest().param("sort", "birthday").with(authenticatedUser(owner.getId())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].name").value("첫 번째"))
-                .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(true))
-                .andExpect(jsonPath("$.hasNext").value(true))
-                .andExpect(jsonPath("$.nextCursor").isString());
     }
 
     @Test

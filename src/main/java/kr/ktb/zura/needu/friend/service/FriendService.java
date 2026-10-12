@@ -1,7 +1,5 @@
 package kr.ktb.zura.needu.friend.service;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class FriendService {
 
-    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
     private static final int MAX_KEYWORD_LENGTH = 20;
 
     private final FriendRepository friendRepository;
@@ -67,32 +64,18 @@ public class FriendService {
         String keyword = normalizeKeyword(condition.keyword());
         userService.validateActiveUser(userId);
         if (Boolean.TRUE.equals(condition.favorite()) || keyword != null) {
-            // TODO: 즐겨찾기 필터, 이름 검색, V2 정렬(즐겨찾기 → 다가오는 생일 → 이름)과 조건에 묶인 커서를 구현
+            // TODO: 즐겨찾기 필터, 이름 검색과 조건에 묶인 커서를 구현
             throw new UnsupportedOperationException("FRD-1 미구현");
         }
         boolean isKakaoFriendSynced = userService.isKakaoFriendSynced(userId);
 
-        String sort = condition.sort();
         String cursor = condition.cursor();
         int size = condition.size();
-
-        boolean isBirthdaySort = "birthday".equals(sort);
-        Limit limit = Limit.of(size + 1);
-        FriendCursor birthdayCursor = isBirthdaySort && cursor != null ? FriendCursor.decode(cursor) : null;
-        LocalDate referenceDate = isBirthdaySort
-                ? birthdayCursor == null ? LocalDate.now(KOREA_ZONE) : birthdayCursor.referenceDate()
-                : null;
-        List<FriendSummaryResponse> friends = isBirthdaySort
-                ? findAllByBirthday(userId, birthdayCursor, referenceDate, limit)
-                : findAllByName(userId, cursor, limit);
+        List<FriendSummaryResponse> friends = findAllByName(userId, cursor, Limit.of(size + 1));
 
         boolean hasNext = friends.size() > size;
         List<FriendSummaryResponse> pageItems = hasNext ? friends.subList(0, size) : friends;
-        String nextCursor = hasNext
-                ? isBirthdaySort
-                        ? FriendCursor.from(referenceDate, pageItems.getLast()).encode()
-                        : FriendNameCursor.from(pageItems.getLast()).encode()
-                : null;
+        String nextCursor = hasNext ? FriendNameCursor.from(pageItems.getLast()).encode() : null;
         return FriendListResponse.from(
                 new CursorPageResponse<>(pageItems, nextCursor, hasNext), isKakaoFriendSynced);
     }
@@ -116,16 +99,6 @@ public class FriendService {
             throw new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT);
         }
         return stripped;
-    }
-
-    private List<FriendSummaryResponse> findAllByBirthday(
-            Long userId, FriendCursor cursor, LocalDate referenceDate, Limit limit) {
-        int currentBirthdayKey = FriendCursor.birthdayKey(referenceDate);
-        if (cursor == null) {
-            return friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(userId, currentBirthdayKey, limit);
-        }
-        return friendRepository.findAllByOwnerUserIdAfterBirthdayCursor(
-                userId, currentBirthdayKey, cursor.sortKey(), cursor.userId(), limit);
     }
 
     private List<FriendSummaryResponse> findAllByName(Long userId, String cursor, Limit limit) {

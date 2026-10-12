@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Pattern;
 import java.net.URI;
 import java.util.UUID;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -53,13 +52,12 @@ public class FriendController {
     @GetMapping
     public ResponseEntity<FriendListApiResponse> findAllFriends(
             @AuthenticationPrincipal Long userId,
-            @RequestParam(required = false) @Pattern(regexp = "birthday") String sort,
             @RequestParam(required = false) Boolean favorite,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String cursor,
             @RequestParam @Min(FriendPageLimits.MIN_PAGE_SIZE) @Max(FriendPageLimits.MAX_PAGE_SIZE) int size
     ) {
-        FriendSearchCondition condition = new FriendSearchCondition(sort, favorite, keyword, cursor, size);
+        FriendSearchCondition condition = new FriendSearchCondition(favorite, keyword, cursor, size);
         return ResponseEntity.ok(FriendListApiResponse.of(
                 FriendResponseMessages.FRIENDS_FOUND,
                 friendService.findAllFriends(userId, condition)

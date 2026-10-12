@@ -29,8 +29,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -122,7 +120,7 @@ class FriendServiceTest {
 
     @Test
     void keywordOverTwentyCharactersAfterStrip_findAllFriends_throwsInvalidInput() {
-        FriendSearchCondition condition = new FriendSearchCondition(null, null, "  " + "가".repeat(21) + "  ", null, 20);
+        FriendSearchCondition condition = new FriendSearchCondition(null, "  " + "가".repeat(21) + "  ", null, 20);
 
         assertThatThrownBy(() -> friendService.findAllFriends(1L, condition))
                 .isInstanceOf(BusinessException.class)
@@ -139,7 +137,7 @@ class FriendServiceTest {
         when(userService.isKakaoFriendSynced(1L)).thenReturn(true);
 
         FriendListResponse response = friendService.findAllFriends(
-                1L, new FriendSearchCondition(null, null, null, null, 2));
+                1L, new FriendSearchCondition(null, null, null, 2));
 
         assertThat(response.items()).containsExactly(first, second);
         assertThat(response.isKakaoFriendSynced()).isTrue();
@@ -152,11 +150,11 @@ class FriendServiceTest {
     @Test
     void lastPage_findAllFriends_returnsNullCursor() {
         FriendSummaryResponse friend = friendSummary(2L, LocalDate.of(2000, 10, 1));
-        when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, Limit.of(3)))
                 .thenReturn(List.of(friend));
 
         FriendListResponse response = friendService.findAllFriends(
-                1L, new FriendSearchCondition("birthday", null, null, null, 2));
+                1L, new FriendSearchCondition(null, null, null, 2));
 
         assertThat(response.items()).containsExactly(friend);
         assertThat(response.hasNext()).isFalse();
