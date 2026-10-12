@@ -3,7 +3,7 @@ name: Backend V2 Production CD
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
+      image_sha:
         description: "Production에 배포할 ECR 이미지의 Git SHA"
         required: true
         type: string
@@ -18,7 +18,7 @@ jobs:
     with:
       environment: prod
       github_environment: production
-      image_tag: ${{ inputs.image_tag }}
+      image_sha: ${{ inputs.image_sha }}
       verify_dev_match: true
     secrets: inherit
 
@@ -34,16 +34,16 @@ jobs:
       - name: Checkout Deployed Commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.image_tag }}
+          ref: ${{ inputs.image_sha }}
           fetch-depth: 0
 
       - name: Create Production Tag
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_SHA: ${{ inputs.image_sha }}
         run: |
           PRODUCTION_TAG="prod-$(TZ=Asia/Seoul date +%Y%m%d)-${GITHUB_RUN_NUMBER}"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$PRODUCTION_TAG" "$IMAGE_TAG" -m "Production deployment $PRODUCTION_TAG"
+          git tag -a "$PRODUCTION_TAG" "$IMAGE_SHA" -m "Production deployment $PRODUCTION_TAG"
           git push origin "$PRODUCTION_TAG"

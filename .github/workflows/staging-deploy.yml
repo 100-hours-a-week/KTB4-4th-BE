@@ -3,7 +3,7 @@ name: Backend V2 Staging CD
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
+      image_sha:
         description: "Staging에 배포할 ECR 이미지의 Git SHA"
         required: true
         type: string
@@ -18,5 +18,5 @@ jobs:
     with:
       environment: staging
       github_environment: staging
-      image_tag: ${{ inputs.image_tag }}
+      image_sha: ${{ inputs.image_sha }}
     secrets: inherit

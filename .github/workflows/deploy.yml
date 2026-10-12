@@ -11,8 +11,8 @@ on:
         description: "배포 승인과 OIDC 인증에 사용할 GitHub Environment"
         required: true
         type: string
-      image_tag:
-        description: "ECR 이미지 태그로 사용할 Git SHA"
+      image_sha:
+        description: "V2 ECR 이미지 태그에 사용할 Git SHA"
         required: true
         type: string
       verify_dev_match:
@@ -48,15 +48,15 @@ jobs:
       - name: Validate Inputs
         env:
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_SHA: ${{ inputs.image_sha }}
         run: |
           if [[ ! "$DEPLOY_ENVIRONMENT" =~ ^(dev|staging|prod)$ ]]; then
             echo "지원하지 않는 배포 환경입니다: $DEPLOY_ENVIRONMENT"
             exit 1
           fi
 
-          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "이미지 태그는 40자리 Git SHA여야 합니다: $IMAGE_TAG"
+          if [[ ! "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "이미지 SHA는 40자리 Git SHA여야 합니다: $IMAGE_SHA"
             exit 1
           fi
 
@@ -81,7 +81,7 @@ jobs:
 
       - name: Verify ECR Image
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_TAG: v2-${{ inputs.image_sha }}
         run: |
           aws ecr describe-images \
             --repository-name "$ECR_REPOSITORY" \
@@ -92,7 +92,7 @@ jobs:
       - name: Verify Dev Image
         if: inputs.verify_dev_match
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_TAG: v2-${{ inputs.image_sha }}
         run: |
           DEV_TASK_DEFINITION_ARN=$(aws ecs describe-services \
             --cluster needu-dev-cluster \
@@ -119,7 +119,7 @@ jobs:
       - name: Create Task Definition Revision
         id: task-definition
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_TAG: v2-${{ inputs.image_sha }}
         run: |
           BASE_TASK_DEFINITION_ARN=$(aws ssm get-parameter \
             --name "$BASE_TASK_DEFINITION_PARAMETER" \
