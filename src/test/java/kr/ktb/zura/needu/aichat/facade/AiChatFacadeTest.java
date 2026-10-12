@@ -63,6 +63,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -84,6 +85,8 @@ class AiChatFacadeTest {
     private static final Duration SHORT_COMPLETION_COOLDOWN = Duration.ofMinutes(5);
     private static final OffsetDateTime EXPIRATION_AT = OffsetDateTime.parse("2026-09-23T05:48:00+00:00");
     private static final LocalDateTime PURGE_AT = LocalDateTime.of(2026, 9, 23, 5, 48);
+    private static final AiConversationLock.Handle LOCK_HANDLE =
+            new AiConversationLock.Handle(ROOM_ID, "lock-owner-token");
 
     @Mock
     private AiChatRoomService aiChatRoomService;
@@ -100,12 +103,14 @@ class AiChatFacadeTest {
     @Mock
     private UserService userService;
 
+    @Mock
     private AiConversationLock aiConversationLock;
+
     private AiChatFacade aiChatFacade;
 
     @BeforeEach
     void setUp() {
-        aiConversationLock = new AiConversationLock();
+        lenient().when(aiConversationLock.tryLock(ROOM_ID)).thenReturn(Optional.of(LOCK_HANDLE));
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
@@ -339,7 +344,7 @@ class AiChatFacadeTest {
 
     @Test
     void conversationAlreadyLocked_sendMessage_throwsTooManyRequests() {
-        aiConversationLock.tryLock(ROOM_ID);
+        given(aiConversationLock.tryLock(ROOM_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(TooManyRequestsException.class);
@@ -456,7 +461,7 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
-        assertThat(aiConversationLock.tryLock(ROOM_ID)).isTrue();
+        verify(aiConversationLock, never()).tryLock(anyLong());
     }
 
     @Test
@@ -481,7 +486,7 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class);
 
-        assertThat(aiConversationLock.tryLock(ROOM_ID)).isTrue();
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
     }
 
     @Test
@@ -670,7 +675,7 @@ class AiChatFacadeTest {
                 .hasMessage("save failed");
 
         verify(aiChatRoomService).expireRoom(ROOM_ID);
-        assertThat(aiConversationLock.tryLock(ROOM_ID)).isTrue();
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
     }
 
     @Test
@@ -702,7 +707,7 @@ class AiChatFacadeTest {
 
     @Test
     void confirmAlreadyInProgress_confirmAnalysis_throwsTooManyRequestsWithoutClosingSession() {
-        aiConversationLock.tryLock(ROOM_ID);
+        given(aiConversationLock.tryLock(ROOM_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
                 .isInstanceOf(TooManyRequestsException.class);
