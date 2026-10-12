@@ -119,15 +119,6 @@ class FriendServiceTest {
     }
 
     @Test
-    void keywordOverTwentyCharactersAfterStrip_findAllFriends_throwsInvalidInput() {
-        FriendSearchCondition condition = new FriendSearchCondition(null, "  " + "가".repeat(21) + "  ", null, 20);
-
-        assertThatThrownBy(() -> friendService.findAllFriends(1L, condition))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
-    }
-
-    @Test
     void missingSort_findAllFriends_returnsNamePageAndCursor() {
         FriendSummaryResponse first = friendSummary(2L, "가나", LocalDate.of(2000, 10, 1));
         FriendSummaryResponse second = friendSummary(3L, "다라", LocalDate.of(2000, 10, 2));

@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
-import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
@@ -27,8 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class FriendService {
-
-    private static final int MAX_KEYWORD_LENGTH = 20;
 
     private final FriendRepository friendRepository;
     private final UserService userService;
@@ -92,14 +89,7 @@ public class FriendService {
     }
 
     private String normalizeKeyword(String keyword) {
-        if (keyword == null) {
-            return null;
-        }
-        String stripped = keyword.strip();
-        if (stripped.isEmpty() || stripped.length() > MAX_KEYWORD_LENGTH) {
-            throw new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT);
-        }
-        return stripped;
+        return keyword == null ? null : keyword.strip();
     }
 
     private List<FriendSummaryResponse> findAllByName(

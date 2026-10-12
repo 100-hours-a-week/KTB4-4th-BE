@@ -26,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
@@ -131,6 +132,53 @@ class FriendControllerTest {
                         .param("size", "51")
                         .with(authenticatedUser()))
                 .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
+    void missingSize_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL).with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).findAllFriends(anyLong(), any());
+    }
+
+    @Test
+    void nonNumericSize_findAllFriends_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("size", "twenty")
+                        .with(authenticatedUser()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void nonBooleanFavorite_findAllFriends_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("favorite", "maybe")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void keywordOverTwentyCharacters_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("keyword", "가".repeat(21))
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).findAllFriends(anyLong(), any());
+    }
+
+    @Test
+    void blankKeyword_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("keyword", "   ")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).findAllFriends(anyLong(), any());
     }
 
     @Test

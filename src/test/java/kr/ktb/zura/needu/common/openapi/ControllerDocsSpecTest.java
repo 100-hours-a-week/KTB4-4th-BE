@@ -7,6 +7,8 @@ import org.springframework.test.context.TestConstructor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
@@ -51,6 +53,15 @@ class ControllerDocsSpecTest {
         requestSpec()
                 .andExpect(jsonPath("$.paths['/api/v1/auth/kakao/authorize'].get.responses['401']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/v1/friends/{userId}'].get.responses['401']").exists());
+    }
+
+    @Test
+    void parameterObject_expandsToQueryParameters() throws Exception {
+        requestSpec()
+                .andExpect(jsonPath("$.paths['/api/v1/friends'].get.parameters[*].name")
+                        .value(containsInAnyOrder("favorite", "keyword", "cursor", "size")))
+                .andExpect(jsonPath("$.paths['/api/v1/friends'].get.parameters[?(@.name == 'size')].required")
+                        .value(contains(true)));
     }
 
     private ResultActions requestSpec() throws Exception {

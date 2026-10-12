@@ -3,8 +3,6 @@ package kr.ktb.zura.needu.friend.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import java.net.URI;
 import java.util.UUID;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -21,11 +19,13 @@ import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
 import kr.ktb.zura.needu.friend.service.PokeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -52,12 +52,8 @@ public class FriendController {
     @GetMapping
     public ResponseEntity<FriendListApiResponse> findAllFriends(
             @AuthenticationPrincipal Long userId,
-            @RequestParam(required = false) Boolean favorite,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String cursor,
-            @RequestParam @Min(FriendPageLimits.MIN_PAGE_SIZE) @Max(FriendPageLimits.MAX_PAGE_SIZE) int size
+            @Valid @ParameterObject @ModelAttribute FriendSearchCondition condition
     ) {
-        FriendSearchCondition condition = new FriendSearchCondition(favorite, keyword, cursor, size);
         return ResponseEntity.ok(FriendListApiResponse.of(
                 FriendResponseMessages.FRIENDS_FOUND,
                 friendService.findAllFriends(userId, condition)
