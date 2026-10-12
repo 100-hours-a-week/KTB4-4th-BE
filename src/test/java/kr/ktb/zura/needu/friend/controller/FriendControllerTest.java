@@ -26,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
@@ -62,14 +63,13 @@ class FriendControllerTest {
     private PokeService pokeService;
 
     @Test
-    void friendsExist_findAllFriends_returnsBirthdayPage() throws Exception {
+    void friendsExist_findAllFriends_returnsFriendPage() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(
                 FRIEND_USER_ID, "친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29), true);
-        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition("birthday", null, null, null, 20)))
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(friend), true, "next", true));
 
         mockMvc.perform(get(LIST_URL)
-                        .param("sort", "birthday")
                         .param("size", "20")
                         .with(authenticatedUser()))
                 .andExpect(status().isOk())
@@ -84,8 +84,55 @@ class FriendControllerTest {
     }
 
     @Test
-    void missingSort_findAllFriends_returnsDefaultNamePage() throws Exception {
-        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, null, 20)))
+    void favoriteFalse_findAllFriends_passesFavoriteConditionAndReturnsNamePage() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "가나", null, null, true);
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(false, null, "cursor", 20)))
+                .willReturn(new FriendListResponse(List.of(friend), false, "next", true));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("favorite", "false")
+                        .param("cursor", "cursor")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].name").value("가나"))
+                .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.nextCursor").value("next"));
+    }
+
+    @Test
+    void favoriteTrue_findAllFriends_passesFavoriteCondition() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "가나", null, null, true);
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(true, null, null, 20)))
+                .willReturn(new FriendListResponse(List.of(friend), false, null, false));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("favorite", "true")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void keyword_findAllFriends_passesKeywordCondition() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "김철수", null, null, false);
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, "김", null, 20)))
+                .willReturn(new FriendListResponse(List.of(friend), false, null, false));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("keyword", "김")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].name").value("김철수"));
+    }
+
+    @Test
+    void missingFavorite_findAllFriends_returnsDefaultNamePage() throws Exception {
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(), false, null, false));
 
         mockMvc.perform(get(LIST_URL).param("size", "20").with(authenticatedUser()))
@@ -94,23 +141,58 @@ class FriendControllerTest {
     }
 
     @Test
-    void unsupportedSort_findAllFriends_returnsUnprocessableContent() throws Exception {
-        mockMvc.perform(get(LIST_URL)
-                        .param("sort", "name")
-                        .param("size", "20")
-                        .with(authenticatedUser()))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message")
-                        .value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
-    }
-
-    @Test
     void sizeOutOfRange_findAllFriends_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(get(LIST_URL)
-                        .param("sort", "birthday")
                         .param("size", "51")
                         .with(authenticatedUser()))
                 .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
+    void missingSize_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL).with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).findAllFriends(anyLong(), any());
+    }
+
+    @Test
+    void nonNumericSize_findAllFriends_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("size", "twenty")
+                        .with(authenticatedUser()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void nonBooleanFavorite_findAllFriends_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("favorite", "maybe")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void keywordOverTwentyCharacters_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("keyword", "가".repeat(21))
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).findAllFriends(anyLong(), any());
+    }
+
+    @Test
+    void blankKeyword_findAllFriends_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(LIST_URL)
+                        .param("keyword", "   ")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(friendService, never()).findAllFriends(anyLong(), any());
     }
 
     @Test

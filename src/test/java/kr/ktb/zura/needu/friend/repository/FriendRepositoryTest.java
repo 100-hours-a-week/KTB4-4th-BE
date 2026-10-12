@@ -58,9 +58,9 @@ class FriendRepositoryTest {
         ));
 
         List<FriendSummaryResponse> allFriends = friendRepository
-                .findAllByOwnerUserIdOrderByName(1L, Limit.of(10));
+                .findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(10));
         List<FriendSummaryResponse> friendsAfterCursor = friendRepository
-                .findAllByOwnerUserIdAfterNameCursor(1L, "가나", first.getId(), Limit.of(10));
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "%", "가나", first.getId(), Limit.of(10));
 
         assertThat(allFriends).extracting(FriendSummaryResponse::userId)
                 .containsExactly(first.getId(), second.getId(), later.getId());
@@ -69,64 +69,112 @@ class FriendRepositoryTest {
     }
 
     @Test
-    void yearEnd_findAllByOwner_ordersUpcomingBirthdaysAndExcludesMissingBirthday() {
-        User today = saveUser("오늘", LocalDate.of(2000, 12, 30));
-        User nextYear = saveUser("연초", LocalDate.of(2000, 1, 2));
-        User passed = saveUser("지난 생일", LocalDate.of(2000, 12, 20));
-        User missing = saveUser("생일 없음", null);
-        User otherOwnerFriend = saveUser("다른 사용자 친구", LocalDate.of(2000, 12, 31));
+    void favoriteOnly_findAllByOwner_returnsOnlyFavoritesByName() {
+        User favoriteLater = saveUser("다라", null);
+        User regular = saveUser("가가", null);
+        User favoriteFirst = saveUser("가나", null);
+        User favoriteSecond = saveUser("가나", null);
+        User otherOwnerFavorite = saveUser("가", null);
         friendRepository.saveAll(List.of(
-                new Friend(1L, today.getId()),
-                new Friend(1L, nextYear.getId()),
-                new Friend(1L, passed.getId()),
-                new Friend(1L, missing.getId()),
-                new Friend(2L, otherOwnerFriend.getId())
+                favoriteFriend(1L, favoriteLater),
+                new Friend(1L, regular.getId()),
+                favoriteFriend(1L, favoriteSecond),
+                favoriteFriend(1L, favoriteFirst),
+                favoriteFriend(2L, otherOwnerFavorite)
         ));
 
-        List<FriendSummaryResponse> friends = friendRepository
-                .findAllByOwnerUserIdOrderByUpcomingBirthday(1L, 1230, Limit.of(10));
+        List<FriendSummaryResponse> favorites = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, true, "%", Limit.of(10));
+        List<FriendSummaryResponse> favoritesAfterCursor = friendRepository
+                .findAllByOwnerUserIdAfterNameCursor(1L, true, "%", "가가", regular.getId(), Limit.of(10));
 
-        assertThat(friends).extracting(FriendSummaryResponse::userId)
-                .containsExactly(today.getId(), nextYear.getId(), passed.getId());
+        assertThat(favorites).extracting(FriendSummaryResponse::userId)
+                .containsExactly(favoriteFirst.getId(), favoriteSecond.getId(), favoriteLater.getId());
+        assertThat(favorites).extracting(FriendSummaryResponse::isFavorite).containsOnly(true);
+        assertThat(favoritesAfterCursor).extracting(FriendSummaryResponse::userId)
+                .containsExactly(favoriteFirst.getId(), favoriteSecond.getId(), favoriteLater.getId());
     }
 
     @Test
-    void leapDay_findAllByOwner_treatsAsMarchFirstAndOrdersByUserId() {
-        User leapDay = saveUser("윤년생", LocalDate.of(2000, 2, 29));
-        User marchFirst = saveUser("삼월생", LocalDate.of(2000, 3, 1));
+    void inactiveFriends_findAllByOwner_returnsOnlyActiveFriendsOnEveryPage() {
+        User active = saveUser("가나", null);
+        User withdrawn = saveUser("다라", null);
+        withdrawn.withdraw();
+        User blockedFavorite = saveUser("마바", null);
+        blockedFavorite.block();
+        User onboarding = userRepository.save(new User(
+                externalIdSequence.incrementAndGet(), "사아", null, Gender.NONE, null));
         friendRepository.saveAll(List.of(
-                new Friend(1L, leapDay.getId()),
-                new Friend(1L, marchFirst.getId())
+                new Friend(1L, active.getId()),
+                new Friend(1L, withdrawn.getId()),
+                favoriteFriend(1L, blockedFavorite),
+                new Friend(1L, onboarding.getId())
         ));
 
-        List<FriendSummaryResponse> friends = friendRepository
-                .findAllByOwnerUserIdOrderByUpcomingBirthday(1L, 201, Limit.of(10));
+        List<FriendSummaryResponse> allFriends = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(10));
+        List<FriendSummaryResponse> friendsAfterCursor = friendRepository
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "%", "가가", active.getId() - 1, Limit.of(10));
+        List<FriendSummaryResponse> favorites = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, true, "%", Limit.of(10));
 
-        assertThat(friends).extracting(FriendSummaryResponse::userId)
-                .containsExactly(leapDay.getId(), marchFirst.getId());
-        assertThat(friends.getFirst().birthDate()).isEqualTo(LocalDate.of(2000, 2, 29));
+        assertThat(allFriends).extracting(FriendSummaryResponse::userId).containsExactly(active.getId());
+        assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId).containsExactly(active.getId());
+        assertThat(favorites).isEmpty();
     }
 
     @Test
-    void cursorOnSameBirthday_findAllAfterCursor_doesNotSkipFriend() {
-        User first = saveUser("첫 번째", LocalDate.of(2000, 5, 1));
-        User second = saveUser("두 번째", LocalDate.of(1999, 5, 1));
-        User later = saveUser("다음 생일", LocalDate.of(2000, 5, 2));
+    void namePrefixPattern_findAllByOwner_returnsNamesStartingWithKeyword() {
+        User kimChulsoo = saveUser("김철수", null);
+        User kimSuji = saveUser("김수지", null);
+        User parkKimji = saveUser("박김지", null);
+        User leeYounghee = saveUser("이영희", null);
         friendRepository.saveAll(List.of(
-                new Friend(1L, first.getId()),
-                new Friend(1L, second.getId()),
-                new Friend(1L, later.getId())
+                new Friend(1L, kimChulsoo.getId()),
+                new Friend(1L, kimSuji.getId()),
+                new Friend(1L, parkKimji.getId()),
+                new Friend(1L, leeYounghee.getId())
         ));
 
-        List<FriendSummaryResponse> friends = friendRepository.findAllByOwnerUserIdAfterBirthdayCursor(
-                1L, 401, 501, first.getId(), Limit.of(10));
+        List<FriendSummaryResponse> friends = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, false, "김%", Limit.of(10));
+        List<FriendSummaryResponse> friendsAfterCursor = friendRepository
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", kimSuji.getId(), Limit.of(10));
 
         assertThat(friends).extracting(FriendSummaryResponse::userId)
-                .containsExactly(second.getId(), later.getId());
+                .containsExactly(kimSuji.getId(), kimChulsoo.getId());
+        assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId)
+                .containsExactly(kimChulsoo.getId());
+    }
+
+    @Test
+    void escapedWildcardPattern_findAllByOwner_matchesWildcardAsLiteral() {
+        User percent = saveUser("50%할인", null);
+        User fiftyWon = saveUser("50원", null);
+        User underscore = saveUser("a_b", null);
+        User letter = saveUser("axb", null);
+        friendRepository.saveAll(List.of(
+                new Friend(1L, percent.getId()),
+                new Friend(1L, fiftyWon.getId()),
+                new Friend(1L, underscore.getId()),
+                new Friend(1L, letter.getId())
+        ));
+
+        assertThat(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "50!%%", Limit.of(10)))
+                .extracting(FriendSummaryResponse::userId).containsExactly(percent.getId());
+        assertThat(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "a!_%", Limit.of(10)))
+                .extracting(FriendSummaryResponse::userId).containsExactly(underscore.getId());
+    }
+
+    private Friend favoriteFriend(Long ownerUserId, User friendUser) {
+        Friend friend = new Friend(ownerUserId, friendUser.getId());
+        friend.markAsFavorite();
+        return friend;
     }
 
     private User saveUser(String name, LocalDate birthDate) {
-        return userRepository.save(new User(
-                externalIdSequence.incrementAndGet(), name, null, Gender.NONE, birthDate));
+        User user = new User(externalIdSequence.incrementAndGet(), name, null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.save(user);
     }
 }

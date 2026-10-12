@@ -29,8 +29,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -121,25 +119,16 @@ class FriendServiceTest {
     }
 
     @Test
-    void keywordOverTwentyCharactersAfterStrip_findAllFriends_throwsInvalidInput() {
-        FriendSearchCondition condition = new FriendSearchCondition(null, null, "  " + "가".repeat(21) + "  ", null, 20);
-
-        assertThatThrownBy(() -> friendService.findAllFriends(1L, condition))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT);
-    }
-
-    @Test
     void missingSort_findAllFriends_returnsNamePageAndCursor() {
         FriendSummaryResponse first = friendSummary(2L, "가나", LocalDate.of(2000, 10, 1));
         FriendSummaryResponse second = friendSummary(3L, "다라", LocalDate.of(2000, 10, 2));
         FriendSummaryResponse extra = friendSummary(4L, "마바", LocalDate.of(2000, 10, 3));
-        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, Limit.of(3)))
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(3)))
                 .thenReturn(List.of(first, second, extra));
         when(userService.isKakaoFriendSynced(1L)).thenReturn(true);
 
         FriendListResponse response = friendService.findAllFriends(
-                1L, new FriendSearchCondition(null, null, null, null, 2));
+                1L, new FriendSearchCondition(null, null, null, 2));
 
         assertThat(response.items()).containsExactly(first, second);
         assertThat(response.isKakaoFriendSynced()).isTrue();
@@ -150,13 +139,95 @@ class FriendServiceTest {
     }
 
     @Test
-    void lastPage_findAllFriends_returnsNullCursor() {
-        FriendSummaryResponse friend = friendSummary(2L, LocalDate.of(2000, 10, 1));
-        when(friendRepository.findAllByOwnerUserIdOrderByUpcomingBirthday(eq(1L), anyInt(), eq(Limit.of(3))))
+    void favoriteFalseWithCursor_findAllFriends_returnsAllFriendsAfterNameCursor() {
+        FriendSummaryResponse favorite = new FriendSummaryResponse(4L, "마바", null, null, true);
+        FriendSummaryResponse regular = friendSummary(5L, "사아", null);
+        String cursor = new FriendNameCursor("다라", 3L).encode();
+        when(friendRepository.findAllByOwnerUserIdAfterNameCursor(1L, false, "%", "다라", 3L, Limit.of(3)))
+                .thenReturn(List.of(favorite, regular));
+
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition(false, null, cursor, 2));
+
+        assertThat(response.items()).containsExactly(favorite, regular);
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.nextCursor()).isNull();
+    }
+
+    @Test
+    void favoriteTrue_findAllFriends_returnsFavoriteNamePageAndCursor() {
+        FriendSummaryResponse first = new FriendSummaryResponse(2L, "가나", null, null, true);
+        FriendSummaryResponse extra = new FriendSummaryResponse(3L, "다라", null, null, true);
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, true, "%", Limit.of(2)))
+                .thenReturn(List.of(first, extra));
+
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition(true, null, null, 1));
+
+        assertThat(response.items()).containsExactly(first);
+        assertThat(response.hasNext()).isTrue();
+        assertThat(FriendNameCursor.decode(response.nextCursor())).isEqualTo(new FriendNameCursor("가나", 2L));
+    }
+
+    @Test
+    void favoriteTrueWithCursor_findAllFriends_queriesFavoritesAfterNameCursor() {
+        FriendSummaryResponse favorite = new FriendSummaryResponse(3L, "다라", null, null, true);
+        String cursor = new FriendNameCursor("가나", 2L).encode();
+        when(friendRepository.findAllByOwnerUserIdAfterNameCursor(1L, true, "%", "가나", 2L, Limit.of(2)))
+                .thenReturn(List.of(favorite));
+
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition(true, null, cursor, 1));
+
+        assertThat(response.items()).containsExactly(favorite);
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.nextCursor()).isNull();
+    }
+
+    @Test
+    void keyword_findAllFriends_queriesStrippedNamePrefixPattern() {
+        FriendSummaryResponse friend = friendSummary(2L, "김철수", null);
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "김%", Limit.of(3)))
                 .thenReturn(List.of(friend));
 
         FriendListResponse response = friendService.findAllFriends(
-                1L, new FriendSearchCondition("birthday", null, null, null, 2));
+                1L, new FriendSearchCondition(null, " 김 ", null, 2));
+
+        assertThat(response.items()).containsExactly(friend);
+        assertThat(response.hasNext()).isFalse();
+    }
+
+    @Test
+    void keywordWithLikeWildcards_findAllFriends_escapesWildcards() {
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, true, "50!%!_!!%", Limit.of(3)))
+                .thenReturn(List.of());
+
+        friendService.findAllFriends(1L, new FriendSearchCondition(true, "50%_!", null, 2));
+
+        verify(friendRepository).findAllByOwnerUserIdOrderByName(1L, true, "50!%!_!!%", Limit.of(3));
+    }
+
+    @Test
+    void keywordWithCursor_findAllFriends_queriesPatternAfterNameCursor() {
+        String cursor = new FriendNameCursor("김수지", 2L).encode();
+        when(friendRepository.findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", 2L, Limit.of(3)))
+                .thenReturn(List.of());
+
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition(null, "김", cursor, 2));
+
+        assertThat(response.items()).isEmpty();
+        verify(friendRepository).findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", 2L, Limit.of(3));
+    }
+
+    @Test
+    void lastPage_findAllFriends_returnsNullCursor() {
+        FriendSummaryResponse friend = friendSummary(2L, LocalDate.of(2000, 10, 1));
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(3)))
+                .thenReturn(List.of(friend));
+
+        FriendListResponse response = friendService.findAllFriends(
+                1L, new FriendSearchCondition(null, null, null, 2));
 
         assertThat(response.items()).containsExactly(friend);
         assertThat(response.hasNext()).isFalse();
