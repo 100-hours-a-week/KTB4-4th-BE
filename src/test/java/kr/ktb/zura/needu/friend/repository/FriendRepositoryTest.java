@@ -58,9 +58,9 @@ class FriendRepositoryTest {
         ));
 
         List<FriendSummaryResponse> allFriends = friendRepository
-                .findAllByOwnerUserIdOrderByName(1L, false, Limit.of(10));
+                .findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(10));
         List<FriendSummaryResponse> friendsAfterCursor = friendRepository
-                .findAllByOwnerUserIdAfterNameCursor(1L, false, "가나", first.getId(), Limit.of(10));
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "%", "가나", first.getId(), Limit.of(10));
 
         assertThat(allFriends).extracting(FriendSummaryResponse::userId)
                 .containsExactly(first.getId(), second.getId(), later.getId());
@@ -84,9 +84,9 @@ class FriendRepositoryTest {
         ));
 
         List<FriendSummaryResponse> favorites = friendRepository
-                .findAllByOwnerUserIdOrderByName(1L, true, Limit.of(10));
+                .findAllByOwnerUserIdOrderByName(1L, true, "%", Limit.of(10));
         List<FriendSummaryResponse> favoritesAfterCursor = friendRepository
-                .findAllByOwnerUserIdAfterNameCursor(1L, true, "가가", regular.getId(), Limit.of(10));
+                .findAllByOwnerUserIdAfterNameCursor(1L, true, "%", "가가", regular.getId(), Limit.of(10));
 
         assertThat(favorites).extracting(FriendSummaryResponse::userId)
                 .containsExactly(favoriteFirst.getId(), favoriteSecond.getId(), favoriteLater.getId());
@@ -112,15 +112,58 @@ class FriendRepositoryTest {
         ));
 
         List<FriendSummaryResponse> allFriends = friendRepository
-                .findAllByOwnerUserIdOrderByName(1L, false, Limit.of(10));
+                .findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(10));
         List<FriendSummaryResponse> friendsAfterCursor = friendRepository
-                .findAllByOwnerUserIdAfterNameCursor(1L, false, "가가", active.getId() - 1, Limit.of(10));
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "%", "가가", active.getId() - 1, Limit.of(10));
         List<FriendSummaryResponse> favorites = friendRepository
-                .findAllByOwnerUserIdOrderByName(1L, true, Limit.of(10));
+                .findAllByOwnerUserIdOrderByName(1L, true, "%", Limit.of(10));
 
         assertThat(allFriends).extracting(FriendSummaryResponse::userId).containsExactly(active.getId());
         assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId).containsExactly(active.getId());
         assertThat(favorites).isEmpty();
+    }
+
+    @Test
+    void namePrefixPattern_findAllByOwner_returnsNamesStartingWithKeyword() {
+        User kimChulsoo = saveUser("김철수", null);
+        User kimSuji = saveUser("김수지", null);
+        User parkKimji = saveUser("박김지", null);
+        User leeYounghee = saveUser("이영희", null);
+        friendRepository.saveAll(List.of(
+                new Friend(1L, kimChulsoo.getId()),
+                new Friend(1L, kimSuji.getId()),
+                new Friend(1L, parkKimji.getId()),
+                new Friend(1L, leeYounghee.getId())
+        ));
+
+        List<FriendSummaryResponse> friends = friendRepository
+                .findAllByOwnerUserIdOrderByName(1L, false, "김%", Limit.of(10));
+        List<FriendSummaryResponse> friendsAfterCursor = friendRepository
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", kimSuji.getId(), Limit.of(10));
+
+        assertThat(friends).extracting(FriendSummaryResponse::userId)
+                .containsExactly(kimSuji.getId(), kimChulsoo.getId());
+        assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId)
+                .containsExactly(kimChulsoo.getId());
+    }
+
+    @Test
+    void escapedWildcardPattern_findAllByOwner_matchesWildcardAsLiteral() {
+        User percent = saveUser("50%할인", null);
+        User fiftyWon = saveUser("50원", null);
+        User underscore = saveUser("a_b", null);
+        User letter = saveUser("axb", null);
+        friendRepository.saveAll(List.of(
+                new Friend(1L, percent.getId()),
+                new Friend(1L, fiftyWon.getId()),
+                new Friend(1L, underscore.getId()),
+                new Friend(1L, letter.getId())
+        ));
+
+        assertThat(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "50!%%", Limit.of(10)))
+                .extracting(FriendSummaryResponse::userId).containsExactly(percent.getId());
+        assertThat(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "a!_%", Limit.of(10)))
+                .extracting(FriendSummaryResponse::userId).containsExactly(underscore.getId());
     }
 
     private Friend favoriteFriend(Long ownerUserId, User friendUser) {

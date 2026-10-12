@@ -115,6 +115,23 @@ class FriendListIntegrationTest {
     }
 
     @Test
+    void keyword_findAllFriends_returnsFriendsWhoseNameStartsWithKeyword() throws Exception {
+        User owner = saveUser("사용자", LocalDate.of(2000, 1, 1));
+        User kimChulsoo = saveUser("김철수", LocalDate.of(2000, 3, 1));
+        User parkKimji = saveUser("박김지", LocalDate.of(2000, 3, 2));
+        friendRepository.saveAll(List.of(
+                new Friend(owner.getId(), kimChulsoo.getId()),
+                new Friend(owner.getId(), parkKimji.getId())
+        ));
+
+        mockMvc.perform(validRequest().param("keyword", "김").with(authenticatedUser(owner.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("김철수"))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
     void unauthenticated_findAllFriends_returnsUnauthorized() throws Exception {
         mockMvc.perform(validRequest())
                 .andExpect(status().isUnauthorized())

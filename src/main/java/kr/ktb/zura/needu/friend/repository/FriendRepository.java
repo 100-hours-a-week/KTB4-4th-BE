@@ -18,6 +18,7 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
 
     List<Friend> findAllByOwnerUserIdAndFriendUserIdIn(Long ownerUserId, Collection<Long> friendUserIds);
 
+    // namePrefixPattern의 이스케이프 문자 '!'는 FriendService에서 만드는 패턴과 동일해야 한다
     @Query("""
             select new kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse(
                 u.id, u.nickname, u.profileImageUrl, u.birthDate, f.favorite)
@@ -26,11 +27,13 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
             where f.ownerUserId = :ownerUserId
               and u.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
               and (:isFavoriteOnly = false or f.favorite = true)
+              and u.nickname like :namePrefixPattern escape '!'
             order by u.nickname asc, u.id asc
             """)
     List<FriendSummaryResponse> findAllByOwnerUserIdOrderByName(
             @Param("ownerUserId") Long ownerUserId,
             @Param("isFavoriteOnly") boolean isFavoriteOnly,
+            @Param("namePrefixPattern") String namePrefixPattern,
             Limit limit
     );
 
@@ -42,12 +45,14 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
             where f.ownerUserId = :ownerUserId
               and u.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
               and (:isFavoriteOnly = false or f.favorite = true)
+              and u.nickname like :namePrefixPattern escape '!'
               and (u.nickname > :cursorName or (u.nickname = :cursorName and u.id > :cursorUserId))
             order by u.nickname asc, u.id asc
             """)
     List<FriendSummaryResponse> findAllByOwnerUserIdAfterNameCursor(
             @Param("ownerUserId") Long ownerUserId,
             @Param("isFavoriteOnly") boolean isFavoriteOnly,
+            @Param("namePrefixPattern") String namePrefixPattern,
             @Param("cursorName") String cursorName,
             @Param("cursorUserId") Long cursorUserId,
             Limit limit

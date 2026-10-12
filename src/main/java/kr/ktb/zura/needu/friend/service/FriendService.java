@@ -27,6 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class FriendService {
 
+    // MySQL 문자열 리터럴에서 역슬래시가 이스케이프로 해석되지 않도록 LIKE 이스케이프 문자로 '!'를 쓴다
+    private static final String LIKE_ESCAPE = "!";
+    private static final String LIKE_ANY = "%";
+
     private final FriendRepository friendRepository;
     private final UserService userService;
 
@@ -58,18 +62,15 @@ public class FriendService {
     }
 
     public FriendListResponse findAllFriends(Long userId, FriendSearchCondition condition) {
-        String keyword = normalizeKeyword(condition.keyword());
         userService.validateActiveUser(userId);
-        if (keyword != null) {
-            // TODO: 이름 검색과 조건에 묶인 커서를 구현
-            throw new UnsupportedOperationException("FRD-1 미구현");
-        }
         boolean isKakaoFriendSynced = userService.isKakaoFriendSynced(userId);
 
         String cursor = condition.cursor();
         int size = condition.size();
         boolean isFavoriteOnly = Boolean.TRUE.equals(condition.favorite());
-        List<FriendSummaryResponse> friends = findAllByName(userId, isFavoriteOnly, cursor, Limit.of(size + 1));
+        String namePrefixPattern = toNamePrefixPattern(condition.keyword());
+        List<FriendSummaryResponse> friends = findAllByName(
+                userId, isFavoriteOnly, namePrefixPattern, cursor, Limit.of(size + 1));
 
         boolean hasNext = friends.size() > size;
         List<FriendSummaryResponse> pageItems = hasNext ? friends.subList(0, size) : friends;
@@ -88,18 +89,25 @@ public class FriendService {
                 .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND));
     }
 
-    private String normalizeKeyword(String keyword) {
-        return keyword == null ? null : keyword.strip();
+    private String toNamePrefixPattern(String keyword) {
+        if (keyword == null) {
+            return LIKE_ANY;
+        }
+        String escapedKeyword = keyword.strip()
+                .replace(LIKE_ESCAPE, LIKE_ESCAPE + LIKE_ESCAPE)
+                .replace("%", LIKE_ESCAPE + "%")
+                .replace("_", LIKE_ESCAPE + "_");
+        return escapedKeyword + LIKE_ANY;
     }
 
     private List<FriendSummaryResponse> findAllByName(
-            Long userId, boolean isFavoriteOnly, String cursor, Limit limit) {
+            Long userId, boolean isFavoriteOnly, String namePrefixPattern, String cursor, Limit limit) {
         if (cursor == null) {
-            return friendRepository.findAllByOwnerUserIdOrderByName(userId, isFavoriteOnly, limit);
+            return friendRepository.findAllByOwnerUserIdOrderByName(userId, isFavoriteOnly, namePrefixPattern, limit);
         }
         FriendNameCursor decodedCursor = FriendNameCursor.decode(cursor);
         return friendRepository.findAllByOwnerUserIdAfterNameCursor(
-                userId, isFavoriteOnly, decodedCursor.name(), decodedCursor.userId(), limit);
+                userId, isFavoriteOnly, namePrefixPattern, decodedCursor.name(), decodedCursor.userId(), limit);
     }
 
     @Transactional

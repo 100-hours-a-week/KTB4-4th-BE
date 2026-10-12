@@ -117,6 +117,20 @@ class FriendControllerTest {
     }
 
     @Test
+    void keyword_findAllFriends_passesKeywordCondition() throws Exception {
+        FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "김철수", null, null, false);
+        given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, "김", null, 20)))
+                .willReturn(new FriendListResponse(List.of(friend), false, null, false));
+
+        mockMvc.perform(get(LIST_URL)
+                        .param("keyword", "김")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].name").value("김철수"));
+    }
+
+    @Test
     void missingFavorite_findAllFriends_returnsDefaultNamePage() throws Exception {
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
                 .willReturn(new FriendListResponse(List.of(), false, null, false));
