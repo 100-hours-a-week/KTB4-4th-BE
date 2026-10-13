@@ -36,6 +36,7 @@ import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.service.AiAnalysisConfirmService;
 import kr.ktb.zura.needu.aichat.service.AiChatRoomService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
+import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
@@ -106,13 +107,16 @@ class AiChatFacadeTest {
     @Mock
     private AiConversationLock aiConversationLock;
 
+    @Mock
+    private AiGenerationStateService aiGenerationStateService;
+
     private AiChatFacade aiChatFacade;
 
     @BeforeEach
     void setUp() {
         lenient().when(aiConversationLock.tryLock(ROOM_ID)).thenReturn(Optional.of(LOCK_HANDLE));
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
+                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
     }
 
@@ -135,7 +139,7 @@ class AiChatFacadeTest {
     @Test
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
+                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
@@ -332,14 +336,72 @@ class AiChatFacadeTest {
     }
 
     @Test
-    void replyNotSavedYet_sendMessage_throwsTooManyRequests() {
+    void replyBeingGenerated_sendMessage_throwsTooManyRequests() {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID))
                 .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
         given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiGenerationStateService.isGenerating(ROOM_ID, USER_MESSAGE_ID)).willReturn(true);
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(TooManyRequestsException.class);
         verifyNoInteractions(aiChatClient);
+        verify(aiGenerationStateService, never()).startGenerating(anyLong(), anyLong());
+    }
+
+    @Test
+    void unansweredMessageNotGenerating_sendMessage_regeneratesReplyForSameMessage() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID))
+                .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
+        given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiGenerationStateService.isGenerating(ROOM_ID, USER_MESSAGE_ID)).willReturn(false);
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(aiMessageService.createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
+
+        AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        assertThat(response).isEqualTo(
+                new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false));
+        verify(aiMessageService, never()).createUserMessage(anyLong(), any(), any());
+        verify(aiGenerationStateService).startGenerating(ROOM_ID, USER_MESSAGE_ID);
+        verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
+    }
+
+    @Test
+    void newClientMessageId_sendMessage_marksGeneratingUntilReplySaved() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(aiMessageService.createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
+
+        aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        var order = inOrder(aiGenerationStateService, aiChatClient, aiMessageService);
+        order.verify(aiGenerationStateService).startGenerating(ROOM_ID, USER_MESSAGE_ID);
+        order.verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        order.verify(aiMessageService).createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
+        order.verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
+    }
+
+    @Test
+    void replyFailed_sendMessage_clearsGeneratingState() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
     }
 
     @Test
