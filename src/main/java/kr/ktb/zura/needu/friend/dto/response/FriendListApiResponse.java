@@ -5,6 +5,8 @@ import java.util.List;
 public record FriendListApiResponse(
         String message,
         Data data,
+        Long totalCount,
+        Long favoriteTotalCount,
         String nextCursor,
         boolean hasNext
 ) {
@@ -13,6 +15,8 @@ public record FriendListApiResponse(
         return new FriendListApiResponse(
                 message,
                 new Data(response.items(), response.isKakaoFriendSynced()),
+                response.totalCount(),
+                response.favoriteTotalCount(),
                 response.nextCursor(),
                 response.hasNext()
         );

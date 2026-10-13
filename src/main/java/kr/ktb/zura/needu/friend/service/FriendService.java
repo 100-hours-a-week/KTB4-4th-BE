@@ -75,8 +75,13 @@ public class FriendService {
         boolean hasNext = friends.size() > size;
         List<FriendSummaryResponse> pageItems = hasNext ? friends.subList(0, size) : friends;
         String nextCursor = hasNext ? FriendNameCursor.from(pageItems.getLast()).encode() : null;
+        long totalCount = friendRepository.countAllActiveByOwnerUserId(userId);
+        long favoriteTotalCount = friendRepository.countAllActiveFavoritesByOwnerUserId(userId);
         return FriendListResponse.from(
-                new CursorPageResponse<>(pageItems, nextCursor, hasNext), isKakaoFriendSynced);
+                new CursorPageResponse<>(pageItems, nextCursor, hasNext),
+                isKakaoFriendSynced,
+                totalCount,
+                favoriteTotalCount);
     }
 
     private Friend findFriendRelation(Long ownerUserId, Long friendUserId) {

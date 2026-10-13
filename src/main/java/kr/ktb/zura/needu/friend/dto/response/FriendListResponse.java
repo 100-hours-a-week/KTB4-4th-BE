@@ -6,15 +6,20 @@ import kr.ktb.zura.needu.common.response.CursorPageResponse;
 public record FriendListResponse(
         List<FriendSummaryResponse> items,
         boolean isKakaoFriendSynced,
+        long totalCount,
+        long favoriteTotalCount,
         String nextCursor,
         boolean hasNext
 ) {
 
     public static FriendListResponse from(
             CursorPageResponse<FriendSummaryResponse> page,
-            boolean isKakaoFriendSynced
+            boolean isKakaoFriendSynced,
+            long totalCount,
+            long favoriteTotalCount
     ) {
         return new FriendListResponse(
-                page.items(), isKakaoFriendSynced, page.nextCursor(), page.hasNext());
+                page.items(), isKakaoFriendSynced, totalCount, favoriteTotalCount,
+                page.nextCursor(), page.hasNext());
     }
 }
