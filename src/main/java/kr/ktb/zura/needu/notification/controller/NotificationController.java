@@ -10,6 +10,7 @@ import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
 import kr.ktb.zura.needu.notification.service.NotificationService;
 import kr.ktb.zura.needu.notification.service.NotificationStreamService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -74,6 +75,10 @@ public class NotificationController {
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<SseEmitter> connectStream(@AuthenticationPrincipal Long userId) {
-        return ResponseEntity.ok(notificationStreamService.connect(userId));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL,
+                        "no-cache, no-store, max-age=0, must-revalidate, no-transform")
+                .header("X-Accel-Buffering", "no")
+                .body(notificationStreamService.connect(userId));
     }
 }
