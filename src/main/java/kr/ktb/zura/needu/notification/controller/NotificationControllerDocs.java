@@ -30,6 +30,9 @@ public class NotificationControllerDocs implements ControllerDocs {
                                 UserErrorCode.USER_BLOCKED,
                                 UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
+                OperationDoc.of(NotificationController.class, "readAllNotifications")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .build(),
                 OperationDoc.of(NotificationController.class, "deleteNotification")
                         .successStatus(HttpStatus.NO_CONTENT)
                         .errors(NotificationErrorCode.NOTIFICATION_NOT_FOUND,
