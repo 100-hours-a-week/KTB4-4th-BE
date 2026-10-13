@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.notification.dto.request.NotificationListRequest;
 import kr.ktb.zura.needu.notification.dto.response.NotificationListApiResponse;
+import kr.ktb.zura.needu.notification.dto.response.NotificationReadAllResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
 import kr.ktb.zura.needu.notification.service.NotificationService;
@@ -60,6 +61,16 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.of(
                 NotificationResponseMessage.NOTIFICATION_READ.getMessage(),
                 notificationService.readNotification(userId, notificationId)
+        ));
+    }
+
+    @PatchMapping("/read-all")
+    public ResponseEntity<ApiResponse<NotificationReadAllResponse>> readAllNotifications(
+            @AuthenticationPrincipal Long userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                NotificationResponseMessage.ALL_NOTIFICATIONS_READ.getMessage(),
+                notificationService.readAllNotifications(userId)
         ));
     }
 

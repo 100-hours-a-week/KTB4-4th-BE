@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
 import kr.ktb.zura.needu.notification.dto.response.NotificationListResponse;
+import kr.ktb.zura.needu.notification.dto.response.NotificationReadAllResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
@@ -94,6 +95,15 @@ public class NotificationService {
         long unreadCount = notificationRepository.countUnreadByReceiverUserId(userId);
 
         return NotificationReadResponse.from(notification, isTargetAvailable(notification), unreadCount);
+    }
+
+    @Transactional
+    public NotificationReadAllResponse readAllNotifications(Long userId) {
+        userService.validateActiveUser(userId);
+        LocalDateTime readAt = LocalDateTime.now(ZoneOffset.UTC);
+        int updatedCount = notificationRepository.readAllByReceiverUserId(userId, readAt);
+        long unreadCount = notificationRepository.countUnreadByReceiverUserId(userId);
+        return new NotificationReadAllResponse(updatedCount, unreadCount);
     }
 
     @Transactional
