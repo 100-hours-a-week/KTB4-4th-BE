@@ -133,6 +133,23 @@ class FriendRepositoryTest {
     }
 
     @Test
+    void activeFriends_countAllByOwner_returnsTotalAndFavoriteCounts() {
+        User regular = saveUser("가나", null);
+        User favorite = saveUser("다라", null);
+        User inactiveFavorite = saveUser("마바", null);
+        inactiveFavorite.withdraw();
+        friendRepository.saveAll(List.of(
+                new Friend(1L, regular.getId()),
+                favoriteFriend(1L, favorite),
+                favoriteFriend(1L, inactiveFavorite),
+                new Friend(2L, regular.getId())
+        ));
+
+        assertThat(friendRepository.countAllActiveByOwnerUserId(1L)).isEqualTo(2L);
+        assertThat(friendRepository.countAllActiveFavoritesByOwnerUserId(1L)).isEqualTo(1L);
+    }
+
+    @Test
     void inactiveFriends_findAllByOwner_returnsOnlyActiveFriendsOnEveryPage() {
         User active = saveUser("가나", null);
         User withdrawn = saveUser("다라", null);
