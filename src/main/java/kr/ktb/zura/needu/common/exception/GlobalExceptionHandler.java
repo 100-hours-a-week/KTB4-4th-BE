@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolationException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,6 +38,7 @@ public class GlobalExceptionHandler {
             log.info("Business exception occurred. code={}", errorCode.name());
         }
         return ResponseEntity.status(errorCode.getStatus())
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(ApiResponse.of(errorCode.getMessage(), e.getData()));
     }
 
@@ -108,6 +110,7 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiResponse<Void>> toErrorResponse(ErrorCode errorCode) {
         return ResponseEntity.status(errorCode.getStatus())
+                .contentType(MediaType.APPLICATION_JSON) // SSE 요청(Accept: text/event-stream)의 연결 전 오류도 JSON으로 내려가도록 Content-Type 고정
                 .body(ApiResponse.from(errorCode));
     }
 }
