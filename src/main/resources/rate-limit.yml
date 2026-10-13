@@ -81,6 +81,11 @@ needu:
         path-pattern: /api/v1/notifications
         limit: 120
         window: 1m
+      notification-read-all:
+        method: PATCH
+        path-pattern: /api/v1/notifications/read-all
+        limit: 60
+        window: 1m
       notification-read:
         method: PATCH
         path-pattern: /api/v1/notifications/{notificationId}
