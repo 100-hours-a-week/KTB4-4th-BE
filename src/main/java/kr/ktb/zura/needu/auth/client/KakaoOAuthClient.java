@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.auth.client;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.net.URI;
+import java.time.Duration;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,12 +60,12 @@ public class KakaoOAuthClient {
     }
 
     public KakaoUserInfo findUserInfo(String code) {
-        return requestUserInfo(requestAccessToken(code, redirectUri));
+        return requestUserInfo(requestTokens(code, redirectUri).accessToken());
     }
 
     public KakaoAuthorization authorizeFriend(String code) {
-        String accessToken = requestAccessToken(code, friendRedirectUri);
-        return new KakaoAuthorization(requestUserInfo(accessToken), accessToken);
+        KakaoTokens tokens = requestTokens(code, friendRedirectUri);
+        return new KakaoAuthorization(requestUserInfo(tokens.accessToken()), tokens);
     }
 
     private KakaoUserInfo requestUserInfo(String accessToken) {
@@ -87,7 +88,7 @@ public class KakaoOAuthClient {
         }
     }
 
-    private String requestAccessToken(String code, String requestRedirectUri) {
+    private KakaoTokens requestTokens(String code, String requestRedirectUri) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("client_id", clientId);
@@ -101,10 +102,19 @@ public class KakaoOAuthClient {
                     .body(form)
                     .retrieve()
                     .body(KakaoTokenResponse.class);
-            if (response == null || response.accessToken() == null || response.accessToken().isBlank()) {
+            if (response == null
+                    || response.accessToken() == null || response.accessToken().isBlank()
+                    || response.refreshToken() == null || response.refreshToken().isBlank()
+                    || response.expiresIn() == null || response.expiresIn() <= 0
+                    || response.refreshTokenExpiresIn() == null || response.refreshTokenExpiresIn() <= 0) {
                 throw new BusinessException(AuthErrorCode.AUTH_KAKAO_UNAVAILABLE);
             }
-            return response.accessToken();
+            return new KakaoTokens(
+                    response.accessToken(),
+                    response.refreshToken(),
+                    Duration.ofSeconds(response.expiresIn()),
+                    Duration.ofSeconds(response.refreshTokenExpiresIn())
+            );
         } catch (RestClientResponseException exception) {
             if (exception.getStatusCode().is4xxClientError()) {
                 throw new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_CODE);
@@ -118,10 +128,23 @@ public class KakaoOAuthClient {
     public record KakaoUserInfo(Long id, String nickname, String profileImageUrl) {
     }
 
-    public record KakaoAuthorization(KakaoUserInfo userInfo, String accessToken) {
+    public record KakaoAuthorization(KakaoUserInfo userInfo, KakaoTokens tokens) {
     }
 
-    private record KakaoTokenResponse(@JsonProperty("access_token") String accessToken) {
+    public record KakaoTokens(
+            String accessToken,
+            String refreshToken,
+            Duration accessTokenExpiresIn,
+            Duration refreshTokenExpiresIn
+    ) {
+    }
+
+    private record KakaoTokenResponse(
+            @JsonProperty("access_token") String accessToken,
+            @JsonProperty("refresh_token") String refreshToken,
+            @JsonProperty("expires_in") Long expiresIn,
+            @JsonProperty("refresh_token_expires_in") Long refreshTokenExpiresIn
+    ) {
     }
 
     private record KakaoUserResponse(Long id, @JsonProperty("kakao_account") KakaoAccount kakaoAccount) {

@@ -18,6 +18,7 @@ public class AuthService {
     private final UserService userService;
     private final AuthSessionService authSessionService;
     private final AccessTokenService accessTokenService;
+    private final KakaoTokenService kakaoTokenService;
 
     public URI createKakaoAuthorizationUri(String state) {
         return kakaoOAuthClient.createAuthorizationUri(state);
@@ -27,9 +28,11 @@ public class AuthService {
         return kakaoOAuthClient.createFriendAuthorizationUri(state);
     }
 
-    public KakaoAuthorization authorizeKakaoFriend(String code) {
+    public String authorizeKakaoFriend(Long userId, String code) {
         KakaoOAuthClient.KakaoAuthorization authorization = kakaoOAuthClient.authorizeFriend(code);
-        return new KakaoAuthorization(authorization.userInfo().id(), authorization.accessToken());
+        userService.validateKakaoIdentity(userId, authorization.userInfo().id());
+        kakaoTokenService.saveTokens(userId, authorization.tokens());
+        return authorization.tokens().accessToken();
     }
 
     public Tokens loginWithKakao(String code) {
@@ -59,8 +62,5 @@ public class AuthService {
     }
 
     public record Tokens(String accessToken, String refreshToken, Duration refreshMaxAge) {
-    }
-
-    public record KakaoAuthorization(Long kakaoUserId, String accessToken) {
     }
 }

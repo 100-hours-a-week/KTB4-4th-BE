@@ -23,9 +23,8 @@ public class KakaoFriendSyncService {
 
     public void sync(Long userId, String code) {
         userService.validateActiveUser(userId);
-        AuthService.KakaoAuthorization authorization = authService.authorizeKakaoFriend(code);
-        userService.validateKakaoIdentity(userId, authorization.kakaoUserId());
+        String accessToken = authService.authorizeKakaoFriend(userId, code);
         friendService.syncKakaoFriends(userId,
-                kakaoFriendClient.findAllFriendIds(authorization.accessToken()));
+                kakaoFriendClient.findAllFriendIds(accessToken));
     }
 }
