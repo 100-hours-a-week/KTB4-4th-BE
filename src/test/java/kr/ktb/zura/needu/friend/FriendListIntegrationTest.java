@@ -69,6 +69,8 @@ class FriendListIntegrationTest {
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].name").value("두 번째"))
                 .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(false))
+                .andExpect(jsonPath("$.totalCount").value(2))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(0))
                 .andExpect(jsonPath("$.hasNext").value(true))
                 .andExpect(jsonPath("$.nextCursor").isString());
     }
@@ -87,6 +89,8 @@ class FriendListIntegrationTest {
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].name").value("다라"))
                 .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.totalCount").value(2))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(1))
                 .andExpect(jsonPath("$.hasNext").value(false));
     }
 
@@ -110,6 +114,8 @@ class FriendListIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].name").value("다라"))
+                .andExpect(jsonPath("$.totalCount").value(1))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(0))
                 .andExpect(jsonPath("$.hasNext").value(false));
     }
 

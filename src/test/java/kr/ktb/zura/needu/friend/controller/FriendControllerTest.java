@@ -67,7 +67,7 @@ class FriendControllerTest {
         FriendSummaryResponse friend = new FriendSummaryResponse(
                 FRIEND_USER_ID, "친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29), true);
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
-                .willReturn(new FriendListResponse(List.of(friend), true, "next", true));
+                .willReturn(new FriendListResponse(List.of(friend), true, 12L, 4L, "next", true));
 
         mockMvc.perform(get(LIST_URL)
                         .param("size", "20")
@@ -79,6 +79,8 @@ class FriendControllerTest {
                 .andExpect(jsonPath("$.data.items[0].birthDate").value("2000-02-29"))
                 .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
                 .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(true))
+                .andExpect(jsonPath("$.totalCount").value(12))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(4))
                 .andExpect(jsonPath("$.hasNext").value(true))
                 .andExpect(jsonPath("$.nextCursor").value("next"));
     }
@@ -87,7 +89,7 @@ class FriendControllerTest {
     void favoriteFalse_findAllFriends_passesFavoriteConditionAndReturnsNamePage() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "가나", null, null, true);
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(false, null, "cursor", 20)))
-                .willReturn(new FriendListResponse(List.of(friend), false, "next", true));
+                .willReturn(new FriendListResponse(List.of(friend), false, 12L, 4L, "next", true));
 
         mockMvc.perform(get(LIST_URL)
                         .param("favorite", "false")
@@ -105,7 +107,7 @@ class FriendControllerTest {
     void favoriteTrue_findAllFriends_passesFavoriteCondition() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "가나", null, null, true);
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(true, null, null, 20)))
-                .willReturn(new FriendListResponse(List.of(friend), false, null, false));
+                .willReturn(new FriendListResponse(List.of(friend), false, 12L, 4L, null, false));
 
         mockMvc.perform(get(LIST_URL)
                         .param("favorite", "true")
@@ -120,7 +122,7 @@ class FriendControllerTest {
     void keyword_findAllFriends_passesKeywordCondition() throws Exception {
         FriendSummaryResponse friend = new FriendSummaryResponse(FRIEND_USER_ID, "김철수", null, null, false);
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, "김", null, 20)))
-                .willReturn(new FriendListResponse(List.of(friend), false, null, false));
+                .willReturn(new FriendListResponse(List.of(friend), false, 12L, 4L, null, false));
 
         mockMvc.perform(get(LIST_URL)
                         .param("keyword", "김")
@@ -133,7 +135,7 @@ class FriendControllerTest {
     @Test
     void missingFavorite_findAllFriends_returnsDefaultNamePage() throws Exception {
         given(friendService.findAllFriends(LOGIN_USER_ID, new FriendSearchCondition(null, null, null, 20)))
-                .willReturn(new FriendListResponse(List.of(), false, null, false));
+                .willReturn(new FriendListResponse(List.of(), false, 0L, 0L, null, false));
 
         mockMvc.perform(get(LIST_URL).param("size", "20").with(authenticatedUser()))
                 .andExpect(status().isOk())

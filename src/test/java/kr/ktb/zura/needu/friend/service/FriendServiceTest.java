@@ -125,6 +125,8 @@ class FriendServiceTest {
         FriendSummaryResponse extra = friendSummary(4L, "마바", LocalDate.of(2000, 10, 3));
         when(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "%", Limit.of(3)))
                 .thenReturn(List.of(first, second, extra));
+        when(friendRepository.countAllActiveByOwnerUserId(1L)).thenReturn(12L);
+        when(friendRepository.countAllActiveFavoritesByOwnerUserId(1L)).thenReturn(4L);
         when(userService.isKakaoFriendSynced(1L)).thenReturn(true);
 
         FriendListResponse response = friendService.findAllFriends(
@@ -132,6 +134,8 @@ class FriendServiceTest {
 
         assertThat(response.items()).containsExactly(first, second);
         assertThat(response.isKakaoFriendSynced()).isTrue();
+        assertThat(response.totalCount()).isEqualTo(12L);
+        assertThat(response.favoriteTotalCount()).isEqualTo(4L);
         assertThat(response.hasNext()).isTrue();
         assertThat(FriendNameCursor.decode(response.nextCursor()))
                 .isEqualTo(new FriendNameCursor("다라", 3L));

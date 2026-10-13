@@ -20,6 +20,25 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
     List<Friend> findAllByOwnerUserIdAndFriendUserIdIn(Long ownerUserId, Collection<Long> friendUserIds);
 
     @Query("""
+            select count(f)
+            from Friend f
+            join User u on u.id = f.friendUserId
+            where f.ownerUserId = :ownerUserId
+              and u.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
+            """)
+    long countAllActiveByOwnerUserId(@Param("ownerUserId") Long ownerUserId);
+
+    @Query("""
+            select count(f)
+            from Friend f
+            join User u on u.id = f.friendUserId
+            where f.ownerUserId = :ownerUserId
+              and f.favorite = true
+              and u.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
+            """)
+    long countAllActiveFavoritesByOwnerUserId(@Param("ownerUserId") Long ownerUserId);
+
+    @Query("""
             select new kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget(
                 f.ownerUserId, friendUser.id, friendUser.nickname)
             from Friend f
