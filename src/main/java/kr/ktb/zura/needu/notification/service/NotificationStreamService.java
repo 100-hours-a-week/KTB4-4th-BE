@@ -107,7 +107,6 @@ public class NotificationStreamService {
             try {
                 emitter.send(eventSupplier.get());
             } catch (IOException | IllegalStateException exception) {
-                emitter.completeWithError(exception);
                 removeEmitter(userId, emitter);
             }
         });
