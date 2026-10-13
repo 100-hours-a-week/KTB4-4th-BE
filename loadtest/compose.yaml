@@ -40,6 +40,7 @@ services:
       AUTH_COOKIE_SECURE: "false"
       KAKAO_REST_API_KEY: loadtest
       KAKAO_CLIENT_SECRET: loadtest
+      KAKAO_TOKEN_ENCRYPTION_KEY: ${KAKAO_TOKEN_ENCRYPTION_KEY}
       KAKAO_REDIRECT_URI: http://localhost:8080/api/v1/auth/kakao/callback
       KAKAO_FRIEND_REDIRECT_URI: http://localhost:8080/api/v1/friends/kakao/callback
       AI_SERVER_BASE_URL: http://unused:9000
