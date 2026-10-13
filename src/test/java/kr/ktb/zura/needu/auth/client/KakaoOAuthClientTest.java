@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.auth.client;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,7 +65,7 @@ class KakaoOAuthClientTest {
         server.expect(once(), requestTo("https://kauth.kakao.com/oauth/token"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("client_secret=secret")))
-                .andRespond(withSuccess("{\"access_token\":\"kakao-access\"}", MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(tokenResponse(), MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("https://kapi.kakao.com/v2/user/me"))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer kakao-access"))
@@ -80,6 +81,27 @@ class KakaoOAuthClientTest {
     }
 
     @Test
+    void validFriendCode_returnsUserInfoAndTokens() {
+        server.expect(once(), requestTo("https://kauth.kakao.com/oauth/token"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString(
+                        "redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fapi%2Fv1%2Ffriends%2Fkakao%2Fcallback")))
+                .andRespond(withSuccess(tokenResponse(), MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://kapi.kakao.com/v2/user/me"))
+                .andExpect(header("Authorization", "Bearer kakao-access"))
+                .andRespond(withSuccess("{\"id\":42}", MediaType.APPLICATION_JSON));
+
+        KakaoOAuthClient.KakaoAuthorization result = client.authorizeFriend("code");
+
+        assertEquals(42L, result.userInfo().id());
+        assertEquals("kakao-access", result.tokens().accessToken());
+        assertEquals("kakao-refresh", result.tokens().refreshToken());
+        assertEquals(Duration.ofSeconds(21600), result.tokens().accessTokenExpiresIn());
+        assertEquals(Duration.ofSeconds(5184000), result.tokens().refreshTokenExpiresIn());
+        server.verify();
+    }
+
+    @Test
     void invalidCode_returnsBadRequest() {
         server.expect(once(), requestTo("https://kauth.kakao.com/oauth/token"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST));
@@ -89,5 +111,16 @@ class KakaoOAuthClientTest {
 
         assertEquals(AuthErrorCode.AUTH_KAKAO_INVALID_CODE, exception.getErrorCode());
         server.verify();
+    }
+
+    private String tokenResponse() {
+        return """
+                {
+                  "access_token": "kakao-access",
+                  "refresh_token": "kakao-refresh",
+                  "expires_in": 21600,
+                  "refresh_token_expires_in": 5184000
+                }
+                """;
     }
 }
