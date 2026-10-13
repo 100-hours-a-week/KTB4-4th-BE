@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [dev, main]
   push:
-    branches: [main]
+    branches: [dev, main]
 
 permissions:
   contents: read
@@ -42,7 +42,7 @@ jobs:
   release-check:
     name: Integration Test & Docker Build
     needs: basic-check
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -82,8 +82,8 @@ jobs:
       - name: Docker Build Check
         run: docker build -t needu-backend:ci-check .
 
-  ecr-push:
-    name: Build & Push to ECR
+  v1-ecr-push:
+    name: Build & Push V1 Image
     needs: basic-check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -123,3 +123,56 @@ jobs:
         run: |
           docker push \
             "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+  v2-ecr-push:
+    name: Build & Push V2 Image
+    needs: basic-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker Image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: v2-${{ github.sha }}
+        run: |
+          docker build \
+            -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            .
+
+      - name: Push Docker Image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: v2-${{ github.sha }}
+        run: |
+          docker push \
+            "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+  deploy-dev:
+    name: Deploy V2 Dev
+    needs: v2-ecr-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+      github_environment: dev
+      image_sha: ${{ github.sha }}
+    secrets: inherit
