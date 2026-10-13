@@ -30,7 +30,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest(properties = {
-        "needu.rate-limit.policies.notification-read.limit=" + NotificationReadIntegrationTest.RATE_LIMIT
+        "needu.rate-limit.policies.notification-read.limit=" + NotificationReadIntegrationTest.RATE_LIMIT,
+        "needu.rate-limit.policies.notification-read-all.limit=" + NotificationReadIntegrationTest.RATE_LIMIT
 })
 @AutoConfigureMockMvc
 class NotificationReadIntegrationTest {
@@ -38,6 +39,7 @@ class NotificationReadIntegrationTest {
     static final int RATE_LIMIT = 2;
 
     private static final String URL = "/api/v1/notifications/{notificationId}";
+    private static final String READ_ALL_URL = "/api/v1/notifications/read-all";
 
     @Autowired
     private MockMvc mockMvc;
@@ -89,6 +91,43 @@ class NotificationReadIntegrationTest {
         }
 
         mockMvc.perform(patch(URL, notification.getId()).with(authenticatedUser(userId)).with(csrf()))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"))
+                .andExpect(jsonPath("$.message")
+                        .value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."));
+    }
+
+    @Test
+    void unreadNotificationsExist_readAllNotifications_readsOnlyOwnedNotifications() throws Exception {
+        Long userId = saveUser(203L).getId();
+        Long otherUserId = saveUser(204L).getId();
+        Notification first = saveNotification(userId, 321L, "read-all-first");
+        Notification second = saveNotification(userId, 322L, "read-all-second");
+        Notification otherUser = saveNotification(otherUserId, 323L, "read-all-other-user");
+
+        mockMvc.perform(patch(READ_ALL_URL).with(authenticatedUser(userId)).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("모든 알림을 읽음 처리했습니다."))
+                .andExpect(jsonPath("$.data.updatedCount").value(2))
+                .andExpect(jsonPath("$.data.unreadCount").value(0));
+
+        assertThat(notificationRepository.findById(first.getId())).get()
+                .extracting(Notification::getReadAt).isNotNull();
+        assertThat(notificationRepository.findById(second.getId())).get()
+                .extracting(Notification::getReadAt).isNotNull();
+        assertThat(notificationRepository.findById(otherUser.getId())).get()
+                .extracting(Notification::getReadAt).isNull();
+    }
+
+    @Test
+    void requestsOverLimit_readAllNotifications_returnsTooManyRequests() throws Exception {
+        Long userId = saveUser(205L).getId();
+        for (int request = 0; request < RATE_LIMIT; request++) {
+            mockMvc.perform(patch(READ_ALL_URL).with(authenticatedUser(userId)).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(patch(READ_ALL_URL).with(authenticatedUser(userId)).with(csrf()))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists("Retry-After"))
                 .andExpect(jsonPath("$.message")

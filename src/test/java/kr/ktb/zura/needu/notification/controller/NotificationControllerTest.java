@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
 import kr.ktb.zura.needu.notification.dto.response.NotificationListResponse;
+import kr.ktb.zura.needu.notification.dto.response.NotificationReadAllResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
@@ -46,6 +47,7 @@ class NotificationControllerTest {
     private static final Long LOGIN_USER_ID = 1L;
     private static final String LIST_URL = "/api/v1/notifications";
     private static final String SUMMARY_URL = LIST_URL + "/summary";
+    private static final String READ_ALL_URL = LIST_URL + "/read-all";
     private static final String STREAM_URL = LIST_URL + "/stream";
 
     @Autowired
@@ -216,6 +218,36 @@ class NotificationControllerTest {
                 .andExpect(status().isForbidden());
 
         verify(notificationService, never()).readNotification(anyLong(), anyLong());
+    }
+
+    @Test
+    void authenticatedUser_readAllNotifications_returnsUpdatedAndRemainingCounts() throws Exception {
+        given(notificationService.readAllNotifications(LOGIN_USER_ID))
+                .willReturn(new NotificationReadAllResponse(3, 0));
+
+        mockMvc.perform(patch(READ_ALL_URL).with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("모든 알림을 읽음 처리했습니다."))
+                .andExpect(jsonPath("$.data.updatedCount").value(3))
+                .andExpect(jsonPath("$.data.unreadCount").value(0));
+
+        verify(notificationService).readAllNotifications(LOGIN_USER_ID);
+    }
+
+    @Test
+    void unauthenticatedUser_readAllNotifications_returnsUnauthorized() throws Exception {
+        mockMvc.perform(patch(READ_ALL_URL).with(csrf()))
+                .andExpect(status().isUnauthorized());
+
+        verify(notificationService, never()).readAllNotifications(anyLong());
+    }
+
+    @Test
+    void csrfMissing_readAllNotifications_returnsCsrfForbidden() throws Exception {
+        mockMvc.perform(patch(READ_ALL_URL).with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(notificationService, never()).readAllNotifications(anyLong());
     }
 
     @Test

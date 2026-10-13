@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
 import kr.ktb.zura.needu.notification.dto.response.NotificationListResponse;
+import kr.ktb.zura.needu.notification.dto.response.NotificationReadAllResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
 import kr.ktb.zura.needu.notification.entity.Notification;
@@ -110,6 +112,20 @@ class NotificationServiceTest {
                 501L, readAt, NotificationResourceType.USER, 321L, true, 3L));
         verify(userService).validateActiveUser(USER_ID);
         verify(notification).read();
+    }
+
+    @Test
+    void unreadNotificationsExist_readAllNotifications_returnsUpdatedAndRemainingCounts() {
+        given(notificationRepository.readAllByReceiverUserId(
+                org.mockito.ArgumentMatchers.eq(USER_ID), any(LocalDateTime.class))).willReturn(3);
+        given(notificationRepository.countUnreadByReceiverUserId(USER_ID)).willReturn(1L);
+
+        NotificationReadAllResponse response = notificationService.readAllNotifications(USER_ID);
+
+        assertThat(response).isEqualTo(new NotificationReadAllResponse(3, 1));
+        verify(userService).validateActiveUser(USER_ID);
+        verify(notificationRepository).readAllByReceiverUserId(
+                org.mockito.ArgumentMatchers.eq(USER_ID), any(LocalDateTime.class));
     }
 
     @Test

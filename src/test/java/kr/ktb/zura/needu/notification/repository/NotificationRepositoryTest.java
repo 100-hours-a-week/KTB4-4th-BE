@@ -46,6 +46,30 @@ class NotificationRepositoryTest {
     }
 
     @Test
+    void notificationsHaveDifferentStates_readAllByReceiverUserId_updatesOnlyOwnedActiveUnreadNotifications() {
+        LocalDateTime now = LocalDateTime.now();
+        Notification unread = createNotification(USER_ID, "unread-all", now.plusDays(1));
+        Notification otherUserUnread = createNotification(2L, "other-user-unread-all", now.plusDays(1));
+        Notification read = createNotification(USER_ID, "already-read-all", now.plusDays(1));
+        Notification deleted = createNotification(USER_ID, "deleted-all", now.plusDays(1));
+        Notification expired = createNotification(USER_ID, "expired-all", now.minusDays(1));
+        read.read();
+        deleted.delete();
+        notificationRepository.saveAllAndFlush(List.of(unread, otherUserUnread, read, deleted, expired));
+
+        int updatedCount = notificationRepository.readAllByReceiverUserId(USER_ID, now);
+        entityManager.clear();
+
+        assertThat(updatedCount).isEqualTo(1);
+        assertThat(notificationRepository.findById(unread.getId())).get()
+                .extracting(Notification::getReadAt).isNotNull();
+        assertThat(notificationRepository.findById(otherUserUnread.getId())).get()
+                .extracting(Notification::getReadAt).isNull();
+        assertThat(notificationRepository.findById(expired.getId())).get()
+                .extracting(Notification::getReadAt).isNull();
+    }
+
+    @Test
     void multipleUsersHaveUnreadNotifications_findAllUnreadCounts_returnsCountsByUser() {
         LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
         notificationRepository.saveAllAndFlush(List.of(
