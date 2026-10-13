@@ -19,6 +19,12 @@ needu:
   notification:
     stream-timeout: ${NOTIFICATION_STREAM_TIMEOUT:30m}
     heartbeat-interval: ${NOTIFICATION_HEARTBEAT_INTERVAL:25s}
+    friend-birthday:
+      cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
+      zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}
+      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7}
+      lock-at-most-for: ${FRIEND_BIRTHDAY_LOCK_AT_MOST_FOR:10m}
+      lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
   product:

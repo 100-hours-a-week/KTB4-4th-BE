@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.friend.repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.user.entity.User;
@@ -42,6 +43,42 @@ class FriendRepositoryTest {
 
         assertThatThrownBy(() -> friendRepository.saveAndFlush(new Friend(1L, 2L)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void birthdayAndLeapDayFriends_findAllBirthdayNotificationTargets_returnsOnlyActiveRelations() {
+        User owner = saveUser("알림수신자", LocalDate.of(2000, 1, 1));
+        User inactiveOwner = saveUser("비활성수신자", LocalDate.of(2000, 1, 1));
+        inactiveOwner.block();
+        User marchFirst = saveUser("삼월생", LocalDate.of(2000, 3, 1));
+        User leapDay = saveUser("윤일생", LocalDate.of(2000, 2, 29));
+        User otherDay = saveUser("다른날", LocalDate.of(2000, 3, 2));
+        User inactiveFriend = saveUser("비활성친구", LocalDate.of(2000, 3, 1));
+        inactiveFriend.withdraw();
+        friendRepository.saveAll(List.of(
+                new Friend(owner.getId(), marchFirst.getId()),
+                new Friend(owner.getId(), leapDay.getId()),
+                new Friend(owner.getId(), otherDay.getId()),
+                new Friend(owner.getId(), inactiveFriend.getId()),
+                new Friend(inactiveOwner.getId(), marchFirst.getId())
+        ));
+
+        List<FriendBirthdayNotificationTarget> targets =
+                friendRepository.findAllBirthdayNotificationTargets(3, 1, true);
+
+        assertThat(targets)
+                .extracting(
+                        FriendBirthdayNotificationTarget::ownerUserId,
+                        FriendBirthdayNotificationTarget::friendUserId,
+                        FriendBirthdayNotificationTarget::nickname
+                )
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(owner.getId(), marchFirst.getId(), "삼월생"),
+                        org.assertj.core.groups.Tuple.tuple(owner.getId(), leapDay.getId(), "윤일생")
+                );
+        assertThat(friendRepository.findAllBirthdayNotificationTargets(3, 1, false))
+                .extracting(FriendBirthdayNotificationTarget::friendUserId)
+                .containsExactly(marchFirst.getId());
     }
 
     @Test

@@ -110,7 +110,7 @@ class NotificationControllerTest {
         LocalDateTime serverTime = LocalDateTime.of(2026, 9, 5, 14, 30);
         NotificationResponse notification = new NotificationResponse(501L, NotificationCategory.EVENT,
                 NotificationType.FRIEND_BIRTHDAY,
-                "수연 님의 생일이 8일 남았어요.", "지금 선물을 준비하면 여유 있게 도착해요.",
+                "수연 님의 생일이 7일 남았어요.", "지금 선물을 준비하면 여유 있게 도착해요.",
                 NotificationResourceType.USER, 321L, true, null, serverTime.minusDays(1));
         given(notificationService.findAllNotifications(LOGIN_USER_ID, new NotificationSearchCondition(null, null, 20, null)))
                 .willReturn(new NotificationListResponse(
