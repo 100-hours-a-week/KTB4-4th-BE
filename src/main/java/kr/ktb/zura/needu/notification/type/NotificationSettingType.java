@@ -7,7 +7,9 @@ public enum NotificationSettingType {
     FRIEND_BIRTHDAY(true),
     PURCHASE_STATUS(true),
     ANNIVERSARY_EVENT(true),
-    MARKETING(false);
+    MARKETING(false),
+    WEB_PUSH(true),
+    PURCHASE_FEEDBACK(true);
 
     private final boolean defaultEnabled;
 
