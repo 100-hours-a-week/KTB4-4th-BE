@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.notification.entity.Notification;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -27,6 +28,21 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
               AND notification.expiresAt > CURRENT_TIMESTAMP
             """)
     long countUnreadByReceiverUserId(@Param("receiverUserId") Long receiverUserId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Notification notification
+            SET notification.readAt = :readAt,
+                notification.updatedAt = :readAt
+            WHERE notification.receiverUserId = :receiverUserId
+              AND notification.readAt IS NULL
+              AND notification.deletedAt IS NULL
+              AND notification.expiresAt > :readAt
+            """)
+    int readAllByReceiverUserId(
+            @Param("receiverUserId") Long receiverUserId,
+            @Param("readAt") LocalDateTime readAt
+    );
 
     @Transactional(readOnly = true)
     @Query("""
