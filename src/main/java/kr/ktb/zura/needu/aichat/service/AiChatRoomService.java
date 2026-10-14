@@ -107,6 +107,15 @@ public class AiChatRoomService {
     }
 
     @Transactional(readOnly = true)
+    public AiChatRoom findStreamableRoom(Long userId, Long roomId) {
+        AiChatRoom room = findAccessibleRoom(userId, roomId);
+        if (!room.isActive() || room.isInputLocked()) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED);
+        }
+        return room;
+    }
+
+    @Transactional(readOnly = true)
     public void validateAnalyzableRoom(Long userId, Long roomId) {
         AiChatRoom room = findAccessibleRoom(userId, roomId);
         if (!room.isAnalyzing() || !room.isInputLocked()) {

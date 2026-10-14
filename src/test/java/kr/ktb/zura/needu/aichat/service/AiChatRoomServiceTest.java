@@ -213,6 +213,35 @@ class AiChatRoomServiceTest {
     }
 
     @Test
+    void activeRoomOwnedByUser_findStreamableRoom_returnsRoom() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+
+        AiChatRoom room = aiChatRoomService.findStreamableRoom(USER_ID, activeRoom.getId());
+
+        assertThat(room.getId()).isEqualTo(activeRoom.getId());
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.ACTIVE);
+    }
+
+    @Test
+    void analyzingRoom_findStreamableRoom_throwsInputLocked() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        aiChatRoomService.startAnalysis(activeRoom.getId());
+
+        assertThatThrownBy(() -> aiChatRoomService.findStreamableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INPUT_LOCKED);
+    }
+
+    @Test
+    void roomOwnedByAnotherUser_findStreamableRoom_throwsConversationForbidden() {
+        AiChatRoom activeRoom = activateRoom(OTHER_USER_ID);
+
+        assertThatThrownBy(() -> aiChatRoomService.findStreamableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
     void inputUnlockedRoom_validateAnalyzableRoom_throwsAnalysisNotReady() {
         AiChatRoom activeRoom = activateRoom(USER_ID);
 

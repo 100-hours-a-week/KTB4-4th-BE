@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
+import kr.ktb.zura.needu.aichat.client.AiChatReplyStreamClient;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
@@ -34,10 +35,17 @@ import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.service.AiAnalysisConfirmService;
+import kr.ktb.zura.needu.aichat.service.AiChatEventPublisher;
 import kr.ktb.zura.needu.aichat.service.AiChatRoomService;
+import kr.ktb.zura.needu.aichat.service.AiChatStreamService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
+import kr.ktb.zura.needu.aichat.sse.AiChatAcceptedEvent;
+import kr.ktb.zura.needu.aichat.sse.AiChatDeltaEvent;
+import kr.ktb.zura.needu.aichat.sse.AiChatDoneEvent;
+import kr.ktb.zura.needu.aichat.sse.AiChatErrorEvent;
+import kr.ktb.zura.needu.aichat.sse.AiChatEventType;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -53,6 +61,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,6 +75,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -110,13 +120,20 @@ class AiChatFacadeTest {
     @Mock
     private AiGenerationStateService aiGenerationStateService;
 
+    @Mock
+    private AiChatStreamService aiChatStreamService;
+
+    @Mock
+    private AiChatEventPublisher aiChatEventPublisher;
+
     private AiChatFacade aiChatFacade;
 
     @BeforeEach
     void setUp() {
         lenient().when(aiConversationLock.tryLock(ROOM_ID)).thenReturn(Optional.of(LOCK_HANDLE));
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
+                aiGenerationStateService, aiChatClient, replyStreamClient(), aiAnalysisConfirmService,
+                aiChatStreamService, aiChatEventPublisher, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
     }
 
@@ -139,7 +156,8 @@ class AiChatFacadeTest {
     @Test
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, userService, MESSAGE_RETRY_AFTER,
+                aiGenerationStateService, aiChatClient, replyStreamClient(), aiAnalysisConfirmService,
+                aiChatStreamService, aiChatEventPublisher, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
@@ -402,6 +420,139 @@ class AiChatFacadeTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
         verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
+    }
+
+    @Test
+    void newClientMessageId_sendMessage_publishesTurnEventsAndEndsTurnAfterUnlock() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(aiMessageService.createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
+
+        AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        var order = inOrder(aiChatEventPublisher, aiChatClient, aiMessageService, aiConversationLock);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ACCEPTED,
+                new AiChatAcceptedEvent(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
+        order.verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DELTA,
+                new AiChatDeltaEvent(USER_MESSAGE_ID, 0, AI_CONTENT));
+        order.verify(aiMessageService).createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
+        order.verify(aiConversationLock).unlock(LOCK_HANDLE);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.COMPLETED, response);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DONE,
+                new AiChatDoneEvent(USER_MESSAGE_ID));
+    }
+
+    @Test
+    void replyFailed_sendMessage_publishesErrorAndDoneAfterUnlock() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+
+        var order = inOrder(aiChatEventPublisher, aiConversationLock);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ACCEPTED,
+                new AiChatAcceptedEvent(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
+        order.verify(aiConversationLock).unlock(LOCK_HANDLE);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
+                USER_MESSAGE_ID, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE.getMessage(), true, false));
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DONE,
+                new AiChatDoneEvent(USER_MESSAGE_ID));
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.DELTA), any());
+    }
+
+    @Test
+    void aiSessionGone_sendMessage_publishesRestartRequiredError() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND));
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
+                USER_MESSAGE_ID, AiChatErrorCode.AICHAT_SESSION_NOT_FOUND.getMessage(), false, true));
+    }
+
+    @Test
+    void duplicateClientMessageId_sendMessage_publishesNoTurnEvents() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID))
+                .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
+        given(aiMessageService.findReply(USER_MESSAGE_ID))
+                .willReturn(Optional.of(message(AI_MESSAGE_ID, USER_MESSAGE_ID)));
+
+        aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        verifyNoInteractions(aiChatEventPublisher);
+    }
+
+    @Test
+    void duplicateInsertFromAnotherInstance_sendMessage_publishesNoTurnEvents() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willThrow(new DataIntegrityViolationException("duplicate"));
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(TooManyRequestsException.class);
+
+        verifyNoInteractions(aiChatEventPublisher);
+    }
+
+    @Test
+    void eventPublishFails_sendMessage_stillReturnsReply() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+                .willReturn(message(USER_MESSAGE_ID, null));
+        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(aiMessageService.createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
+        willThrow(new IllegalStateException("redis down"))
+                .given(aiChatEventPublisher).publish(eq(ROOM_ID), eq(AiChatEventType.ACCEPTED), any());
+
+        AiMessageResponse response = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        assertThat(response).isEqualTo(
+                new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false));
+        verify(aiChatEventPublisher, times(1)).publish(anyLong(), any(), any());
+    }
+
+    @Test
+    void streamableConversation_connectStream_connectsFoundRoom() {
+        AiChatRoom room = room(ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT);
+        SseEmitter emitter = new SseEmitter();
+        given(aiChatRoomService.findStreamableRoom(USER_ID, ROOM_ID)).willReturn(room);
+        given(aiChatStreamService.connect(room)).willReturn(emitter);
+
+        SseEmitter connected = aiChatFacade.connectStream(USER_ID, ROOM_ID);
+
+        assertThat(connected).isSameAs(emitter);
+        verify(userService).validateActiveUser(USER_ID);
+    }
+
+    @Test
+    void inputLockedConversation_connectStream_throwsWithoutConnecting() {
+        given(aiChatRoomService.findStreamableRoom(USER_ID, ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED));
+
+        assertThatThrownBy(() -> aiChatFacade.connectStream(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INPUT_LOCKED);
+        verifyNoInteractions(aiChatStreamService);
     }
 
     @Test
@@ -788,6 +939,11 @@ class AiChatFacadeTest {
         return new AiServerCloseSessionResponse(
                 ROOM_ID, USER_ID, "캠핑을 즐깁니다.", keywords(tastes, interests),
                 new AiServerRecommendationsResponse(self, gift));
+    }
+
+    // AI 클라이언트 대역의 답변을 운영 기본값(20 코드 포인트, 간격 없음)으로 나눠 넘기도록 실제 객체로 감싼다
+    private AiChatReplyStreamClient replyStreamClient() {
+        return new AiChatReplyStreamClient(aiChatClient, 20, Duration.ZERO);
     }
 
     private static SendMessageRequest sendMessageRequest() {
