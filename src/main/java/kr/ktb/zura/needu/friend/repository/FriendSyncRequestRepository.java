@@ -1,7 +1,18 @@
 package kr.ktb.zura.needu.friend.repository;
 
+import java.time.LocalDateTime;
 import kr.ktb.zura.needu.friend.entity.FriendSyncRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface FriendSyncRequestRepository extends JpaRepository<FriendSyncRequest, Long> {
+
+    @Modifying
+    @Query(value = """
+            insert ignore into friend_sync_requests (user_id, requested_at, next_attempt_at, retry_count)
+            values (:userId, :requestedAt, :requestedAt, 0)
+            """, nativeQuery = true)
+    int createIfAbsent(@Param("userId") Long userId, @Param("requestedAt") LocalDateTime requestedAt);
 }

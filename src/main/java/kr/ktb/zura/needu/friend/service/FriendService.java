@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.friend.service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +17,7 @@ import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
+import kr.ktb.zura.needu.friend.repository.FriendSyncRequestRepository;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +35,7 @@ public class FriendService {
     private static final String LIKE_ANY = "%";
 
     private final FriendRepository friendRepository;
+    private final FriendSyncRequestRepository friendSyncRequestRepository;
     private final UserService userService;
 
     public FriendDetailResponse findFriend(Long ownerUserId, Long friendUserId) {
@@ -129,7 +133,11 @@ public class FriendService {
                 .filter(friendUserId -> !existingFriendUserIds.contains(friendUserId))
                 .map(friendUserId -> new Friend(ownerUserId, friendUserId))
                 .toList();
+
         friendRepository.saveAll(newFriends);
+        LocalDateTime requestedAt = LocalDateTime.now(ZoneOffset.UTC);
+        newFriends.forEach(friend -> friendSyncRequestRepository.createIfAbsent(
+                friend.getFriendUserId(), requestedAt));
         userService.completeKakaoFriendSync(ownerUserId);
     }
 }
