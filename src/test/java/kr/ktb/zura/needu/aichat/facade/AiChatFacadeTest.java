@@ -58,6 +58,7 @@ import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
+import kr.ktb.zura.needu.user.service.ConsentService;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -123,6 +124,9 @@ class AiChatFacadeTest {
     private UserService userService;
 
     @Mock
+    private ConsentService consentService;
+
+    @Mock
     private AiConversationLock aiConversationLock;
 
     @Mock
@@ -145,6 +149,7 @@ class AiChatFacadeTest {
     @BeforeEach
     void setUp() {
         lenient().when(aiConversationLock.tryLock(ROOM_ID)).thenReturn(Optional.of(LOCK_HANDLE));
+        lenient().when(consentService.hasAgreedToAiConversation(USER_ID)).thenReturn(true);
         lenient().when(aiReplyTaskExecutor.tryReserve()).thenReturn(Optional.of(replySlot));
         // 백그라운드 답변 생성을 호출한 스레드에서 바로 실행해 결과를 확인한다
         lenient().doAnswer(invocation -> {
@@ -153,7 +158,7 @@ class AiChatFacadeTest {
         }).when(replySlot).execute(any());
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
-                aiChatEventPublisher, aiReplyTaskExecutor, userService, MESSAGE_RETRY_AFTER,
+                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
     }
 
@@ -177,7 +182,7 @@ class AiChatFacadeTest {
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
-                aiChatEventPublisher, aiReplyTaskExecutor, userService, MESSAGE_RETRY_AFTER,
+                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
@@ -320,6 +325,37 @@ class AiChatFacadeTest {
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_INVALID_RESPONSE);
         verify(aiChatRoomService).discardRoom(ROOM_ID);
         verify(aiChatRoomService, never()).activateRoom(anyLong(), any(), any());
+    }
+
+    @Test
+    void aiConversationNotAgreed_startOrResumeConversation_throwsConsentRequiredWithoutReservingRoom() {
+        given(consentService.hasAgreedToAiConversation(USER_ID)).willReturn(false);
+
+        assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONSENT_REQUIRED);
+        verifyNoInteractions(aiChatRoomService, aiChatClient);
+    }
+
+    @Test
+    void aiConversationNotAgreed_sendMessage_throwsConsentRequiredWithoutSavingMessage() {
+        given(consentService.hasAgreedToAiConversation(USER_ID)).willReturn(false);
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONSENT_REQUIRED);
+        verifyNoInteractions(aiChatRoomService, aiMessageService, aiConversationLock, aiReplyTaskExecutor, aiChatClient);
+    }
+
+    @Test
+    void streamableConversation_connectStream_doesNotCheckConsent() {
+        AiChatRoom room = room(ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT);
+        given(aiChatRoomService.findStreamableRoom(USER_ID, ROOM_ID)).willReturn(room);
+        given(aiChatStreamService.connect(room)).willReturn(new SseEmitter());
+
+        aiChatFacade.connectStream(USER_ID, ROOM_ID);
+
+        verifyNoInteractions(consentService);
     }
 
     @Test
