@@ -39,11 +39,13 @@ public class AiChatControllerDocs implements ControllerDocs {
                         .errors(CONVERSATION_ACCESS_ERRORS)
                         .errors(AiChatErrorCode.AICHAT_INPUT_LOCKED)
                         .build(),
+                // AI 서버 오류는 응답이 아니라 스트림의 error 이벤트로 전달된다
+                // 429(이전 답변 생성 중)·503(동시 답변 수 초과)은 요청 제한 정책의 공통 오류와 문구가 같아 함께 문서화된다
                 OperationDoc.of(AiChatController.class, "sendMessage")
+                        .successStatus(HttpStatus.ACCEPTED, HttpStatus.OK)
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(CONVERSATION_ACCESS_ERRORS)
-                        .errors(AiChatErrorCode.AICHAT_CONSENT_REQUIRED)
-                        .errors(AiChatErrorCode.AICHAT_INPUT_LOCKED, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+                        .errors(AiChatErrorCode.AICHAT_CONSENT_REQUIRED, AiChatErrorCode.AICHAT_INPUT_LOCKED)
                         .build(),
                 OperationDoc.of(AiChatController.class, "createAnalysis")
                         .errors(ACTIVE_USER_ERRORS)

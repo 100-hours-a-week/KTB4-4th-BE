@@ -7,12 +7,12 @@ import jakarta.validation.constraints.Min;
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
+import kr.ktb.zura.needu.aichat.facade.AiMessageSendResult;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -79,13 +79,17 @@ public class AiChatController {
     }
 
     @PostMapping("/{conversationId}/messages")
-    public ResponseEntity<ApiResponse<AiMessageResponse>> sendMessage(
+    public ResponseEntity<ApiResponse<Object>> sendMessage(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long conversationId,
             @Valid @RequestBody SendMessageRequest request
     ) {
-        AiMessageResponse response = aiChatFacade.sendMessage(userId, conversationId, request);
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.MESSAGE_SENT, response));
+        AiMessageSendResult result = aiChatFacade.sendMessage(userId, conversationId, request);
+        if (result.isAccepted()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(ApiResponse.of(AiChatResponseMessages.MESSAGE_ACCEPTED, result.accepted()));
+        }
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.MESSAGE_SENT, result.reply()));
     }
 
     @PostMapping("/{conversationId}/analysis")
@@ -115,6 +119,5 @@ public class AiChatController {
         ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(userId, conversationId);
         return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.CONVERSATION_COMPLETED, response));
     }
-
 
 }

@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageAcceptedResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
@@ -18,6 +19,7 @@ import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
+import kr.ktb.zura.needu.aichat.facade.AiMessageSendResult;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -128,15 +130,29 @@ class AiChatControllerTest {
     }
 
     @Test
-    void validRequest_sendMessage_returnsOk() throws Exception {
+    void validRequest_sendMessage_returnsAccepted() throws Exception {
         given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
-                .willReturn(new AiMessageResponse(
+                .willReturn(AiMessageSendResult.accepted(
+                        new AiMessageAcceptedResponse(201L, CLIENT_MESSAGE_ID)));
+
+        mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message").value("메시지를 접수했습니다."))
+                .andExpect(jsonPath("$.data.userMessageId").value(201))
+                .andExpect(jsonPath("$.data.clientMessageId").value(CLIENT_MESSAGE_ID.toString()))
+                .andExpect(jsonPath("$.data.messageId").doesNotExist());
+    }
+
+    @Test
+    void answeredMessageResent_sendMessage_returnsOkWithSavedReply() throws Exception {
+        given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
+                .willReturn(AiMessageSendResult.replied(new AiMessageResponse(
                         201L,
                         202L,
                         "러닝을 좋아하시는군요.",
                         15,
                         true
-                ));
+                )));
 
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
                 .andExpect(status().isOk())
