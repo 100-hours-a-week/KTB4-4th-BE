@@ -26,6 +26,7 @@ public class FriendSyncService {
     private final AuthService authService;
     private final KakaoFriendClient kakaoFriendClient;
     private final FriendService friendService;
+    private final FriendJoinedNotificationService friendJoinedNotificationService;
     private final int batchSize;
     private final int maxRetryCount;
     private final Duration retryDelay;
@@ -35,6 +36,7 @@ public class FriendSyncService {
             AuthService authService,
             KakaoFriendClient kakaoFriendClient,
             FriendService friendService,
+            FriendJoinedNotificationService friendJoinedNotificationService,
             @Value("${needu.friend.sync.batch-size}") int batchSize,
             @Value("${needu.friend.sync.max-retry-count}") int maxRetryCount,
             @Value("${needu.friend.sync.retry-delay}") Duration retryDelay
@@ -43,6 +45,7 @@ public class FriendSyncService {
         this.authService = authService;
         this.kakaoFriendClient = kakaoFriendClient;
         this.friendService = friendService;
+        this.friendJoinedNotificationService = friendJoinedNotificationService;
         this.batchSize = batchSize;
         this.maxRetryCount = maxRetryCount;
         this.retryDelay = retryDelay;
@@ -66,7 +69,8 @@ public class FriendSyncService {
         try {
             String accessToken = authService.findKakaoAccessToken(request.getUserId(), FRIENDS_SCOPE);
             List<Long> kakaoFriendIds = kakaoFriendClient.findAllFriendIds(accessToken);
-            friendService.syncRequestedKakaoFriends(request.getUserId(), kakaoFriendIds);
+            List<Long> newFriendUserIds = friendService.syncRequestedKakaoFriends(request.getUserId(), kakaoFriendIds);
+            friendJoinedNotificationService.createNotifications(request.getUserId(), newFriendUserIds);
             friendSyncRequestRepository.deleteById(request.getUserId());
         } catch (BusinessException exception) {
             if (exception.getErrorCode() == AuthErrorCode.AUTH_KAKAO_AUTHORIZATION_REQUIRED) {

@@ -13,6 +13,7 @@ import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
@@ -132,10 +133,13 @@ public class FriendService {
 
 
     @Transactional
-    public void syncRequestedKakaoFriends(Long ownerUserId, Collection<Long> kakaoFriendIds) {
+    public List<Long> syncRequestedKakaoFriends(Long ownerUserId, Collection<Long> kakaoFriendIds) {
         Map<Long, Long> userIdsByKakaoId = getUserIdsByKakaoId(kakaoFriendIds);
-        saveNewKakaoFriends(ownerUserId, userIdsByKakaoId);
+        List<Friend> newFriends = saveNewKakaoFriends(ownerUserId, userIdsByKakaoId);
         userService.completeKakaoFriendSync(ownerUserId);
+        return newFriends.stream()
+                .map(Friend::getFriendUserId)
+                .toList();
     }
 
     private Map<Long, Long> getUserIdsByKakaoId(Collection<Long> kakaoFriendIds) {
