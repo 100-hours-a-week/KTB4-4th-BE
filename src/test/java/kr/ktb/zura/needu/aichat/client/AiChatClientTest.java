@@ -2,7 +2,9 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -28,6 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -52,7 +55,8 @@ class AiChatClientTest {
         // 메시지 전송은 read timeout이 다른 전용 RestClient를 쓰므로 대역도 따로 둔다
         RestClient.Builder messageBuilder = RestClient.builder().baseUrl("http://localhost:9000");
         messageServer = MockRestServiceServer.bindTo(messageBuilder).build();
-        client = new HttpAiChatClient(builder.build(), messageBuilder.build(), "service-token");
+        client = new HttpAiChatClient(builder.build(), messageBuilder.build(), "service-token",
+                JsonMapper.builder().build(), Duration.ofSeconds(30), Duration.ofSeconds(90));
     }
 
     @Test
@@ -124,6 +128,154 @@ class AiChatClientTest {
                 OffsetDateTime.parse("2026-09-23T05:50:00+00:00"),
                 3, 20, false, false, 15), response);
         messageServer.verify();
+    }
+
+    @Test
+    void streamMessage_requestsStreamEndpointAndPassesDeltasThenReturnsCompleted() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer service-token"))
+                .andExpect(header("Accept", MediaType.TEXT_EVENT_STREAM_VALUE))
+                .andExpect(content().json("""
+                        {"userId": 1, "userMessageId": 701, "message": "주말마다 캠핑 가요"}
+                        """))
+                .andRespond(withSuccess("""
+                        : ping
+
+                        event: delta
+                        data: {"index": 0, "text": "캠핑 "}
+
+                        event: unknown
+                        data: {"ignored": true}
+
+                        event: delta
+                        data: {"index": 1, "text": "좋죠."}
+
+                        event: completed
+                        data: {"reply": "캠핑 좋죠.", "createdAt": "2026-09-23T05:20:00+00:00",
+                        data: "expirationAt": "2026-09-23T05:50:00+00:00", "turn": 3, "maxTurns": 20,
+                        data: "canClose": false, "inputLocked": false, "progress": 15}
+
+                        """, MediaType.TEXT_EVENT_STREAM));
+        List<String> deltas = new ArrayList<>();
+
+        AiServerSendMessageResponse response = client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", deltas::add);
+
+        assertEquals(List.of("캠핑 ", "좋죠."), deltas);
+        assertEquals(new AiServerSendMessageResponse(
+                "캠핑 좋죠.", OffsetDateTime.parse("2026-09-23T05:20:00+00:00"),
+                OffsetDateTime.parse("2026-09-23T05:50:00+00:00"),
+                3, 20, false, false, 15), response);
+        messageServer.verify();
+    }
+
+    @ParameterizedTest
+    @MethodSource("sendMessageHttpErrors")
+    void httpErrorBeforeStream_streamMessage_throwsMappedBusinessException(HttpStatus status,
+                                                                           AiChatErrorCode errorCode) {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(withStatus(status));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", text -> { }));
+
+        assertEquals(errorCode, exception.getErrorCode());
+    }
+
+    @Test
+    void sessionClosedConflictBeforeStream_streamMessage_throwsSessionClosed() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "SESSION_CLOSED", "message": "이미 끝난 대화입니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", text -> { }));
+
+        assertEquals(AiChatErrorCode.AICHAT_SESSION_CLOSED, exception.getErrorCode());
+    }
+
+    @ParameterizedTest
+    @MethodSource("streamErrorEvents")
+    void errorEventDuringStream_streamMessage_passesReceivedDeltasAndThrowsMappedError(String errorData,
+                                                                                      AiChatErrorCode errorCode) {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(withSuccess("""
+                        event: delta
+                        data: {"index": 0, "text": "캠핑 "}
+
+                        event: error
+                        data: %s
+
+                        """.formatted(errorData), MediaType.TEXT_EVENT_STREAM));
+        List<String> deltas = new ArrayList<>();
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", deltas::add));
+
+        assertEquals(List.of("캠핑 "), deltas);
+        assertEquals(errorCode, exception.getErrorCode());
+    }
+
+    @Test
+    void streamEndsWithoutCompleted_streamMessage_throwsServerUnavailable() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(withSuccess("""
+                        event: delta
+                        data: {"index": 0, "text": "캠핑 "}
+
+                        """, MediaType.TEXT_EVENT_STREAM));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", text -> { }));
+
+        assertEquals(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE, exception.getErrorCode());
+    }
+
+    @Test
+    void skippedDeltaIndex_streamMessage_throwsInvalidResponse() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(withSuccess("""
+                        event: delta
+                        data: {"index": 0, "text": "캠핑 "}
+
+                        event: delta
+                        data: {"index": 2, "text": "좋죠."}
+
+                        """, MediaType.TEXT_EVENT_STREAM));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", text -> { }));
+
+        assertEquals(AiChatErrorCode.AICHAT_INVALID_RESPONSE, exception.getErrorCode());
+    }
+
+    @Test
+    void invalidEventJson_streamMessage_throwsInvalidResponse() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(withSuccess("""
+                        event: completed
+                        data: not-json
+
+                        """, MediaType.TEXT_EVENT_STREAM));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", text -> { }));
+
+        assertEquals(AiChatErrorCode.AICHAT_INVALID_RESPONSE, exception.getErrorCode());
+    }
+
+    @Test
+    void networkErrorBeforeStream_streamMessage_throwsServerUnavailable() {
+        messageServer.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/messages/stream"))
+                .andRespond(request -> {
+                    throw new ResourceAccessException("connection refused", new ConnectException());
+                });
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.streamMessage(1L, 101L, 701L, "주말마다 캠핑 가요", text -> { }));
+
+        assertEquals(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE, exception.getErrorCode());
     }
 
     @Test
@@ -391,6 +543,20 @@ class AiChatClientTest {
                 Arguments.of(HttpStatus.TOO_MANY_REQUESTS, AiChatErrorCode.AICHAT_REQUEST_REJECTED),
                 Arguments.of(HttpStatus.UNAUTHORIZED, AiChatErrorCode.AICHAT_AUTHENTICATION_FAILED),
                 Arguments.of(HttpStatus.BAD_GATEWAY, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+        );
+    }
+
+    private static Stream<Arguments> streamErrorEvents() {
+        return Stream.of(
+                Arguments.of("""
+                        {"code": "MODEL_TIMEOUT", "message": "답변 생성이 지연되었습니다.", "retryable": true}""",
+                        AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE),
+                Arguments.of("""
+                        {"code": "SESSION_CLOSED", "message": "이미 끝난 대화입니다.", "retryable": false}""",
+                        AiChatErrorCode.AICHAT_SESSION_CLOSED),
+                Arguments.of("""
+                        {"code": "CONTENT_REJECTED", "message": "처리할 수 없는 메시지입니다.", "retryable": false}""",
+                        AiChatErrorCode.AICHAT_REQUEST_REJECTED)
         );
     }
 
