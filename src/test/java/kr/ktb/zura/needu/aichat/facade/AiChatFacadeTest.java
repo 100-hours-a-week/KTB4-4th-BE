@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
-import kr.ktb.zura.needu.aichat.client.AiChatReplyStreamClient;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
@@ -58,6 +58,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.stubbing.Answer;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -132,8 +133,8 @@ class AiChatFacadeTest {
     void setUp() {
         lenient().when(aiConversationLock.tryLock(ROOM_ID)).thenReturn(Optional.of(LOCK_HANDLE));
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiGenerationStateService, aiChatClient, replyStreamClient(), aiAnalysisConfirmService,
-                aiChatStreamService, aiChatEventPublisher, userService, MESSAGE_RETRY_AFTER,
+                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
+                aiChatEventPublisher, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
     }
 
@@ -156,8 +157,8 @@ class AiChatFacadeTest {
     @Test
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
-                aiGenerationStateService, aiChatClient, replyStreamClient(), aiAnalysisConfirmService,
-                aiChatStreamService, aiChatEventPublisher, userService, MESSAGE_RETRY_AFTER,
+                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
+                aiChatEventPublisher, userService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
@@ -307,8 +308,8 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
         given(aiMessageService.createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
@@ -324,8 +325,8 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT, true));
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT, true)));
         given(aiMessageService.createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, true, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID, true));
@@ -334,7 +335,7 @@ class AiChatFacadeTest {
 
         assertThat(response.inputLocked()).isTrue();
         assertThat(response.progress()).isEqualTo(5);
-        verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
         verify(aiChatClient, never()).createAnalysis(anyLong());
     }
 
@@ -372,8 +373,8 @@ class AiChatFacadeTest {
                 .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
         given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiGenerationStateService.isGenerating(ROOM_ID, USER_MESSAGE_ID)).willReturn(false);
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
         given(aiMessageService.createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
@@ -392,8 +393,8 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
         given(aiMessageService.createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
@@ -402,7 +403,7 @@ class AiChatFacadeTest {
 
         var order = inOrder(aiGenerationStateService, aiChatClient, aiMessageService);
         order.verify(aiGenerationStateService).startGenerating(ROOM_ID, USER_MESSAGE_ID);
-        order.verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        order.verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
         order.verify(aiMessageService).createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
         order.verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
@@ -413,7 +414,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -427,8 +428,8 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
         given(aiMessageService.createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
@@ -438,7 +439,7 @@ class AiChatFacadeTest {
         var order = inOrder(aiChatEventPublisher, aiChatClient, aiMessageService, aiConversationLock);
         order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ACCEPTED,
                 new AiChatAcceptedEvent(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
-        order.verify(aiChatClient).sendMessage(USER_ID, ROOM_ID, USER_CONTENT);
+        order.verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
         order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DELTA,
                 new AiChatDeltaEvent(USER_MESSAGE_ID, 0, AI_CONTENT));
         order.verify(aiMessageService).createReplyAndUpdateRoom(
@@ -454,7 +455,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -477,7 +478,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -516,8 +517,8 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(sendMessageResponse(AI_CONTENT));
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
         given(aiMessageService.createReplyAndUpdateRoom(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
@@ -580,7 +581,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SESSION_NOT_FOUND));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -596,7 +597,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -611,7 +612,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -625,7 +626,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT)).willReturn(sendMessageResponse(" "));
+        given(streamMessageCall()).willAnswer(streamReply(sendMessageResponse(" ")));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -639,9 +640,9 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(new AiServerSendMessageResponse(
-                        AI_CONTENT, null, EXPIRATION_AT, 1, 20, false, false, 101));
+        given(streamMessageCall())
+                .willAnswer(streamReply(new AiServerSendMessageResponse(
+                        AI_CONTENT, null, EXPIRATION_AT, 1, 20, false, false, 101)));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -655,9 +656,9 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
-                .willReturn(new AiServerSendMessageResponse(
-                        AI_CONTENT, null, EXPIRATION_AT, 1, 20, false, null, 5));
+        given(streamMessageCall())
+                .willAnswer(streamReply(new AiServerSendMessageResponse(
+                        AI_CONTENT, null, EXPIRATION_AT, 1, 20, false, null, 5)));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -693,7 +694,7 @@ class AiChatFacadeTest {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
                 .willReturn(message(USER_MESSAGE_ID, null));
-        given(aiChatClient.sendMessage(USER_ID, ROOM_ID, USER_CONTENT))
+        given(streamMessageCall())
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -941,9 +942,20 @@ class AiChatFacadeTest {
                 new AiServerRecommendationsResponse(self, gift));
     }
 
-    // AI 클라이언트 대역의 답변을 운영 기본값(20 코드 포인트, 간격 없음)으로 나눠 넘기도록 실제 객체로 감싼다
-    private AiChatReplyStreamClient replyStreamClient() {
-        return new AiChatReplyStreamClient(aiChatClient, 20, Duration.ZERO);
+    // AI 답변 스트리밍 호출. 사용자 메시지 ID는 테스트마다 달라 어떤 값이든 받는다
+    private AiServerSendMessageResponse streamMessageCall() {
+        return aiChatClient.streamMessage(eq(USER_ID), eq(ROOM_ID), anyLong(), eq(USER_CONTENT), any());
+    }
+
+    // AI 서버가 답변 전체를 조각 하나로 보낸 뒤 completed를 보낸 것처럼 응답한다
+    private static Answer<AiServerSendMessageResponse> streamReply(AiServerSendMessageResponse response) {
+        return invocation -> {
+            Consumer<String> onDelta = invocation.getArgument(4);
+            if (response.reply() != null) {
+                onDelta.accept(response.reply());
+            }
+            return response;
+        };
     }
 
     private static SendMessageRequest sendMessageRequest() {
