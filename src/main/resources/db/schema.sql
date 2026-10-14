@@ -93,11 +93,39 @@ CREATE TABLE IF NOT EXISTS kakao_tokens (
     encrypted_refresh_token  VARCHAR(1024) NOT NULL COMMENT 'AES-256-GCM 암호문',
     access_token_expires_at  DATETIME(6)   NOT NULL,
     refresh_token_expires_at DATETIME(6)   NOT NULL,
+    scopes                   VARCHAR(1000) NOT NULL DEFAULT '',
+    version                  BIGINT        NOT NULL DEFAULT 0 COMMENT '낙관적 락(@Version)',
     created_at               DATETIME(6)   NOT NULL,
     updated_at               DATETIME(6)   NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_kakao_tokens_user_id (user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_kakao_token_scopes = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE kakao_tokens ADD COLUMN scopes VARCHAR(1000) NOT NULL DEFAULT ''friends''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'kakao_tokens'
+      AND column_name = 'scopes'
+);
+PREPARE add_kakao_token_scopes_statement FROM @add_kakao_token_scopes;
+EXECUTE add_kakao_token_scopes_statement;
+DEALLOCATE PREPARE add_kakao_token_scopes_statement;
+
+SET @add_kakao_token_version = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE kakao_tokens ADD COLUMN version BIGINT NOT NULL DEFAULT 0 COMMENT ''낙관적 락(@Version)''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'kakao_tokens'
+      AND column_name = 'version'
+);
+PREPARE add_kakao_token_version_statement FROM @add_kakao_token_version;
+EXECUTE add_kakao_token_version_statement;
+DEALLOCATE PREPARE add_kakao_token_version_statement;
 
 -- ---------------------------------------------------------------------------
 -- friend
