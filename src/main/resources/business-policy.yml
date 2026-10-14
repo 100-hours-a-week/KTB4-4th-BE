@@ -14,6 +14,12 @@ ai:
     short-completion-cooldown: ${AI_CHAT_SHORT_COMPLETION_COOLDOWN:5m}
     # 같은 대화방의 메시지가 처리 중일 때 클라이언트에 안내할 재시도 시간이다.
     message-retry-after: ${AI_CHAT_MESSAGE_RETRY_AFTER:10s}
+    # AI 대화 SSE 연결 유지 시간이다. 지나면 FE EventSource가 자동으로 다시 연결한다.
+    stream-timeout: ${AI_CHAT_STREAM_TIMEOUT:30m}
+    # nginx proxy_read_timeout보다 짧게 둬서 유휴 연결이 끊기지 않게 한다.
+    stream-heartbeat-interval: ${AI_CHAT_STREAM_HEARTBEAT_INTERVAL:25s}
+    # 연결 하나에 보내지 못하고 쌓인 이벤트가 이 수를 넘으면 그 연결을 끊는다. FE는 다시 연결해 메시지 목록으로 복구한다.
+    stream-max-pending-events: ${AI_CHAT_STREAM_MAX_PENDING_EVENTS:1000}
 
 needu:
   notification:
