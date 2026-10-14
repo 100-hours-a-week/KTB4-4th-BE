@@ -142,6 +142,15 @@ CREATE TABLE IF NOT EXISTS friends (
     KEY idx_friends_friend_user_id (friend_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS friend_sync_requests (
+    user_id         BIGINT      NOT NULL,
+    requested_at    DATETIME(6) NOT NULL,
+    next_attempt_at DATETIME(6) NOT NULL,
+    retry_count     INT         NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id),
+    KEY idx_friend_sync_requests_next_attempt (next_attempt_at, user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- notification
 -- ---------------------------------------------------------------------------
