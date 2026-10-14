@@ -121,23 +121,44 @@ public class FriendService {
 
     @Transactional
     public void syncKakaoFriends(Long ownerUserId, Collection<Long> kakaoFriendIds) {
-        Map<Long, Long> userIdsByKakaoId = userService.findUserIdsByExternalIds(Set.copyOf(kakaoFriendIds));
+        Map<Long, Long> userIdsByKakaoId = getUserIdsByKakaoId(kakaoFriendIds);
+
+        List<Friend> newFriends = saveNewKakaoFriends(ownerUserId, userIdsByKakaoId);
+        LocalDateTime requestedAt = LocalDateTime.now(ZoneOffset.UTC);
+        newFriends.forEach(friend -> friendSyncRequestRepository.createIfAbsent(
+                friend.getFriendUserId(), requestedAt));
+        userService.completeKakaoFriendSync(ownerUserId);
+    }
+
+
+    @Transactional
+    public void syncRequestedKakaoFriends(Long ownerUserId, Collection<Long> kakaoFriendIds) {
+        Map<Long, Long> userIdsByKakaoId = getUserIdsByKakaoId(kakaoFriendIds);
+        saveNewKakaoFriends(ownerUserId, userIdsByKakaoId);
+        userService.completeKakaoFriendSync(ownerUserId);
+    }
+
+    private Map<Long, Long> getUserIdsByKakaoId(Collection<Long> kakaoFriendIds) {
+        return userService.findUserIdsByExternalIds(Set.copyOf(kakaoFriendIds));
+    }
+
+    private List<Friend> saveNewKakaoFriends(Long ownerUserId, Map<Long, Long> userIdsByKakaoId) {
         Set<Long> candidateUserIds = userIdsByKakaoId.values().stream()
                 .filter(friendUserId -> !friendUserId.equals(ownerUserId))
                 .collect(Collectors.toSet());
+
         Set<Long> existingFriendUserIds = candidateUserIds.isEmpty() ? Set.of()
                 : friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(ownerUserId, candidateUserIds).stream()
-                        .map(Friend::getFriendUserId)
-                        .collect(Collectors.toSet());
+                .map(Friend::getFriendUserId)
+                .collect(Collectors.toSet());
+
         List<Friend> newFriends = candidateUserIds.stream()
                 .filter(friendUserId -> !existingFriendUserIds.contains(friendUserId))
                 .map(friendUserId -> new Friend(ownerUserId, friendUserId))
                 .toList();
 
         friendRepository.saveAll(newFriends);
-        LocalDateTime requestedAt = LocalDateTime.now(ZoneOffset.UTC);
-        newFriends.forEach(friend -> friendSyncRequestRepository.createIfAbsent(
-                friend.getFriendUserId(), requestedAt));
-        userService.completeKakaoFriendSync(ownerUserId);
+
+        return newFriends;
     }
 }
