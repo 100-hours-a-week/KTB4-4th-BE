@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.auth.client;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Set;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +99,7 @@ class KakaoOAuthClientTest {
         assertEquals("kakao-refresh", result.tokens().refreshToken());
         assertEquals(Duration.ofSeconds(21600), result.tokens().accessTokenExpiresIn());
         assertEquals(Duration.ofSeconds(5184000), result.tokens().refreshTokenExpiresIn());
+        assertEquals(Set.of("friends", "profile_nickname"), result.tokens().scopes());
         server.verify();
     }
 
@@ -119,7 +121,8 @@ class KakaoOAuthClientTest {
                   "access_token": "kakao-access",
                   "refresh_token": "kakao-refresh",
                   "expires_in": 21600,
-                  "refresh_token_expires_in": 5184000
+                  "refresh_token_expires_in": 5184000,
+                  "scope": "friends profile_nickname"
                 }
                 """;
     }

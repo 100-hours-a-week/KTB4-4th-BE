@@ -9,18 +9,29 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Set;
 import kr.ktb.zura.needu.auth.client.KakaoOAuthClient;
+import kr.ktb.zura.needu.auth.config.KakaoOAuth2ClientConfig;
+import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
 
 class AuthServiceTest {
 
     private KakaoOAuthClient kakaoOAuthClient;
     private UserService userService;
     private KakaoTokenService kakaoTokenService;
+    private OAuth2AuthorizedClientManager authorizedClientManager;
     private AuthService authService;
 
     @BeforeEach
@@ -28,12 +39,14 @@ class AuthServiceTest {
         kakaoOAuthClient = mock(KakaoOAuthClient.class);
         userService = mock(UserService.class);
         kakaoTokenService = mock(KakaoTokenService.class);
+        authorizedClientManager = mock(OAuth2AuthorizedClientManager.class);
         authService = new AuthService(
                 kakaoOAuthClient,
                 userService,
                 mock(AuthSessionService.class),
                 mock(AccessTokenService.class),
-                kakaoTokenService
+                kakaoTokenService,
+                authorizedClientManager
         );
     }
 
@@ -41,10 +54,30 @@ class AuthServiceTest {
     void validKakaoAccount_authorizeKakaoFriend_savesTokens() {
         when(kakaoOAuthClient.authorizeFriend("code")).thenReturn(authorization());
 
-        String accessToken = authService.authorizeKakaoFriend(1L, "code");
+        authService.authorizeKakaoFriend(1L, "code");
 
-        assertEquals("access-token", accessToken);
         verify(kakaoTokenService).saveTokens(1L, authorization().tokens());
+    }
+
+    @Test
+    void authorizedFriendScope_findKakaoAccessToken_returnsManagedToken() {
+        when(authorizedClientManager.authorize(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(authorizedClient(Set.of("friends")));
+
+        String accessToken = authService.findKakaoAccessToken(1L, "friends");
+
+        assertEquals("managed-access", accessToken);
+    }
+
+    @Test
+    void missingRequiredScope_findKakaoAccessToken_requiresAuthorization() {
+        when(authorizedClientManager.authorize(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(authorizedClient(Set.of("profile_nickname")));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> authService.findKakaoAccessToken(1L, "friends"));
+
+        assertEquals(AuthErrorCode.AUTH_KAKAO_AUTHORIZATION_REQUIRED, exception.getErrorCode());
     }
 
     @Test
@@ -66,8 +99,29 @@ class AuthServiceTest {
                         "access-token",
                         "refresh-token",
                         Duration.ofHours(6),
-                        Duration.ofDays(60)
+                        Duration.ofDays(60),
+                        Set.of("friends")
                 )
         );
+    }
+
+    private OAuth2AuthorizedClient authorizedClient(Set<String> scopes) {
+        ClientRegistration registration = ClientRegistration
+                .withRegistrationId(KakaoOAuth2ClientConfig.REGISTRATION_ID)
+                .clientId("client-id")
+                .clientSecret("client-secret")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("https://example.com/callback")
+                .authorizationUri("https://kauth.kakao.com/oauth/authorize")
+                .tokenUri("https://kauth.kakao.com/oauth/token")
+                .build();
+        OAuth2AccessToken accessToken = new OAuth2AccessToken(
+                OAuth2AccessToken.TokenType.BEARER,
+                "managed-access",
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                scopes);
+        return new OAuth2AuthorizedClient(registration, "1", accessToken);
     }
 }

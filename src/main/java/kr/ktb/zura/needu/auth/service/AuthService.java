@@ -2,11 +2,20 @@ package kr.ktb.zura.needu.auth.service;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import kr.ktb.zura.needu.auth.client.KakaoOAuthClient;
 import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
+import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
+import kr.ktb.zura.needu.auth.config.KakaoOAuth2ClientConfig;
+import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +28,7 @@ public class AuthService {
     private final AuthSessionService authSessionService;
     private final AccessTokenService accessTokenService;
     private final KakaoTokenService kakaoTokenService;
+    private final OAuth2AuthorizedClientManager kakaoAuthorizedClientManager;
 
     public URI createKakaoAuthorizationUri(String state) {
         return kakaoOAuthClient.createAuthorizationUri(state);
@@ -28,11 +38,33 @@ public class AuthService {
         return kakaoOAuthClient.createFriendAuthorizationUri(state);
     }
 
-    public String authorizeKakaoFriend(Long userId, String code) {
+    public void authorizeKakaoFriend(Long userId, String code) {
         KakaoOAuthClient.KakaoAuthorization authorization = kakaoOAuthClient.authorizeFriend(code);
         userService.validateKakaoIdentity(userId, authorization.userInfo().id());
         kakaoTokenService.saveTokens(userId, authorization.tokens());
-        return authorization.tokens().accessToken();
+    }
+
+    public String findKakaoAccessToken(Long userId, String requiredScope) {
+        UsernamePasswordAuthenticationToken principal = new UsernamePasswordAuthenticationToken(
+                userId.toString(), null, List.of());
+        OAuth2AuthorizeRequest request = OAuth2AuthorizeRequest
+                .withClientRegistrationId(KakaoOAuth2ClientConfig.REGISTRATION_ID)
+                .principal(principal)
+                .build();
+        OAuth2AuthorizedClient authorizedClient;
+        try {
+            authorizedClient = kakaoAuthorizedClientManager.authorize(request);
+        } catch (OAuth2AuthorizationException exception) {
+            if ("invalid_grant".equals(exception.getError().getErrorCode())) {
+                throw new BusinessException(AuthErrorCode.AUTH_KAKAO_AUTHORIZATION_REQUIRED);
+            }
+            throw new BusinessException(AuthErrorCode.AUTH_KAKAO_UNAVAILABLE, null, exception);
+        }
+        if (authorizedClient == null
+                || !authorizedClient.getAccessToken().getScopes().contains(requiredScope)) {
+            throw new BusinessException(AuthErrorCode.AUTH_KAKAO_AUTHORIZATION_REQUIRED);
+        }
+        return authorizedClient.getAccessToken().getTokenValue();
     }
 
     public Tokens loginWithKakao(String code) {

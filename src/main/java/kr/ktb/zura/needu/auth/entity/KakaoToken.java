@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -43,6 +44,13 @@ public class KakaoToken {
     @Column(nullable = false)
     private LocalDateTime refreshTokenExpiresAt;
 
+    @Column(nullable = false, length = 1000)
+    private String scopes;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -55,18 +63,21 @@ public class KakaoToken {
                       String encryptedAccessToken,
                       String encryptedRefreshToken,
                       LocalDateTime accessTokenExpiresAt,
-                      LocalDateTime refreshTokenExpiresAt) {
+                      LocalDateTime refreshTokenExpiresAt,
+                      String scopes) {
         this.userId = userId;
-        update(encryptedAccessToken, encryptedRefreshToken, accessTokenExpiresAt, refreshTokenExpiresAt);
+        update(encryptedAccessToken, encryptedRefreshToken, accessTokenExpiresAt, refreshTokenExpiresAt, scopes);
     }
 
     public void update(String encryptedAccessToken,
                        String encryptedRefreshToken,
                        LocalDateTime accessTokenExpiresAt,
-                       LocalDateTime refreshTokenExpiresAt) {
+                       LocalDateTime refreshTokenExpiresAt,
+                       String scopes) {
         this.encryptedAccessToken = encryptedAccessToken;
         this.encryptedRefreshToken = encryptedRefreshToken;
         this.accessTokenExpiresAt = accessTokenExpiresAt;
         this.refreshTokenExpiresAt = refreshTokenExpiresAt;
+        this.scopes = scopes;
     }
 }

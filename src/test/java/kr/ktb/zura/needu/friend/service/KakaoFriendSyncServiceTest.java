@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class KakaoFriendSyncServiceTest {
 
@@ -33,8 +33,8 @@ class KakaoFriendSyncServiceTest {
 
     @Test
     void differentKakaoAccount_doesNotRequestOrSaveFriends() {
-        when(authService.authorizeKakaoFriend(1L, "code"))
-                .thenThrow(new BusinessException(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH));
+        doThrow(new BusinessException(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH))
+                .when(authService).authorizeKakaoFriend(1L, "code");
 
         assertThrows(BusinessException.class, () -> syncService.sync(1L, "code"));
 
