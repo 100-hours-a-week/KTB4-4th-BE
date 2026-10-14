@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class KakaoFriendSyncService {
 
+    private static final String FRIENDS_SCOPE = "friends";
+
     private final AuthService authService;
     private final UserService userService;
     private final KakaoFriendClient kakaoFriendClient;
@@ -23,7 +25,8 @@ public class KakaoFriendSyncService {
 
     public void sync(Long userId, String code) {
         userService.validateActiveUser(userId);
-        String accessToken = authService.authorizeKakaoFriend(userId, code);
+        authService.authorizeKakaoFriend(userId, code);
+        String accessToken = authService.findKakaoAccessToken(userId, FRIENDS_SCOPE);
         friendService.syncKakaoFriends(userId,
                 kakaoFriendClient.findAllFriendIds(accessToken));
     }

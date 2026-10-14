@@ -3,6 +3,9 @@ package kr.ktb.zura.needu.auth.client;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,11 +63,11 @@ public class KakaoOAuthClient {
     }
 
     public KakaoUserInfo findUserInfo(String code) {
-        return requestUserInfo(requestTokens(code, redirectUri).accessToken());
+        return requestUserInfo(requestTokens(code, redirectUri, Set.of()).accessToken());
     }
 
     public KakaoAuthorization authorizeFriend(String code) {
-        KakaoTokens tokens = requestTokens(code, friendRedirectUri);
+        KakaoTokens tokens = requestTokens(code, friendRedirectUri, Set.of("friends"));
         return new KakaoAuthorization(requestUserInfo(tokens.accessToken()), tokens);
     }
 
@@ -88,7 +91,7 @@ public class KakaoOAuthClient {
         }
     }
 
-    private KakaoTokens requestTokens(String code, String requestRedirectUri) {
+    private KakaoTokens requestTokens(String code, String requestRedirectUri, Set<String> requestedScopes) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("client_id", clientId);
@@ -113,7 +116,8 @@ public class KakaoOAuthClient {
                     response.accessToken(),
                     response.refreshToken(),
                     Duration.ofSeconds(response.expiresIn()),
-                    Duration.ofSeconds(response.refreshTokenExpiresIn())
+                    Duration.ofSeconds(response.refreshTokenExpiresIn()),
+                    parseScopes(response.scope(), requestedScopes)
             );
         } catch (RestClientResponseException exception) {
             if (exception.getStatusCode().is4xxClientError()) {
@@ -123,6 +127,15 @@ public class KakaoOAuthClient {
         } catch (RestClientException exception) {
             throw new BusinessException(AuthErrorCode.AUTH_KAKAO_UNAVAILABLE);
         }
+    }
+
+    private Set<String> parseScopes(String scope, Set<String> requestedScopes) {
+        if (scope == null || scope.isBlank()) {
+            return requestedScopes;
+        }
+        return Arrays.stream(scope.trim().split("[,\\s]+"))
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     public record KakaoUserInfo(Long id, String nickname, String profileImageUrl) {
@@ -135,7 +148,8 @@ public class KakaoOAuthClient {
             String accessToken,
             String refreshToken,
             Duration accessTokenExpiresIn,
-            Duration refreshTokenExpiresIn
+            Duration refreshTokenExpiresIn,
+            Set<String> scopes
     ) {
     }
 
@@ -143,7 +157,8 @@ public class KakaoOAuthClient {
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("refresh_token") String refreshToken,
             @JsonProperty("expires_in") Long expiresIn,
-            @JsonProperty("refresh_token_expires_in") Long refreshTokenExpiresIn
+            @JsonProperty("refresh_token_expires_in") Long refreshTokenExpiresIn,
+            String scope
     ) {
     }
 
