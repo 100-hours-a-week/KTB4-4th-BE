@@ -27,6 +27,7 @@ class FriendSyncServiceTest {
     private AuthService authService;
     private KakaoFriendClient kakaoFriendClient;
     private FriendService friendService;
+    private FriendJoinedNotificationService friendJoinedNotificationService;
     private FriendSyncService friendSyncService;
 
     @BeforeEach
@@ -35,11 +36,13 @@ class FriendSyncServiceTest {
         authService = mock(AuthService.class);
         kakaoFriendClient = mock(KakaoFriendClient.class);
         friendService = mock(FriendService.class);
+        friendJoinedNotificationService = mock(FriendJoinedNotificationService.class);
         friendSyncService = new FriendSyncService(
                 friendSyncRequestRepository,
                 authService,
                 kakaoFriendClient,
                 friendService,
+                friendJoinedNotificationService,
                 20,
                 3,
                 java.time.Duration.ofMinutes(5));
@@ -51,10 +54,11 @@ class FriendSyncServiceTest {
         whenDueRequests(request);
         when(authService.findKakaoAccessToken(1L, "friends")).thenReturn("access-token");
         when(kakaoFriendClient.findAllFriendIds("access-token")).thenReturn(List.of(20L, 30L));
+        when(friendService.syncRequestedKakaoFriends(1L, List.of(20L, 30L))).thenReturn(List.of(2L));
 
         friendSyncService.syncPendingRequests();
 
-        verify(friendService).syncRequestedKakaoFriends(1L, List.of(20L, 30L));
+        verify(friendJoinedNotificationService).createNotifications(1L, List.of(2L));
         verify(friendSyncRequestRepository).deleteById(1L);
         verify(friendSyncRequestRepository, never()).save(request);
     }
@@ -71,6 +75,7 @@ class FriendSyncServiceTest {
         verify(friendSyncRequestRepository).deleteById(1L);
         verify(kakaoFriendClient, never()).findAllFriendIds(any());
         verify(friendService, never()).syncRequestedKakaoFriends(any(), any());
+        verify(friendJoinedNotificationService, never()).createNotifications(any(), any());
     }
 
     @Test
@@ -109,6 +114,21 @@ class FriendSyncServiceTest {
 
         verify(friendSyncRequestRepository).deleteById(1L);
         verify(friendSyncRequestRepository, never()).save(request);
+    }
+
+    @Test
+    void friendSyncFails_syncPendingRequests_doesNotCreateNotifications() {
+        FriendSyncRequest request = request(1L);
+        whenDueRequests(request);
+        when(authService.findKakaoAccessToken(1L, "friends")).thenReturn("access-token");
+        when(kakaoFriendClient.findAllFriendIds("access-token")).thenReturn(List.of(20L));
+        when(friendService.syncRequestedKakaoFriends(1L, List.of(20L)))
+                .thenThrow(new IllegalStateException());
+
+        friendSyncService.syncPendingRequests();
+
+        verify(friendJoinedNotificationService, never()).createNotifications(any(), any());
+        verify(friendSyncRequestRepository).save(request);
     }
 
     private FriendSyncRequest request(Long userId) {

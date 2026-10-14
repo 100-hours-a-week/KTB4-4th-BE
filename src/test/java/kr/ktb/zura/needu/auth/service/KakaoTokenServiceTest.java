@@ -24,6 +24,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class KakaoTokenServiceTest {
 
@@ -103,6 +104,29 @@ class KakaoTokenServiceTest {
         assertEquals("access-token", result.getAccessToken().getTokenValue());
         assertEquals("refresh-token", result.getRefreshToken().getTokenValue());
         assertEquals(Set.of("friends"), result.getAccessToken().getScopes());
+    }
+
+    @Test
+    void updatedAtAfterAccessTokenExpiration_loadAuthorizedClient_returnsClientWithStoredExpiration() {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        KakaoToken stored = new KakaoToken(
+                1L,
+                "encrypted-access",
+                "encrypted-refresh",
+                now.plusHours(6),
+                now.plusDays(60),
+                "friends");
+        ReflectionTestUtils.setField(stored, "updatedAt", now.plusHours(9));
+        when(kakaoTokenRepository.findByUserId(1L)).thenReturn(Optional.of(stored));
+        when(clientRegistrationRepository.findByRegistrationId(KakaoOAuth2ClientConfig.REGISTRATION_ID))
+                .thenReturn(mock(ClientRegistration.class));
+        when(kakaoTokenCipher.decrypt("encrypted-access")).thenReturn("access-token");
+        when(kakaoTokenCipher.decrypt("encrypted-refresh")).thenReturn("refresh-token");
+
+        OAuth2AuthorizedClient result = kakaoTokenService.loadAuthorizedClient(
+                KakaoOAuth2ClientConfig.REGISTRATION_ID, "1");
+
+        assertEquals(now.plusHours(6).toInstant(ZoneOffset.UTC), result.getAccessToken().getExpiresAt());
     }
 
     @Test
