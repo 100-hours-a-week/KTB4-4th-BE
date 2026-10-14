@@ -308,6 +308,25 @@ class FriendServiceTest {
         verify(userService, never()).completeKakaoFriendSync(1L);
     }
 
+    @Test
+    void newKakaoFriends_syncRequestedKakaoFriends_savesRelationsWithoutCreatingRequests() {
+        when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(20L, 2L));
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L)))
+                .thenReturn(List.of());
+
+        friendService.syncRequestedKakaoFriends(1L, List.of(20L));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Friend>> captor = ArgumentCaptor.forClass(List.class);
+        verify(friendRepository).saveAll(captor.capture());
+        assertThat(captor.getValue())
+                .extracting(Friend::getOwnerUserId, Friend::getFriendUserId)
+                .containsExactly(tuple(1L, 2L));
+        verify(friendSyncRequestRepository, never()).createIfAbsent(any(), any());
+        verify(userService).completeKakaoFriendSync(1L);
+    }
+
     private FriendSummaryResponse friendSummary(Long userId, LocalDate birthDate) {
         return friendSummary(userId, "친구", birthDate);
     }
