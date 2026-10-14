@@ -33,6 +33,13 @@ needu:
       lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
+    sync:
+      fixed-delay: ${FRIEND_SYNC_FIXED_DELAY:1m}
+      batch-size: ${FRIEND_SYNC_BATCH_SIZE:20}
+      max-retry-count: ${FRIEND_SYNC_MAX_RETRY_COUNT:3}
+      retry-delay: ${FRIEND_SYNC_RETRY_DELAY:5m}
+      lock-at-most-for: ${FRIEND_SYNC_LOCK_AT_MOST_FOR:10m}
+      lock-at-least-for: ${FRIEND_SYNC_LOCK_AT_LEAST_FOR:10s}
   product:
     price-range-cache:
       ttl: ${PRODUCT_PRICE_RANGE_CACHE_TTL:10m}

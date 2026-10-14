@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.friend.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,6 +16,7 @@ import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
+import kr.ktb.zura.needu.friend.repository.FriendSyncRequestRepository;
 import kr.ktb.zura.needu.user.dto.response.AiSummaryResponse;
 import kr.ktb.zura.needu.user.dto.response.TasteProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
@@ -28,7 +31,9 @@ import org.springframework.data.domain.Limit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,14 +43,16 @@ import static org.mockito.Mockito.when;
 class FriendServiceTest {
 
     private FriendRepository friendRepository;
+    private FriendSyncRequestRepository friendSyncRequestRepository;
     private UserService userService;
     private FriendService friendService;
 
     @BeforeEach
     void setUp() {
         friendRepository = mock(FriendRepository.class);
+        friendSyncRequestRepository = mock(FriendSyncRequestRepository.class);
         userService = mock(UserService.class);
-        friendService = new FriendService(friendRepository, userService);
+        friendService = new FriendService(friendRepository, friendSyncRequestRepository, userService);
     }
 
     @Test
@@ -240,6 +247,7 @@ class FriendServiceTest {
 
     @Test
     void newKakaoFriends_syncKakaoFriends_savesOwnerRelationsOnly() {
+        LocalDateTime beforeSync = LocalDateTime.now(ZoneOffset.UTC);
         when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn(Map.of(10L, 1L, 20L, 2L, 30L, 3L));
         when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L, 3L)))
@@ -253,6 +261,10 @@ class FriendServiceTest {
         assertThat(captor.getValue())
                 .extracting(Friend::getOwnerUserId, Friend::getFriendUserId)
                 .containsExactly(tuple(1L, 3L));
+        ArgumentCaptor<LocalDateTime> requestedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(friendSyncRequestRepository).createIfAbsent(eq(3L), requestedAtCaptor.capture());
+        assertThat(requestedAtCaptor.getValue())
+                .isBetween(beforeSync, LocalDateTime.now(ZoneOffset.UTC));
         verify(userService).completeKakaoFriendSync(1L);
     }
 
@@ -262,6 +274,7 @@ class FriendServiceTest {
 
         friendService.syncKakaoFriends(1L, List.of());
 
+        verify(friendSyncRequestRepository, never()).createIfAbsent(any(), any());
         verify(userService).completeKakaoFriendSync(1L);
     }
 
@@ -276,7 +289,42 @@ class FriendServiceTest {
         assertThatThrownBy(() -> friendService.syncKakaoFriends(1L, List.of(20L)))
                 .isInstanceOf(IllegalStateException.class);
 
+        verify(friendSyncRequestRepository, never()).createIfAbsent(any(), any());
         verify(userService, never()).completeKakaoFriendSync(1L);
+    }
+
+    @Test
+    void syncRequestSaveFailure_syncKakaoFriends_doesNotMarkSyncComplete() {
+        when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(20L, 2L));
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L)))
+                .thenReturn(List.of());
+        doThrow(new IllegalStateException()).when(friendSyncRequestRepository)
+                .createIfAbsent(eq(2L), any());
+
+        assertThatThrownBy(() -> friendService.syncKakaoFriends(1L, List.of(20L)))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(userService, never()).completeKakaoFriendSync(1L);
+    }
+
+    @Test
+    void newKakaoFriends_syncRequestedKakaoFriends_savesRelationsWithoutCreatingRequests() {
+        when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(Map.of(20L, 2L));
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L)))
+                .thenReturn(List.of());
+
+        friendService.syncRequestedKakaoFriends(1L, List.of(20L));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Friend>> captor = ArgumentCaptor.forClass(List.class);
+        verify(friendRepository).saveAll(captor.capture());
+        assertThat(captor.getValue())
+                .extracting(Friend::getOwnerUserId, Friend::getFriendUserId)
+                .containsExactly(tuple(1L, 2L));
+        verify(friendSyncRequestRepository, never()).createIfAbsent(any(), any());
+        verify(userService).completeKakaoFriendSync(1L);
     }
 
     private FriendSummaryResponse friendSummary(Long userId, LocalDate birthDate) {
