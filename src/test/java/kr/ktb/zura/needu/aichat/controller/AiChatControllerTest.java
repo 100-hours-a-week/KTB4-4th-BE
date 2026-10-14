@@ -28,10 +28,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,7 +45,9 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AiChatController.class)
@@ -54,6 +58,7 @@ class AiChatControllerTest {
     private static final String URL = "/api/v1/ai/conversations";
     private static final String MESSAGES_URL = URL + "/" + CONVERSATION_ID + "/messages";
     private static final String ANALYSIS_URL = URL + "/" + CONVERSATION_ID + "/analysis";
+    private static final String STREAM_URL = URL + "/" + CONVERSATION_ID + "/stream";
     private static final UUID CLIENT_MESSAGE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
 
@@ -383,6 +388,55 @@ class AiChatControllerTest {
     }
 
     @Test
+    void activeConversation_connectStream_startsSseConnection() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID)).willReturn(new SseEmitter());
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL,
+                        "no-cache, no-store, max-age=0, must-revalidate, no-transform"))
+                .andExpect(header().string("X-Accel-Buffering", "no"))
+                .andExpect(request().asyncStarted());
+    }
+
+    @Test
+    void inputLockedConversation_connectStream_returnsConflict() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED));
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("AI 대화의 사용자 입력이 잠겨 있습니다."));
+    }
+
+    @Test
+    void expiredConversation_connectStream_returnsGone() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_EXPIRED));
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.message").value("AI 대화 세션이 만료되었습니다."));
+    }
+
+    @Test
+    void conversationOwnedByAnotherUser_connectStream_returnsForbidden() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN));
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 AI 대화에 접근할 수 없습니다."));
+    }
+
+    @Test
+    void unauthenticated_connectStream_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get(STREAM_URL))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
     void validRequest_confirmAnalysis_confirmsConversation() throws Exception {
         given(aiChatFacade.confirmAnalysis(USER_ID, CONVERSATION_ID))
                 .willReturn(ProductRecommendationStatusResponse.success());
@@ -393,6 +447,13 @@ class AiChatControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("취향 분석을 확정했습니다."))
                 .andExpect(jsonPath("$.data.isRecommendationCompleted").value(true));
+    }
+
+    // EventSource는 Accept: text/event-stream으로 요청한다
+    private static MockHttpServletRequestBuilder getStream() {
+        return get(STREAM_URL)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())));
     }
 
     private static MockHttpServletRequestBuilder getMessages(String query) {

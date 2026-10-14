@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -70,7 +71,11 @@ public class AiChatController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long conversationId
     ) {
-        return ResponseEntity.ok(aiChatFacade.connectStream(userId, conversationId));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL,
+                        "no-cache, no-store, max-age=0, must-revalidate, no-transform")
+                .header("X-Accel-Buffering", "no")
+                .body(aiChatFacade.connectStream(userId, conversationId));
     }
 
     @PostMapping("/{conversationId}/messages")
