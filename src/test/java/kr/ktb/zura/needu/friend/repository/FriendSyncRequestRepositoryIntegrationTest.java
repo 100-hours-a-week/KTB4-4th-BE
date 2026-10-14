@@ -6,10 +6,13 @@ import kr.ktb.zura.needu.friend.entity.FriendSyncRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+// insert ignore는 MySQL 문법이라 내장 H2로 교체하지 않고 integration 프로필의 MySQL을 사용한다.
 @DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class FriendSyncRequestRepositoryIntegrationTest {
 
     @Autowired
