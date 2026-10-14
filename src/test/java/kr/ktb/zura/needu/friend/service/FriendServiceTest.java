@@ -309,13 +309,15 @@ class FriendServiceTest {
     }
 
     @Test
-    void newKakaoFriends_syncRequestedKakaoFriends_savesRelationsWithoutCreatingRequests() {
+    void newKakaoFriends_syncRequestedKakaoFriends_savesRelationsAndReturnsNewFriendUserIds() {
         when(userService.findUserIdsByExternalIds(org.mockito.ArgumentMatchers.anyCollection()))
-                .thenReturn(Map.of(20L, 2L));
-        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L)))
-                .thenReturn(List.of());
+                .thenReturn(Map.of(20L, 2L, 30L, 3L));
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, java.util.Set.of(2L, 3L)))
+                .thenReturn(List.of(new Friend(1L, 3L)));
 
-        friendService.syncRequestedKakaoFriends(1L, List.of(20L));
+        List<Long> newFriendUserIds = friendService.syncRequestedKakaoFriends(1L, List.of(20L, 30L));
+
+        assertThat(newFriendUserIds).containsExactly(2L);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Friend>> captor = ArgumentCaptor.forClass(List.class);

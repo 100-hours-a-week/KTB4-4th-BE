@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget;
+import kr.ktb.zura.needu.friend.dto.response.FriendJoinedNotificationTarget;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.user.entity.User;
@@ -79,6 +80,26 @@ class FriendRepositoryTest {
         assertThat(friendRepository.findAllBirthdayNotificationTargets(3, 1, false))
                 .extracting(FriendBirthdayNotificationTarget::friendUserId)
                 .containsExactly(marchFirst.getId());
+    }
+
+    @Test
+    void mutualFriends_findAllFriendJoinedNotificationTargets_returnsActiveActors() {
+        User receiver = saveUser("기존사용자", null);
+        User activeActor = saveUser("새친구", null);
+        User oneWayActor = saveUser("단방향친구", null);
+        User inactiveActor = saveUser("비활성친구", null);
+        inactiveActor.withdraw();
+        friendRepository.saveAll(List.of(
+                new Friend(activeActor.getId(), receiver.getId()),
+                new Friend(inactiveActor.getId(), receiver.getId())
+        ));
+
+        List<FriendJoinedNotificationTarget> targets = friendRepository
+                .findAllFriendJoinedNotificationTargets(
+                        receiver.getId(), List.of(activeActor.getId(), oneWayActor.getId(), inactiveActor.getId()));
+
+        assertThat(targets)
+                .containsExactly(new FriendJoinedNotificationTarget(activeActor.getId(), "새친구"));
     }
 
     @Test

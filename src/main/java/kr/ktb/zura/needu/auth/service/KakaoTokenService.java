@@ -72,18 +72,17 @@ public class KakaoTokenService implements OAuth2AuthorizedClientService {
         }
         ClientRegistration registration = clientRegistrationRepository.findByRegistrationId(clientRegistrationId);
         KakaoToken token = storedToken.get();
-        Instant issuedAt = token.getUpdatedAt() == null
-                ? null : token.getUpdatedAt().toInstant(ZoneOffset.UTC);
+        // updatedAt은 JVM 기본 시간대로 기록되어 UTC 만료 시각과 비교할 수 없고, 토큰 갱신 판단에는 expiresAt만 쓰인다.
         OAuth2AccessToken accessToken = new OAuth2AccessToken(
                 OAuth2AccessToken.TokenType.BEARER,
                 kakaoTokenCipher.decrypt(token.getEncryptedAccessToken()),
-                issuedAt,
+                null,
                 token.getAccessTokenExpiresAt().toInstant(ZoneOffset.UTC),
                 parseScopes(token.getScopes())
         );
         OAuth2RefreshToken refreshToken = new OAuth2RefreshToken(
                 kakaoTokenCipher.decrypt(token.getEncryptedRefreshToken()),
-                issuedAt,
+                null,
                 token.getRefreshTokenExpiresAt().toInstant(ZoneOffset.UTC)
         );
         return (T) new OAuth2AuthorizedClient(registration, principalName, accessToken, refreshToken);

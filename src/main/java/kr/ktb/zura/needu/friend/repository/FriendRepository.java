@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget;
+import kr.ktb.zura.needu.friend.dto.response.FriendJoinedNotificationTarget;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import org.springframework.data.domain.Limit;
@@ -57,6 +58,20 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
             @Param("month") int month,
             @Param("day") int day,
             @Param("includeLeapDay") boolean includeLeapDay
+    );
+
+    @Query("""
+            select new kr.ktb.zura.needu.friend.dto.response.FriendJoinedNotificationTarget(
+                reverseFriend.ownerUserId, actorUser.nickname)
+            from Friend reverseFriend
+            join User actorUser on actorUser.id = reverseFriend.ownerUserId
+            where reverseFriend.friendUserId = :receiverUserId
+              and reverseFriend.ownerUserId in :actorUserIds
+              and actorUser.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
+            """)
+    List<FriendJoinedNotificationTarget> findAllFriendJoinedNotificationTargets(
+            @Param("receiverUserId") Long receiverUserId,
+            @Param("actorUserIds") Collection<Long> actorUserIds
     );
 
     // namePrefixPattern의 이스케이프 문자 '!'는 FriendService에서 만드는 패턴과 동일해야 한다
