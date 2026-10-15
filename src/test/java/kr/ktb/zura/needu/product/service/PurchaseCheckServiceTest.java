@@ -89,7 +89,8 @@ class PurchaseCheckServiceTest {
         assertThat(response.answeredAt()).isNotNull();
         PurchaseCheck saved = purchaseCheckRepository.findById(purchaseCheck.getId()).orElseThrow();
         assertThat(saved.getPurchased()).isTrue();
-        assertThat(saved.getAnsweredAt()).isEqualTo(response.answeredAt());
+        // DB에 저장된 answeredAt은 마이크로초까지만 남으므로 오차를 둔다
+        assertThat(saved.getAnsweredAt()).isCloseTo(response.answeredAt(), within(1, ChronoUnit.MILLIS));
     }
 
     @Test

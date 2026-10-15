@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.product.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.entity.ProductLinkClick;
@@ -87,7 +88,8 @@ class ProductLinkClickRepositoryTest {
     @Test
     void clicksOutsideWindow_findPurchaseCheckTargetIds_excludesTooRecentAndTooOldClicks() {
         Product lamp = saveProduct("램프");
-        LocalDateTime to = LocalDateTime.now().minusDays(7);
+        // DB는 마이크로초까지만 저장하며 반올림하므로, 경계값이 저장 후 바뀌지 않도록 미리 자른다
+        LocalDateTime to = LocalDateTime.now().minusDays(7).truncatedTo(ChronoUnit.MICROS);
         LocalDateTime from = to.minusDays(3);
         ProductLinkClick atTo = saveClick(USER_ID, lamp, ProductContext.PERSONAL, to);
         saveClick(USER_ID, lamp, ProductContext.MY_GIFT, to.plusSeconds(1));
