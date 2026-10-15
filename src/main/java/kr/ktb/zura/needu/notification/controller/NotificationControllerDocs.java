@@ -52,6 +52,10 @@ public class NotificationControllerDocs implements ControllerDocs {
                 OperationDoc.of(NotificationSettingController.class, "updateNotificationSetting")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
+                OperationDoc.of(WebPushController.class, "findVapidPublicKey")
+                        .publicApi()
+                        .errors(NotificationErrorCode.NOTIFICATION_VAPID_PUBLIC_KEY_UNAVAILABLE)
+                        .build(),
                 OperationDoc.of(PushSubscriptionController.class, "subscribe")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),

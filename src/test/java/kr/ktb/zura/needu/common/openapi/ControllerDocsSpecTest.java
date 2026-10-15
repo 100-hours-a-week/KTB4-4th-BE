@@ -52,6 +52,10 @@ class ControllerDocsSpecTest {
     void publicApi_hasNoUnauthorizedResponse() throws Exception {
         requestSpec()
                 .andExpect(jsonPath("$.paths['/api/v1/auth/kakao/authorize'].get.responses['401']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/notifications/web-push/public-key'].get.responses['401']")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/notifications/web-push/public-key'].get.responses['503']")
+                        .exists())
                 .andExpect(jsonPath("$.paths['/api/v1/friends/{userId}'].get.responses['401']").exists());
     }
 
