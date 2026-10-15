@@ -175,6 +175,66 @@ CREATE TABLE IF NOT EXISTS notification_settings (
     UNIQUE KEY uk_notification_settings_user_type (user_id, setting_type)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id            BIGINT        NOT NULL AUTO_INCREMENT,
+    user_id       BIGINT        NOT NULL,
+    endpoint      VARCHAR(1000) NOT NULL,
+    endpoint_hash CHAR(64)      NOT NULL COMMENT 'SHA-256(endpoint)',
+    p256dh        VARCHAR(255)  NOT NULL,
+    auth          VARCHAR(100)  NOT NULL,
+    created_at    DATETIME(6)   NOT NULL,
+    updated_at    DATETIME(6)   NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_push_subscriptions_endpoint_hash (endpoint_hash),
+    KEY idx_push_subscriptions_user_id (user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_push_subscription_endpoint_hash = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE push_subscriptions ADD COLUMN endpoint_hash CHAR(64) NULL COMMENT ''SHA-256(endpoint)''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'push_subscriptions'
+      AND column_name = 'endpoint_hash'
+);
+PREPARE add_push_subscription_endpoint_hash_statement FROM @add_push_subscription_endpoint_hash;
+EXECUTE add_push_subscription_endpoint_hash_statement;
+DEALLOCATE PREPARE add_push_subscription_endpoint_hash_statement;
+
+UPDATE push_subscriptions
+SET endpoint_hash = SHA2(endpoint, 256)
+WHERE endpoint_hash IS NULL;
+
+ALTER TABLE push_subscriptions
+    MODIFY COLUMN endpoint_hash CHAR(64) NOT NULL COMMENT 'SHA-256(endpoint)';
+
+SET @drop_push_subscription_endpoint_unique = (
+    SELECT IF(COUNT(*) > 0,
+              'ALTER TABLE push_subscriptions DROP INDEX uk_push_subscriptions_endpoint',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'push_subscriptions'
+      AND index_name = 'uk_push_subscriptions_endpoint'
+);
+PREPARE drop_push_subscription_endpoint_unique_statement FROM @drop_push_subscription_endpoint_unique;
+EXECUTE drop_push_subscription_endpoint_unique_statement;
+DEALLOCATE PREPARE drop_push_subscription_endpoint_unique_statement;
+
+SET @add_push_subscription_endpoint_hash_unique = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE push_subscriptions ADD UNIQUE INDEX uk_push_subscriptions_endpoint_hash (endpoint_hash)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'push_subscriptions'
+      AND index_name = 'uk_push_subscriptions_endpoint_hash'
+);
+PREPARE add_push_subscription_endpoint_hash_unique_statement FROM @add_push_subscription_endpoint_hash_unique;
+EXECUTE add_push_subscription_endpoint_hash_unique_statement;
+DEALLOCATE PREPARE add_push_subscription_endpoint_hash_unique_statement;
+
 -- ---------------------------------------------------------------------------
 -- aichat
 -- ---------------------------------------------------------------------------
