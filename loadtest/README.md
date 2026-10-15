@@ -85,7 +85,7 @@ SCENARIO=read k6 run -o experimental-prometheus-rw k6/scenarios.js
 
 ### AI 동시성 부하
 
-VU마다 별도 사용자로 대화 시작 → 메시지 → 분석 → 확정을 한 번 수행한다.
+VU마다 별도 사용자로 대화 시작 → 메시지 → 분석 → 확정을 한 번 수행한다. 메시지 전송은 `202`로 접수만 되고 답변은 백그라운드에서 만들어지므로, 턴마다 메시지 목록(`size=1`)을 조회해 AI 답변이 저장될 때까지 기다린 뒤 다음 턴으로 넘어간다.
 
 ```bash
 AI_VUS=20 AI_TURNS=2 \
@@ -93,6 +93,10 @@ SCENARIO=ai k6 run -o experimental-prometheus-rw k6/scenarios.js
 ```
 
 `AI_TURNS`는 `.env`의 `AI_SERVER_MOCK_MAX_TURNS`와 같아야 한다. Fake AI의 호출당 지연은 `AI_SERVER_MOCK_LATENCY`로 변경한다.
+
+- 접수부터 답변 저장까지 걸린 시간은 `ai_reply_duration` 지표로 따로 기록한다. `ai_message` 요청 시간에는 AI 응답 시간이 들어가지 않는다.
+- 답변 대기는 `AI_REPLY_TIMEOUT_SECONDS`(기본 30), 조회 간격은 `AI_REPLY_POLL_INTERVAL_SECONDS`(기본 0.5)로 바꾼다. 간격을 너무 줄이면 목록 조회(`ai_reply_poll`)가 부하의 대부분을 차지해 결과가 왜곡된다.
+- 동시에 만드는 답변 수가 `AI_CHAT_REPLY_MAX_CONCURRENCY`(기본 200)를 넘으면 메시지 전송이 `503`으로 거절된다.
 
 ## 4. 결과 판독
 
