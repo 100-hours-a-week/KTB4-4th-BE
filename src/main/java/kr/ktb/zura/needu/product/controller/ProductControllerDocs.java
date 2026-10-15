@@ -47,6 +47,10 @@ public class ProductControllerDocs implements ControllerDocs {
                         .successStatus(HttpStatus.NO_CONTENT)
                         .errors(ACTIVE_USER_ERRORS)
                         .build(),
+                OperationDoc.of(PurchaseCheckController.class, "findPurchaseCheck")
+                        .errors(ACTIVE_USER_ERRORS)
+                        .errors(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND)
+                        .build(),
                 OperationDoc.of(PurchaseCheckController.class, "answerPurchaseCheck")
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND,

@@ -329,6 +329,37 @@ class FriendServiceTest {
         verify(userService).completeKakaoFriendSync(1L);
     }
 
+    @Test
+    void confirmedActiveFriends_findAllFriendNicknames_returnsNicknamesByFriendUserId() {
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, List.of(2L, 3L, 4L)))
+                .thenReturn(List.of(new Friend(1L, 2L), new Friend(1L, 3L)));
+        // 3L은 친구지만 탈퇴·차단 등으로 활성 사용자 조회에서 빠진 경우
+        when(userService.findAllActiveUsersByIds(List.of(2L, 3L)))
+                .thenReturn(List.of(new UserDetailResponse(2L, "수연", null, true, null)));
+
+        Map<Long, String> nicknames = friendService.findAllFriendNicknames(1L, List.of(2L, 3L, 4L));
+
+        assertThat(nicknames).containsExactly(Map.entry(2L, "수연"));
+    }
+
+    @Test
+    void noFriendRelation_findAllFriendNicknames_returnsEmptyWithoutUserLookup() {
+        when(friendRepository.findAllByOwnerUserIdAndFriendUserIdIn(1L, List.of(4L))).thenReturn(List.of());
+
+        Map<Long, String> nicknames = friendService.findAllFriendNicknames(1L, List.of(4L));
+
+        assertThat(nicknames).isEmpty();
+        verify(userService, never()).findAllActiveUsersByIds(any());
+    }
+
+    @Test
+    void emptyFriendUserIds_findAllFriendNicknames_returnsEmptyWithoutQuery() {
+        Map<Long, String> nicknames = friendService.findAllFriendNicknames(1L, List.of());
+
+        assertThat(nicknames).isEmpty();
+        verify(friendRepository, never()).findAllByOwnerUserIdAndFriendUserIdIn(any(), any());
+    }
+
     private FriendSummaryResponse friendSummary(Long userId, LocalDate birthDate) {
         return friendSummary(userId, "친구", birthDate);
     }

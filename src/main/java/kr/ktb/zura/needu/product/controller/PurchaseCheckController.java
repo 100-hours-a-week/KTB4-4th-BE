@@ -3,11 +3,13 @@ package kr.ktb.zura.needu.product.controller;
 import jakarta.validation.Valid;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.product.dto.request.SubmitPurchaseCheckRequest;
+import kr.ktb.zura.needu.product.dto.response.PurchaseCheckDetailResponse;
 import kr.ktb.zura.needu.product.dto.response.PurchaseCheckResponse;
 import kr.ktb.zura.needu.product.service.PurchaseCheckService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,6 +22,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseCheckController {
 
     private final PurchaseCheckService purchaseCheckService;
+
+    @GetMapping("/{purchaseCheckId}")
+    public ResponseEntity<ApiResponse<PurchaseCheckDetailResponse>> findPurchaseCheck(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long purchaseCheckId
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                ProductResponseMessages.PURCHASE_CHECK_FOUND,
+                purchaseCheckService.findPurchaseCheck(userId, purchaseCheckId)
+        ));
+    }
 
     @PostMapping("/{purchaseCheckId}")
     public ResponseEntity<ApiResponse<PurchaseCheckResponse>> answerPurchaseCheck(

@@ -3,13 +3,18 @@ package kr.ktb.zura.needu.product.service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import jakarta.persistence.EntityManager;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.notification.service.NotificationCreationService;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
+import kr.ktb.zura.needu.product.dto.response.PurchaseCheckDetailResponse;
+import kr.ktb.zura.needu.product.dto.response.PurchaseCheckFriendResponse;
 import kr.ktb.zura.needu.product.dto.response.PurchaseCheckResponse;
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.entity.ProductLinkClick;
@@ -18,6 +23,7 @@ import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.PurchaseCheckRepository;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductContext;
+import kr.ktb.zura.needu.product.type.ProductStatus;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +43,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 // 소유자 조건 조회, @Version 충돌, 유니크 제약은 실제 저장 결과로 확인해야 해서 실제 JPA(H2) 위에서 검증한다.
@@ -47,6 +55,7 @@ class PurchaseCheckServiceTest {
 
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
+    private static final Long FRIEND_USER_ID = 3L;
 
     @Autowired
     private PurchaseCheckService purchaseCheckService;
@@ -61,19 +70,104 @@ class PurchaseCheckServiceTest {
     private UserService userService;
 
     @MockitoBean
+    private FriendService friendService;
+
+    @MockitoBean
     private NotificationCreationService notificationCreationService;
 
+    private Product product;
     private ProductLinkClick click;
 
     @BeforeEach
     void setUp() {
-        Product product = new Product(
+        product = new Product(
                 PlatformType.COUPANG, "external-1", "섬유유연제", null, null,
-                new BigDecimal("16500.00"), null, null, null);
+                new BigDecimal("16500.00"), "https://example.com/product.jpg", null,
+                "https://example.com/product");
         entityManager.persist(product);
         click = new ProductLinkClick(USER_ID, product, ProductContext.PERSONAL, null);
         entityManager.persist(click);
         flushAndClear();
+    }
+
+    @Test
+    void ownPurchaseCheck_findPurchaseCheck_returnsProductAndClickContext() {
+        PurchaseCheck purchaseCheck = savePurchaseCheck();
+
+        PurchaseCheckDetailResponse response = purchaseCheckService.findPurchaseCheck(USER_ID, purchaseCheck.getId());
+
+        assertThat(response.purchaseCheckId()).isEqualTo(purchaseCheck.getId());
+        assertThat(response.context()).isEqualTo(ProductContext.PERSONAL);
+        assertThat(response.friend()).isNull();
+        assertThat(response.product().productId()).isEqualTo(product.getId());
+        assertThat(response.product().name()).isEqualTo("섬유유연제");
+        assertThat(response.product().productImageUrl()).isEqualTo("https://example.com/product.jpg");
+        assertThat(response.product().purchaseUrl()).isEqualTo("https://example.com/product");
+        assertThat(response.product().price()).isEqualTo(16500L);
+        assertThat(response.product().status()).isEqualTo(ProductStatus.ACTIVE);
+        assertThat(response.answered()).isFalse();
+        assertThat(response.purchased()).isNull();
+        assertThat(response.answeredAt()).isNull();
+        assertThat(response.clickedAt()).isNotNull();
+        verify(friendService, never()).findAllFriendNicknames(anyLong(), any());
+    }
+
+    @Test
+    void answeredPurchaseCheck_findPurchaseCheck_returnsAnswer() {
+        PurchaseCheck purchaseCheck = savePurchaseCheck();
+        purchaseCheckService.answerPurchaseCheck(USER_ID, purchaseCheck.getId(), false);
+        flushAndClear();
+
+        PurchaseCheckDetailResponse response = purchaseCheckService.findPurchaseCheck(USER_ID, purchaseCheck.getId());
+
+        assertThat(response.answered()).isTrue();
+        assertThat(response.purchased()).isFalse();
+        assertThat(response.answeredAt()).isNotNull();
+    }
+
+    @Test
+    void otherUsersPurchaseCheck_findPurchaseCheck_throwsNotFound() {
+        PurchaseCheck purchaseCheck = savePurchaseCheck();
+
+        assertThatThrownBy(() -> purchaseCheckService.findPurchaseCheck(OTHER_USER_ID, purchaseCheck.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND);
+    }
+
+    @Test
+    void friendGiftClickWithConfirmedFriend_findPurchaseCheck_returnsFriend() {
+        PurchaseCheck purchaseCheck = saveFriendGiftPurchaseCheck();
+        given(friendService.findAllFriendNicknames(USER_ID, List.of(FRIEND_USER_ID)))
+                .willReturn(Map.of(FRIEND_USER_ID, "수연"));
+
+        PurchaseCheckDetailResponse response = purchaseCheckService.findPurchaseCheck(USER_ID, purchaseCheck.getId());
+
+        assertThat(response.context()).isEqualTo(ProductContext.FRIEND_GIFT);
+        assertThat(response.friend()).isEqualTo(new PurchaseCheckFriendResponse(FRIEND_USER_ID, "수연"));
+    }
+
+    @Test
+    void friendGiftClickWithoutConfirmedFriend_findPurchaseCheck_returnsNullFriend() {
+        PurchaseCheck purchaseCheck = saveFriendGiftPurchaseCheck();
+        given(friendService.findAllFriendNicknames(USER_ID, List.of(FRIEND_USER_ID))).willReturn(Map.of());
+
+        PurchaseCheckDetailResponse response = purchaseCheckService.findPurchaseCheck(USER_ID, purchaseCheck.getId());
+
+        assertThat(response.context()).isEqualTo(ProductContext.FRIEND_GIFT);
+        assertThat(response.friend()).isNull();
+    }
+
+    @Test
+    void inactiveUser_findPurchaseCheck_throwsUserError() {
+        PurchaseCheck purchaseCheck = savePurchaseCheck();
+        willThrow(new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED))
+                .given(userService).validateActiveUser(USER_ID);
+
+        assertThatThrownBy(() -> purchaseCheckService.findPurchaseCheck(USER_ID, purchaseCheck.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(UserErrorCode.USER_ONBOARDING_REQUIRED);
     }
 
     @Test
@@ -191,6 +285,29 @@ class PurchaseCheckServiceTest {
     }
 
     @Test
+    void myGiftClick_createPurchaseCheck_usesMyGiftTitle() {
+        ProductLinkClick myGiftClick = saveClick(ProductContext.MY_GIFT, null);
+
+        purchaseCheckService.createPurchaseCheck(myGiftClick.getId());
+
+        verify(notificationCreationService).createNotifications(
+                any(), any(), isNull(), eq("내 선물 추천에서 본 상품, 구매하셨나요?"), anyString(),
+                any(), anyLong(), anyString(), any(LocalDateTime.class));
+    }
+
+    @Test
+    void friendGiftClick_createPurchaseCheck_usesFriendGiftTitleWithoutFriendName() {
+        ProductLinkClick friendGiftClick = saveClick(ProductContext.FRIEND_GIFT, FRIEND_USER_ID);
+
+        purchaseCheckService.createPurchaseCheck(friendGiftClick.getId());
+
+        verify(notificationCreationService).createNotifications(
+                any(), any(), isNull(), eq("친구 선물로 본 상품, 구매하셨나요?"), anyString(),
+                any(), anyLong(), anyString(), any(LocalDateTime.class));
+        verify(friendService, never()).findAllFriendNicknames(anyLong(), any());
+    }
+
+    @Test
     void clickWithPurchaseCheck_createPurchaseCheck_rejectsDuplicate() {
         savePurchaseCheck();
 
@@ -216,6 +333,22 @@ class PurchaseCheckServiceTest {
                 PurchaseCheck.create(entityManager.getReference(ProductLinkClick.class, click.getId())));
         flushAndClear();
         return purchaseCheck;
+    }
+
+    private PurchaseCheck saveFriendGiftPurchaseCheck() {
+        ProductLinkClick friendGiftClick = saveClick(ProductContext.FRIEND_GIFT, FRIEND_USER_ID);
+        PurchaseCheck purchaseCheck = purchaseCheckRepository.save(
+                PurchaseCheck.create(entityManager.getReference(ProductLinkClick.class, friendGiftClick.getId())));
+        flushAndClear();
+        return purchaseCheck;
+    }
+
+    private ProductLinkClick saveClick(ProductContext context, Long friendUserId) {
+        ProductLinkClick newClick = new ProductLinkClick(
+                USER_ID, entityManager.getReference(Product.class, product.getId()), context, friendUserId);
+        entityManager.persist(newClick);
+        flushAndClear();
+        return newClick;
     }
 
     private void flushAndClear() {

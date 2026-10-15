@@ -105,6 +105,13 @@ public class UserService {
                 .map(UserDetailResponse::from);
     }
 
+    public List<UserDetailResponse> findAllActiveUsersByIds(Collection<Long> userIds) {
+        return userRepository.findAllById(userIds).stream()
+                .filter(User::isActive)
+                .map(UserDetailResponse::from)
+                .toList();
+    }
+
     public Map<Long, Long> findUserIdsByExternalIds(Collection<Long> externalIds) {
         return userRepository.findAllByExternalIdIn(externalIds).stream()
                 .collect(Collectors.toMap(User::getExternalId, User::getId));
