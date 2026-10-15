@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
@@ -64,7 +65,8 @@ public class FakeAiChatClient implements AiChatClient {
     }
 
     @Override
-    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
+    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId,
+                                                     AiServerUserProfileRequest userProfile) {
         pause();
         mockTurns.put(conversationRoomId, 0);
         return new AiServerStartSessionResponse(

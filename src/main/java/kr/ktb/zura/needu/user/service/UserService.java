@@ -12,6 +12,7 @@ import kr.ktb.zura.needu.user.dto.response.AiSummaryResponse;
 import kr.ktb.zura.needu.user.dto.response.MyPageResponse;
 import kr.ktb.zura.needu.user.dto.response.MyProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.TasteProfileResponse;
+import kr.ktb.zura.needu.user.dto.response.UserAiProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.dto.response.UserSummaryResponse;
@@ -81,6 +82,15 @@ public class UserService {
 
     public TasteProfileResponse findTasteProfile(Long userId) {
         return findTasteProfile(findUser(userId));
+    }
+
+    public UserAiProfileResponse findUserAiProfile(Long userId) {
+        User user = findUser(userId);
+        Map<String, Object> onboardingTastes = userTasteProfileRepository.findById(userId)
+                .filter(UserTasteProfile::hasOnboardingTastes)
+                .map(UserTasteProfile::getOnboardingTastes)
+                .orElse(Map.of());
+        return UserAiProfileResponse.from(user, GiftPreference.fromOnboardingTastes(onboardingTastes));
     }
 
     public boolean isOnboardingCompleted(Long userId) {
