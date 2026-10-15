@@ -26,6 +26,9 @@ ai:
     reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
 
 needu:
+  user:
+    withdrawal:
+      lock-ttl: ${USER_WITHDRAWAL_LOCK_TTL:120s}
   notification:
     stream-timeout: ${NOTIFICATION_STREAM_TIMEOUT:30m}
     heartbeat-interval: ${NOTIFICATION_HEARTBEAT_INTERVAL:25s}
