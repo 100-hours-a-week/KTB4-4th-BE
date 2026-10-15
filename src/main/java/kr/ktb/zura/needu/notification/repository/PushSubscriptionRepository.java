@@ -13,7 +13,6 @@ public interface PushSubscriptionRepository extends JpaRepository<PushSubscripti
 
     Optional<PushSubscription> findByEndpointHash(String endpointHash);
 
-    List<PushSubscription> findAllByUserId(Long userId);
 
     List<PushSubscription> findAllByUserIdIn(Collection<Long> userIds);
 
