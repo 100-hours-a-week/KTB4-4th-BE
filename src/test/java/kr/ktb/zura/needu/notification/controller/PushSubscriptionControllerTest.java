@@ -80,6 +80,16 @@ class PushSubscriptionControllerTest {
         verify(pushSubscriptionService).unsubscribe(eq(LOGIN_USER_ID), any());
     }
 
+    @Test
+    void nonHttpsEndpoint_unsubscribe_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(delete(URL).with(authenticatedUser()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endpoint\": \"http://fcm.googleapis.com/fcm/send/abc\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(pushSubscriptionService, never()).unsubscribe(anyLong(), any());
+    }
+
     private static String subscriptionJson(String endpoint) {
         return """
                 {"endpoint": "%s", "expirationTime": null, "keys": {"p256dh": "BNcRdreALRFX", "auth": "tBHItJI5svbpez7KI4CCXg"}}

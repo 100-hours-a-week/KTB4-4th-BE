@@ -24,8 +24,8 @@ import static lombok.AccessLevel.PROTECTED;
 @Table(
         name = "push_subscriptions",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_push_subscriptions_endpoint",
-                columnNames = "endpoint"
+                name = "uk_push_subscriptions_endpoint_hash",
+                columnNames = "endpoint_hash"
         ),
         indexes = @Index(name = "idx_push_subscriptions_user_id", columnList = "user_id")
 )
@@ -42,6 +42,9 @@ public class PushSubscription {
     @Column(nullable = false, length = 1000)
     private String endpoint;
 
+    @Column(name = "endpoint_hash", nullable = false, length = 64)
+    private String endpointHash;
+
     @Column(nullable = false, length = 255)
     private String p256dh;
 
@@ -56,9 +59,10 @@ public class PushSubscription {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    public PushSubscription(Long userId, String endpoint, String p256dh, String auth) {
+    public PushSubscription(Long userId, String endpoint, String endpointHash, String p256dh, String auth) {
         this.userId = userId;
         this.endpoint = endpoint;
+        this.endpointHash = endpointHash;
         this.p256dh = p256dh;
         this.auth = auth;
     }
