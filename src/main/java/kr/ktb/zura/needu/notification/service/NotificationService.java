@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final NotificationPreviewService notificationPreviewService;
     private final UserService userService;
 
     public NotificationSummaryResponse findNotificationSummary(Long userId) {
@@ -47,8 +49,10 @@ public class NotificationService {
         boolean hasNext = notifications.size() > condition.size();
         List<Notification> pageItems = hasNext ? notifications.subList(0, condition.size()) : notifications;
         String nextCursor = hasNext ? NotificationCursor.from(pageItems.getLast()).encode() : null;
+        Map<Long, NotificationPreview> previews = notificationPreviewService.findAllPreviews(userId, pageItems);
         List<NotificationResponse> items = pageItems.stream()
-                .map(notification -> NotificationResponse.from(notification, isTargetAvailable(notification)))
+                .map(notification -> NotificationResponse.from(
+                        notification, isTargetAvailable(notification), previews.get(notification.getId())))
                 .toList();
         long unreadCount = notificationRepository.countUnreadByReceiverUserId(userId);
         long newCount = condition.since() == null

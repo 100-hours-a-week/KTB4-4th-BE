@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.notification.dto.response;
 
 import java.time.LocalDateTime;
 import kr.ktb.zura.needu.notification.entity.Notification;
+import kr.ktb.zura.needu.notification.service.NotificationPreview;
 import kr.ktb.zura.needu.notification.type.NotificationCategory;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
@@ -15,11 +16,14 @@ public record NotificationResponse(
         NotificationResourceType resourceType,
         Long resourceId,
         boolean targetAvailable,
+        // 연결된 리소스 종류에 따라 구조가 다르며, 미리보기가 없는 알림은 null
+        NotificationPreview preview,
         LocalDateTime readAt,
         LocalDateTime createdAt
 ) {
 
-    public static NotificationResponse from(Notification notification, boolean targetAvailable) {
+    public static NotificationResponse from(
+            Notification notification, boolean targetAvailable, NotificationPreview preview) {
         return new NotificationResponse(
                 notification.getId(),
                 notification.getEvent().getCategory(),
@@ -29,6 +33,7 @@ public record NotificationResponse(
                 notification.getEvent().getResourceType(),
                 notification.getEvent().getResourceId(),
                 targetAvailable,
+                preview,
                 notification.getReadAt(),
                 notification.getCreatedAt()
         );

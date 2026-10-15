@@ -12,6 +12,7 @@ import kr.ktb.zura.needu.notification.dto.response.NotificationReadResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationResponse;
 import kr.ktb.zura.needu.notification.dto.response.NotificationSummaryResponse;
 import kr.ktb.zura.needu.notification.exception.NotificationErrorCode;
+import kr.ktb.zura.needu.notification.service.NotificationPreview;
 import kr.ktb.zura.needu.notification.service.NotificationService;
 import kr.ktb.zura.needu.notification.service.NotificationStreamService;
 import kr.ktb.zura.needu.notification.type.NotificationCategory;
@@ -118,7 +119,7 @@ class NotificationControllerTest {
         NotificationResponse notification = new NotificationResponse(501L, NotificationCategory.EVENT,
                 NotificationType.FRIEND_BIRTHDAY,
                 "수연 님의 생일이 7일 남았어요.", "지금 선물을 준비하면 여유 있게 도착해요.",
-                NotificationResourceType.USER, 321L, true, null, serverTime.minusDays(1));
+                NotificationResourceType.USER, 321L, true, null, null, serverTime.minusDays(1));
         given(notificationService.findAllNotifications(LOGIN_USER_ID, new NotificationSearchCondition(null, null, 20, null)))
                 .willReturn(new NotificationListResponse(
                         new CursorPageResponse<>(List.of(notification), "next", true), 4, 0, serverTime));
@@ -135,6 +136,24 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.serverTime").value("2026-09-05T14:30:00"))
                 .andExpect(jsonPath("$.nextCursor").value("next"))
                 .andExpect(jsonPath("$.hasNext").value(true));
+    }
+
+    @Test
+    void notificationWithPreview_findAllNotifications_serializesPreviewFields() throws Exception {
+        LocalDateTime serverTime = LocalDateTime.of(2026, 9, 5, 14, 30);
+        NotificationResponse notification = new NotificationResponse(502L, NotificationCategory.PURCHASE_STATUS,
+                NotificationType.PURCHASE_STATUS,
+                "추천받은 상품, 구매하셨나요?", "구매 여부를 알려주시면 추천이 더 정확해져요.",
+                NotificationResourceType.PURCHASE_CHECK, 56L, true,
+                new TestPreview(12L, "섬유유연제"), null, serverTime.minusDays(1));
+        given(notificationService.findAllNotifications(LOGIN_USER_ID, new NotificationSearchCondition(null, null, 20, null)))
+                .willReturn(new NotificationListResponse(
+                        new CursorPageResponse<>(List.of(notification), null, false), 1, 0, serverTime));
+
+        mockMvc.perform(get(LIST_URL).with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].preview.productId").value(12))
+                .andExpect(jsonPath("$.data.items[0].preview.productName").value("섬유유연제"));
     }
 
     @Test
@@ -341,5 +360,8 @@ class NotificationControllerTest {
 
     private static RequestPostProcessor authenticatedUser() {
         return authentication(new UsernamePasswordAuthenticationToken(LOGIN_USER_ID, null, List.of()));
+    }
+
+    private record TestPreview(Long productId, String productName) implements NotificationPreview {
     }
 }
