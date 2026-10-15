@@ -7,6 +7,7 @@ import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.MyPageResponse;
 import kr.ktb.zura.needu.user.dto.response.UserAiProfileResponse;
+import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.entity.UserTasteProfile;
@@ -384,6 +385,22 @@ class UserServiceTest {
                 () -> userService.findUserAiProfile(1L));
 
         assertEquals(UserErrorCode.USER_NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void mixedUserStatuses_findAllActiveUsersByIds_returnsOnlyActiveUsers() {
+        User activeUser = createActiveUser("친구");
+        ReflectionTestUtils.setField(activeUser, "id", 2L);
+        User blockedUser = createActiveUser("차단회원");
+        ReflectionTestUtils.setField(blockedUser, "id", 3L);
+        blockedUser.block();
+        when(userRepository.findAllById(List.of(2L, 3L))).thenReturn(List.of(activeUser, blockedUser));
+
+        List<UserDetailResponse> response = userService.findAllActiveUsersByIds(List.of(2L, 3L));
+
+        assertEquals(1, response.size());
+        assertEquals(2L, response.getFirst().id());
+        assertEquals("친구", response.getFirst().nickname());
     }
 
     @Test

@@ -53,6 +53,21 @@ public class FriendService {
         return findActiveFriendUser(friendUserId);
     }
 
+    public Map<Long, String> findAllFriendNicknames(Long ownerUserId, Collection<Long> friendUserIds) {
+        if (friendUserIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> confirmedFriendUserIds = friendRepository
+                .findAllByOwnerUserIdAndFriendUserIdIn(ownerUserId, friendUserIds).stream()
+                .map(Friend::getFriendUserId)
+                .toList();
+        if (confirmedFriendUserIds.isEmpty()) {
+            return Map.of();
+        }
+        return userService.findAllActiveUsersByIds(confirmedFriendUserIds).stream()
+                .collect(Collectors.toMap(UserDetailResponse::id, UserDetailResponse::nickname));
+    }
+
     @Transactional
     public FriendFavoriteResponse updateFavorite(Long ownerUserId, Long friendUserId, boolean isFavorite) {
         userService.validateActiveUser(ownerUserId);
