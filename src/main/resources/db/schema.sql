@@ -167,13 +167,17 @@ CREATE TABLE IF NOT EXISTS shedlock (
 CREATE TABLE IF NOT EXISTS notification_settings (
     id           BIGINT       NOT NULL AUTO_INCREMENT,
     user_id      BIGINT       NOT NULL,
-    setting_type VARCHAR(30)  NOT NULL COMMENT 'CHAT, POKE, FRIEND_JOINED, FRIEND_BIRTHDAY, PURCHASE_STATUS, ANNIVERSARY_EVENT, MARKETING, WEB_PUSH, PURCHASE_FEEDBACK',
+    setting_type VARCHAR(30)  NOT NULL COMMENT 'CHAT, POKE, FRIEND_JOINED, FRIEND_BIRTHDAY, PURCHASE_STATUS, ANNIVERSARY_EVENT, MARKETING, PURCHASE_FEEDBACK',
     enabled      TINYINT(1)   NOT NULL,
     created_at   DATETIME(6)  NOT NULL,
     updated_at   DATETIME(6)  NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_notification_settings_user_type (user_id, setting_type)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 웹 푸시는 기기별 구독(push_subscriptions)으로만 관리한다. 제거된 WEB_PUSH 설정 행이 남으면 Enum 변환에 실패한다.
+DELETE FROM notification_settings
+WHERE setting_type = 'WEB_PUSH';
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
     id            BIGINT        NOT NULL AUTO_INCREMENT,
