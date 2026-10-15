@@ -44,6 +44,7 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.ErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.user.service.ConsentService;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,6 +67,7 @@ public class AiChatFacade {
     private final AiChatEventPublisher aiChatEventPublisher;
     private final AiReplyTaskExecutor aiReplyTaskExecutor;
     private final UserService userService;
+    private final ConsentService consentService;
     private final Duration messageRetryAfter;
     private final Duration shortCompletionCooldown;
     private final Set<Long> shortCooldownExternalIds;
@@ -80,6 +82,7 @@ public class AiChatFacade {
                         AiChatEventPublisher aiChatEventPublisher,
                         AiReplyTaskExecutor aiReplyTaskExecutor,
                         UserService userService,
+                        ConsentService consentService,
                         @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter,
                         @Value("${ai.chat.short-completion-cooldown:5m}") Duration shortCompletionCooldown,
                         @Value("${ai.chat.short-cooldown-external-ids:}") Set<Long> shortCooldownExternalIds) {
@@ -93,6 +96,7 @@ public class AiChatFacade {
         this.aiChatEventPublisher = aiChatEventPublisher;
         this.aiReplyTaskExecutor = aiReplyTaskExecutor;
         this.userService = userService;
+        this.consentService = consentService;
         this.messageRetryAfter = messageRetryAfter;
         this.shortCompletionCooldown = shortCompletionCooldown;
         this.shortCooldownExternalIds = shortCooldownExternalIds;
@@ -100,7 +104,7 @@ public class AiChatFacade {
 
     public AiConversationStartResult startOrResumeConversation(Long userId) {
         userService.validateActiveUser(userId);
-        // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
+        validateAiConversationConsent(userId);
         boolean hasShortCooldown = hasShortCompletionCooldown(userId);
         AiChatRoom room = hasShortCooldown
                 ? aiChatRoomService.findOrReserveRoom(userId, shortCompletionCooldown)
@@ -142,14 +146,13 @@ public class AiChatFacade {
     // 연결 전 오류(403, 404, 409 입력 잠김, 410 만료)는 HTTP 오류로, 연결 후 오류는 error 이벤트로 보낸다
     public SseEmitter connectStream(Long userId, Long conversationId) {
         userService.validateActiveUser(userId);
-        // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
         AiChatRoom room = aiChatRoomService.findStreamableRoom(userId, conversationId);
         return aiChatStreamService.connect(room);
     }
 
     public AiMessageSendResult sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
         userService.validateActiveUser(userId);
-        // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
+        validateAiConversationConsent(userId);
         aiChatRoomService.validateMessageSendableRoom(userId, conversationId);
         Optional<AiMessageSendResult> resentResult = findResentResult(conversationId, request);
         if (resentResult.isPresent()) {
@@ -165,6 +168,12 @@ public class AiChatFacade {
         } catch (RuntimeException e) {
             aiConversationLock.unlock(lock.get());
             throw e;
+        }
+    }
+
+    private void validateAiConversationConsent(Long userId) {
+        if (!consentService.hasAgreedToAiConversation(userId)) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_CONSENT_REQUIRED);
         }
     }
 

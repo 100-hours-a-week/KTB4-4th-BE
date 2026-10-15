@@ -113,6 +113,17 @@ class AiChatControllerTest {
     }
 
     @Test
+    void aiConversationNotAgreed_startOrResumeConversation_returnsForbidden() throws Exception {
+        given(aiChatFacade.startOrResumeConversation(USER_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONSENT_REQUIRED));
+
+        mockMvc.perform(postConversation())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("AI 대화를 이용하려면 정보 활용 동의가 필요합니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
     void aiServerUnavailable_startOrResumeConversation_returnsServiceUnavailable() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
@@ -163,6 +174,17 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.progress").value(15))
                 .andExpect(jsonPath("$.data.inputLocked").value(true))
                 .andExpect(jsonPath("$.data.analysis").doesNotExist());
+    }
+
+    @Test
+    void aiConversationNotAgreed_sendMessage_returnsForbidden() throws Exception {
+        given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONSENT_REQUIRED));
+
+        mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("AI 대화를 이용하려면 정보 활용 동의가 필요합니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
