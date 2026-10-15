@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.aichat.facade;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
@@ -57,9 +59,12 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.user.dto.response.UserAiProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
+import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.ConsentService;
 import kr.ktb.zura.needu.user.service.UserService;
+import kr.ktb.zura.needu.user.type.Gender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -105,6 +110,10 @@ class AiChatFacadeTest {
     private static final Duration SHORT_COMPLETION_COOLDOWN = Duration.ofMinutes(5);
     private static final OffsetDateTime EXPIRATION_AT = OffsetDateTime.parse("2026-09-23T05:48:00+00:00");
     private static final LocalDateTime PURGE_AT = LocalDateTime.of(2026, 9, 23, 5, 48);
+    private static final UserAiProfileResponse USER_AI_PROFILE = new UserAiProfileResponse(
+            "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE, List.of("COFFEE_TEA"), List.of("PEANUT"), List.of());
+    private static final AiServerUserProfileRequest USER_PROFILE_REQUEST =
+            AiServerUserProfileRequest.from(USER_AI_PROFILE);
     private static final AiConversationLock.Handle LOCK_HANDLE =
             new AiConversationLock.Handle(ROOM_ID, "lock-owner-token");
 
@@ -165,7 +174,8 @@ class AiChatFacadeTest {
     @Test
     void noRoom_startOrResumeConversation_startsSessionAndReturnsCreated() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, ROOM_ID)).willReturn(startSessionResponse(ROOM_ID));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(ROOM_ID));
         given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
@@ -188,7 +198,8 @@ class AiChatFacadeTest {
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
         given(aiChatRoomService.findOrReserveRoom(USER_ID, SHORT_COMPLETION_COOLDOWN))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, ROOM_ID)).willReturn(startSessionResponse(ROOM_ID));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(ROOM_ID));
         given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT));
 
@@ -220,7 +231,8 @@ class AiChatFacadeTest {
                         LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
         given(aiChatRoomService.expireAndReserveRoom(USER_ID, ROOM_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID)).willReturn(startSessionResponse(NEW_ROOM_ID));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(NEW_ROOM_ID));
         given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
@@ -239,7 +251,8 @@ class AiChatFacadeTest {
                         LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
         given(aiChatRoomService.expireAndReserveRoom(USER_ID, ROOM_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID)).willReturn(startSessionResponse(NEW_ROOM_ID));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(NEW_ROOM_ID));
         given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
@@ -291,7 +304,8 @@ class AiChatFacadeTest {
     @Test
     void aiServerUnavailableWhileStarting_startOrResumeConversation_discardsReservedRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, ROOM_ID))
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
@@ -302,9 +316,23 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void userProfileLookupFails_startOrResumeConversation_discardsRoomWithoutCallingAiServer() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(userService.findUserAiProfile(USER_ID))
+                .willThrow(new BusinessException(UserErrorCode.USER_NOT_FOUND));
+
+        assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(UserErrorCode.USER_NOT_FOUND);
+        verify(aiChatRoomService).discardRoom(ROOM_ID);
+        verifyNoInteractions(aiChatClient);
+    }
+
+    @Test
     void aiResponseWithoutGreeting_startOrResumeConversation_throwsInvalidResponseAndDiscardsRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, ROOM_ID))
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST))
                 .willReturn(new AiServerStartSessionResponse(ROOM_ID, null, null, EXPIRATION_AT, 20));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
@@ -317,7 +345,8 @@ class AiChatFacadeTest {
     void differentConversationId_startOrResumeConversation_throwsInvalidResponseAndDiscardsRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
-        given(aiChatClient.startSession(USER_ID, ROOM_ID))
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST))
                 .willReturn(startSessionResponse(NEW_ROOM_ID));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))

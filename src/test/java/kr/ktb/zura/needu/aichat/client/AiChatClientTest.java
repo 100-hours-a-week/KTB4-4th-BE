@@ -3,12 +3,14 @@ package kr.ktb.zura.needu.aichat.client;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
@@ -19,6 +21,7 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.user.type.Gender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -27,6 +30,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -78,9 +82,21 @@ class AiChatClientTest {
     void startSession_requestsSessionEndpointAndParsesResponse() {
         server.expect(requestTo("http://localhost:9000/v1/chat/sessions"))
                 .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer service-token"))
                 .andExpect(content().json("""
-                        {"userId": 1, "conversationRoomId": 101}
-                        """))
+                        {
+                          "userId": 1,
+                          "conversationRoomId": 101,
+                          "userProfile": {
+                            "nickname": "니듀",
+                            "birthDate": "2000-01-01",
+                            "gender": "FEMALE",
+                            "interestCategoryCodes": ["COFFEE_TEA", "TRAVEL"],
+                            "allergyCodes": ["PEANUT"],
+                            "giftExclusionCodes": ["ALCOHOL"]
+                          }
+                        }
+                        """, JsonCompareMode.STRICT))
                 .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON).body("""
                         {
                           "conversationRoomId": 101,
@@ -91,7 +107,9 @@ class AiChatClientTest {
                         }
                         """));
 
-        AiServerStartSessionResponse response = client.startSession(1L, 101L);
+        AiServerStartSessionResponse response = client.startSession(1L, 101L, new AiServerUserProfileRequest(
+                "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE,
+                List.of("COFFEE_TEA", "TRAVEL"), List.of("PEANUT"), List.of("ALCOHOL")));
 
         assertEquals(new AiServerStartSessionResponse(
                 101L, "안녕하세요",

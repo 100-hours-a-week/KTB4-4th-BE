@@ -2,16 +2,19 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerSendMessageResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse;
+import kr.ktb.zura.needu.user.type.Gender;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,11 +23,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FakeAiChatClientTest {
 
+    private static final AiServerUserProfileRequest USER_PROFILE = new AiServerUserProfileRequest(
+            "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE, List.of("COFFEE_TEA"), List.of(), List.of());
+
     @Test
     void conversationFlow_returnsConsistentResponses() {
         AiChatClient client = new FakeAiChatClient(Duration.ZERO, 2, 20, Duration.ZERO);
 
-        AiServerStartSessionResponse session = client.startSession(1L, 101L);
+        AiServerStartSessionResponse session = client.startSession(1L, 101L, USER_PROFILE);
         AiServerSendMessageResponse firstReply = client.sendMessage(1L, 101L, "캠핑을 좋아해요");
         AiServerSendMessageResponse secondReply = client.sendMessage(1L, 101L, "장비를 고르는 게 좋아요");
         AiServerAnalysisResponse analysis = client.createAnalysis(101L);
@@ -59,7 +65,7 @@ class FakeAiChatClientTest {
     void configuredMaxTurns_locksInputOnLastTurn() {
         AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3, 20, Duration.ZERO);
 
-        client.startSession(1L, 101L);
+        client.startSession(1L, 101L, USER_PROFILE);
         AiServerSendMessageResponse firstReply = client.sendMessage(1L, 101L, "first");
         AiServerSendMessageResponse secondReply = client.sendMessage(1L, 101L, "second");
         AiServerSendMessageResponse thirdReply = client.sendMessage(1L, 101L, "third");
@@ -76,7 +82,7 @@ class FakeAiChatClientTest {
         AiChatClient client = new FakeAiChatClient(Duration.ofMillis(30), 2, 20, Duration.ZERO);
 
         long startedAt = System.nanoTime();
-        client.startSession(1L, 101L);
+        client.startSession(1L, 101L, USER_PROFILE);
 
         assertTrue(Duration.ofNanos(System.nanoTime() - startedAt).toMillis() >= 20);
     }
@@ -84,7 +90,7 @@ class FakeAiChatClientTest {
     @Test
     void configuredReplyChunks_streamMessage_passesReplyInChunksThenReturnsResponse() {
         AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3, 2, Duration.ZERO);
-        client.startSession(1L, 101L);
+        client.startSession(1L, 101L, USER_PROFILE);
         List<String> chunks = new ArrayList<>();
 
         AiServerSendMessageResponse response = client.streamMessage(1L, 101L, 701L, "first", chunks::add);

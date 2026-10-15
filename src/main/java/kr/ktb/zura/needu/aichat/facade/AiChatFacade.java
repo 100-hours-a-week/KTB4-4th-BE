@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
@@ -341,7 +342,9 @@ public class AiChatFacade {
 
     private AiConversationStartResult startConversation(Long userId, Long roomId) {
         try {
-            AiServerStartSessionResponse session = aiChatClient.startSession(userId, roomId);
+            AiServerUserProfileRequest userProfile =
+                    AiServerUserProfileRequest.from(userService.findUserAiProfile(userId));
+            AiServerStartSessionResponse session = aiChatClient.startSession(userId, roomId, userProfile);
             validateStartSession(roomId, session);
             AiChatRoom room = aiChatRoomService.activateRoom(
                     roomId, session.greeting(), toPurgeAt(session.expirationAt()));

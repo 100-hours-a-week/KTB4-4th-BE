@@ -14,6 +14,7 @@ import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageStreamRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerStartSessionRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerErrorResponse;
@@ -71,9 +72,11 @@ public class HttpAiChatClient implements AiChatClient {
     }
 
     @Override
-    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
+    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId,
+                                                     AiServerUserProfileRequest userProfile) {
         return request(AiChatEndpoint.START_SESSION, Map.of(),
-                new AiServerStartSessionRequest(userId, conversationRoomId), AiServerStartSessionResponse.class);
+                new AiServerStartSessionRequest(userId, conversationRoomId, userProfile),
+                AiServerStartSessionResponse.class);
     }
 
     @Override
