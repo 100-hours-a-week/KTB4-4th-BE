@@ -5,11 +5,13 @@ import java.time.LocalDateTime;
 
 import kr.ktb.zura.needu.product.entity.Product;
 import kr.ktb.zura.needu.product.entity.ProductLinkClick;
+import kr.ktb.zura.needu.product.entity.PurchaseCheck;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.data.domain.Limit;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +64,52 @@ class ProductLinkClickRepositoryTest {
 
         assertThat(productLinkClickRepository.existsRecentClick(
                 USER_ID, lamp.getId(), ProductContext.PERSONAL, LocalDateTime.now().minusDays(7))).isFalse();
+    }
+
+    @Test
+    void clicksInWindow_findPurchaseCheckTargetIds_returnsOnlyClicksWithoutPurchaseCheck() {
+        Product lamp = saveProduct("램프");
+        LocalDateTime to = LocalDateTime.now().minusDays(7);
+        LocalDateTime from = to.minusDays(3);
+        ProductLinkClick target = saveClick(USER_ID, lamp, ProductContext.PERSONAL, to.minusDays(1));
+        ProductLinkClick checked = saveClick(USER_ID, lamp, ProductContext.MY_GIFT, to.minusDays(1));
+        entityManager.persistAndFlush(PurchaseCheck.create(
+                entityManager.find(ProductLinkClick.class, checked.getId())));
+        ProductLinkClick deleted = saveClick(2L, lamp, ProductContext.PERSONAL, to.minusDays(1));
+        entityManager.find(ProductLinkClick.class, deleted.getId()).delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(productLinkClickRepository.findPurchaseCheckTargetIds(from, to, 0L, Limit.of(10)))
+                .containsExactly(target.getId());
+    }
+
+    @Test
+    void clicksOutsideWindow_findPurchaseCheckTargetIds_excludesTooRecentAndTooOldClicks() {
+        Product lamp = saveProduct("램프");
+        LocalDateTime to = LocalDateTime.now().minusDays(7);
+        LocalDateTime from = to.minusDays(3);
+        ProductLinkClick atTo = saveClick(USER_ID, lamp, ProductContext.PERSONAL, to);
+        saveClick(USER_ID, lamp, ProductContext.MY_GIFT, to.plusSeconds(1));
+        saveClick(USER_ID, lamp, ProductContext.FRIEND_GIFT, from);
+
+        assertThat(productLinkClickRepository.findPurchaseCheckTargetIds(from, to, 0L, Limit.of(10)))
+                .containsExactly(atTo.getId());
+    }
+
+    @Test
+    void lastIdAndLimit_findPurchaseCheckTargetIds_returnsNextClicksInIdOrder() {
+        Product lamp = saveProduct("램프");
+        LocalDateTime to = LocalDateTime.now().minusDays(7);
+        LocalDateTime from = to.minusDays(3);
+        ProductLinkClick first = saveClick(USER_ID, lamp, ProductContext.PERSONAL, to.minusHours(1));
+        ProductLinkClick second = saveClick(2L, lamp, ProductContext.PERSONAL, to.minusHours(3));
+        ProductLinkClick third = saveClick(3L, lamp, ProductContext.PERSONAL, to.minusHours(2));
+
+        assertThat(productLinkClickRepository.findPurchaseCheckTargetIds(from, to, 0L, Limit.of(2)))
+                .containsExactly(first.getId(), second.getId());
+        assertThat(productLinkClickRepository.findPurchaseCheckTargetIds(from, to, second.getId(), Limit.of(2)))
+                .containsExactly(third.getId());
     }
 
     private Product saveProduct(String name) {
