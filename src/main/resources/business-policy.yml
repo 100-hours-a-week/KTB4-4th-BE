@@ -51,3 +51,14 @@ needu:
     link-click:
       # 같은 사용자-상품-context의 클릭을 다시 기록하지 않는 기간
       duplicate-window: ${PRODUCT_LINK_CLICK_DUPLICATE_WINDOW:7d}
+    purchase-check:
+      cron: ${PURCHASE_CHECK_CRON:0 0 12 * * *}
+      zone: ${PURCHASE_CHECK_ZONE:Asia/Seoul}
+      # 링크 클릭 후 구매 여부를 묻기까지의 기간
+      delay: ${PURCHASE_CHECK_DELAY:7d}
+      # delay가 지난 클릭을 이 기간만큼 거슬러 찾는다. 스케줄러가 며칠 멈춰도 놓치지 않고, 이보다 오래된 클릭은 묻지 않는다
+      lookback: ${PURCHASE_CHECK_LOOKBACK:3d}
+      batch-size: ${PURCHASE_CHECK_BATCH_SIZE:100}
+      lock-at-most-for: ${PURCHASE_CHECK_LOCK_AT_MOST_FOR:10m}
+      lock-at-least-for: ${PURCHASE_CHECK_LOCK_AT_LEAST_FOR:1m}
+
