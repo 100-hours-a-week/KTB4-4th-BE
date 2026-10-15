@@ -4,7 +4,9 @@ import jakarta.validation.Valid;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.notification.dto.request.CreatePushSubscriptionRequest;
 import kr.ktb.zura.needu.notification.dto.request.DeletePushSubscriptionRequest;
+import kr.ktb.zura.needu.notification.dto.request.PushSubscriptionStatusRequest;
 import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionResponse;
+import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionStatusResponse;
 import kr.ktb.zura.needu.notification.service.PushSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +32,18 @@ public class PushSubscriptionController {
         return ResponseEntity.ok(ApiResponse.of(
                 NotificationResponseMessage.PUSH_SUBSCRIBED.getMessage(),
                 pushSubscriptionService.subscribe(userId, request)
+        ));
+    }
+
+    // endpoint는 구독 자격 증명이라 쿼리스트링에 노출하지 않도록 GET 대신 POST 본문으로 받는다.
+    @PostMapping("/status")
+    public ResponseEntity<ApiResponse<PushSubscriptionStatusResponse>> findSubscriptionStatus(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody PushSubscriptionStatusRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                NotificationResponseMessage.PUSH_SUBSCRIPTION_STATUS_FOUND.getMessage(),
+                pushSubscriptionService.findSubscriptionStatus(userId, request)
         ));
     }
 

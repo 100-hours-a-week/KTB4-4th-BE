@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -13,7 +14,9 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.notification.dto.request.CreatePushSubscriptionRequest;
 import kr.ktb.zura.needu.notification.dto.request.DeletePushSubscriptionRequest;
 import kr.ktb.zura.needu.notification.dto.request.PushSubscriptionKeysRequest;
+import kr.ktb.zura.needu.notification.dto.request.PushSubscriptionStatusRequest;
 import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionResponse;
+import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionStatusResponse;
 import kr.ktb.zura.needu.notification.entity.PushSubscription;
 import kr.ktb.zura.needu.notification.repository.PushSubscriptionRepository;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -115,5 +118,40 @@ class PushSubscriptionServiceTest {
 
         verify(userService).validateActiveUser(USER_ID);
         verify(pushSubscriptionRepository).deleteByEndpointHashAndUserId(ENDPOINT_HASH, USER_ID);
+    }
+
+    @Test
+    void ownedEndpoint_findSubscriptionStatus_returnsSubscribed() {
+        given(pushSubscriptionRepository.existsByEndpointHashAndUserId(ENDPOINT_HASH, USER_ID))
+                .willReturn(true);
+
+        PushSubscriptionStatusResponse response = pushSubscriptionService.findSubscriptionStatus(
+                USER_ID, new PushSubscriptionStatusRequest(ENDPOINT));
+
+        verify(userService).validateActiveUser(USER_ID);
+        assertThat(response).isEqualTo(new PushSubscriptionStatusResponse(true));
+    }
+
+    @Test
+    void endpointNotOwnedByUser_findSubscriptionStatus_returnsNotSubscribed() {
+        given(pushSubscriptionRepository.existsByEndpointHashAndUserId(ENDPOINT_HASH, USER_ID))
+                .willReturn(false);
+
+        PushSubscriptionStatusResponse response = pushSubscriptionService.findSubscriptionStatus(
+                USER_ID, new PushSubscriptionStatusRequest(ENDPOINT));
+
+        assertThat(response).isEqualTo(new PushSubscriptionStatusResponse(false));
+    }
+
+    @Test
+    void untrustedEndpoint_findSubscriptionStatus_throwsInvalidInput() {
+        PushSubscriptionStatusRequest request = new PushSubscriptionStatusRequest("https://example.com/push");
+
+        assertThatThrownBy(() -> pushSubscriptionService.findSubscriptionStatus(USER_ID, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.COMMON_INVALID_INPUT));
+        verify(pushSubscriptionRepository, never())
+                .existsByEndpointHashAndUserId(org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyLong());
     }
 }

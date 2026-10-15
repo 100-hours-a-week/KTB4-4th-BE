@@ -151,6 +151,11 @@ needu:
         path-pattern: /api/v1/users/me/push-subscriptions
         limit: 30
         window: 1m
+      push-subscription-status:
+        method: POST
+        path-pattern: /api/v1/users/me/push-subscriptions/status
+        limit: 30
+        window: 1m
       push-subscription-delete:
         method: DELETE
         path-pattern: /api/v1/users/me/push-subscriptions

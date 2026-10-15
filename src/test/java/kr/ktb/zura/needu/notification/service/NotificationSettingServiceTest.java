@@ -44,7 +44,6 @@ class NotificationSettingServiceTest {
                 new NotificationSettingResponse(NotificationSettingType.PURCHASE_STATUS, true, null),
                 new NotificationSettingResponse(NotificationSettingType.ANNIVERSARY_EVENT, true, null),
                 new NotificationSettingResponse(NotificationSettingType.MARKETING, true, null),
-                new NotificationSettingResponse(NotificationSettingType.WEB_PUSH, true, null),
                 new NotificationSettingResponse(NotificationSettingType.PURCHASE_FEEDBACK, true, null)
         );
     }

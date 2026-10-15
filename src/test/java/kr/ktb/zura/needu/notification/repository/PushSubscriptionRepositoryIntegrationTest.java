@@ -50,4 +50,14 @@ class PushSubscriptionRepositoryIntegrationTest {
 
         assertThat(pushSubscriptionRepository.findByEndpointHash(ENDPOINT_HASH)).isPresent();
     }
+
+    @Test
+    void endpointOwnedByAnotherUser_existsByEndpointHashAndUserId_returnsFalseForPreviousOwner() {
+        pushSubscriptionRepository.upsert(1L, ENDPOINT, ENDPOINT_HASH, "p256dh", "auth");
+        pushSubscriptionRepository.upsert(2L, ENDPOINT, ENDPOINT_HASH, "p256dh", "auth");
+        entityManager.clear();
+
+        assertThat(pushSubscriptionRepository.existsByEndpointHashAndUserId(ENDPOINT_HASH, 2L)).isTrue();
+        assertThat(pushSubscriptionRepository.existsByEndpointHashAndUserId(ENDPOINT_HASH, 1L)).isFalse();
+    }
 }
