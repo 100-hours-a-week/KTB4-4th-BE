@@ -3,9 +3,14 @@ package kr.ktb.zura.needu.product.controller;
 import java.time.LocalDateTime;
 import java.util.List;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.product.dto.response.PurchaseCheckDetailResponse;
+import kr.ktb.zura.needu.product.dto.response.PurchaseCheckFriendResponse;
+import kr.ktb.zura.needu.product.dto.response.PurchaseCheckProductResponse;
 import kr.ktb.zura.needu.product.dto.response.PurchaseCheckResponse;
 import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.service.PurchaseCheckService;
+import kr.ktb.zura.needu.product.type.ProductContext;
+import kr.ktb.zura.needu.product.type.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -22,6 +27,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +44,59 @@ class PurchaseCheckControllerTest {
 
     @MockitoBean
     private PurchaseCheckService purchaseCheckService;
+
+    @Test
+    void ownPurchaseCheck_findPurchaseCheck_returnsModalData() throws Exception {
+        given(purchaseCheckService.findPurchaseCheck(LOGIN_USER_ID, PURCHASE_CHECK_ID))
+                .willReturn(new PurchaseCheckDetailResponse(
+                        PURCHASE_CHECK_ID,
+                        ProductContext.FRIEND_GIFT,
+                        new PurchaseCheckFriendResponse(321L, "수연"),
+                        new PurchaseCheckProductResponse(
+                                2992L, "섬유유연제", "https://example.com/product.jpg",
+                                "https://example.com/product", 16500L, ProductStatus.ACTIVE),
+                        false,
+                        null,
+                        null,
+                        LocalDateTime.of(2026, 10, 8, 5, 12)));
+
+        mockMvc.perform(get(URL, PURCHASE_CHECK_ID).with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("구매 확인 정보를 조회했습니다."))
+                .andExpect(jsonPath("$.data.purchaseCheckId").value(PURCHASE_CHECK_ID))
+                .andExpect(jsonPath("$.data.context").value("FRIEND_GIFT"))
+                .andExpect(jsonPath("$.data.friend.userId").value(321))
+                .andExpect(jsonPath("$.data.friend.name").value("수연"))
+                .andExpect(jsonPath("$.data.product.productId").value(2992))
+                .andExpect(jsonPath("$.data.product.name").value("섬유유연제"))
+                .andExpect(jsonPath("$.data.product.productImageUrl").value("https://example.com/product.jpg"))
+                .andExpect(jsonPath("$.data.product.purchaseUrl").value("https://example.com/product"))
+                .andExpect(jsonPath("$.data.product.price").value(16500))
+                .andExpect(jsonPath("$.data.product.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.answered").value(false))
+                .andExpect(jsonPath("$.data.purchased").doesNotExist())
+                .andExpect(jsonPath("$.data.answeredAt").doesNotExist())
+                .andExpect(jsonPath("$.data.clickedAt").value("2026-10-08T05:12:00"));
+    }
+
+    @Test
+    void nonNumericId_findPurchaseCheck_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(URL, "abc").with(authenticatedUser()))
+                .andExpect(status().isBadRequest());
+
+        verify(purchaseCheckService, never()).findPurchaseCheck(anyLong(), anyLong());
+    }
+
+    @Test
+    void missingPurchaseCheck_findPurchaseCheck_returnsNotFound() throws Exception {
+        given(purchaseCheckService.findPurchaseCheck(LOGIN_USER_ID, PURCHASE_CHECK_ID))
+                .willThrow(new BusinessException(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND));
+
+        mockMvc.perform(get(URL, PURCHASE_CHECK_ID).with(authenticatedUser()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("구매 확인 요청을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
 
     @Test
     void validRequest_answerPurchaseCheck_returnsAnswer() throws Exception {
