@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.MyPageResponse;
+import kr.ktb.zura.needu.user.dto.response.UserAiProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.entity.UserTasteProfile;
@@ -342,6 +343,47 @@ class UserServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> userService.findMyPage(1L));
 
         assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
+    void onboardedUser_findUserAiProfile_returnsUserInfoAndOnboardingTastes() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        user.completeOnboarding(Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of(
+                "interestCategoryCodes", List.of("COFFEE_TEA", "TRAVEL"),
+                "allergyCodes", List.of("PEANUT"),
+                "giftExclusionCodes", List.of("ALCOHOL")));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        UserAiProfileResponse response = userService.findUserAiProfile(1L);
+
+        assertEquals(new UserAiProfileResponse(
+                "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE,
+                List.of("COFFEE_TEA", "TRAVEL"), List.of("PEANUT"), List.of("ALCOHOL")), response);
+    }
+
+    @Test
+    void userWithoutTasteProfile_findUserAiProfile_returnsEmptyOnboardingTastes() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        UserAiProfileResponse response = userService.findUserAiProfile(1L);
+
+        assertEquals("니듀", response.nickname());
+        assertTrue(response.interestCategoryCodes().isEmpty());
+        assertTrue(response.allergyCodes().isEmpty());
+        assertTrue(response.giftExclusionCodes().isEmpty());
+    }
+
+    @Test
+    void missingUser_findUserAiProfile_throwsUserNotFound() {
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findUserAiProfile(1L));
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, exception.getErrorCode());
     }
 
     @Test
