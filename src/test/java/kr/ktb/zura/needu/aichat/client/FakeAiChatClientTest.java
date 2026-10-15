@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.client;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
@@ -21,7 +22,7 @@ class FakeAiChatClientTest {
 
     @Test
     void conversationFlow_returnsConsistentResponses() {
-        AiChatClient client = new FakeAiChatClient(Duration.ZERO, 2);
+        AiChatClient client = new FakeAiChatClient(Duration.ZERO, 2, 20, Duration.ZERO);
 
         AiServerStartSessionResponse session = client.startSession(1L, 101L);
         AiServerSendMessageResponse firstReply = client.sendMessage(1L, 101L, "캠핑을 좋아해요");
@@ -56,7 +57,7 @@ class FakeAiChatClientTest {
 
     @Test
     void configuredMaxTurns_locksInputOnLastTurn() {
-        AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3);
+        AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3, 20, Duration.ZERO);
 
         client.startSession(1L, 101L);
         AiServerSendMessageResponse firstReply = client.sendMessage(1L, 101L, "first");
@@ -72,7 +73,7 @@ class FakeAiChatClientTest {
 
     @Test
     void configuredLatency_delaysMockCall() {
-        AiChatClient client = new FakeAiChatClient(Duration.ofMillis(30), 2);
+        AiChatClient client = new FakeAiChatClient(Duration.ofMillis(30), 2, 20, Duration.ZERO);
 
         long startedAt = System.nanoTime();
         client.startSession(1L, 101L);
@@ -81,10 +82,27 @@ class FakeAiChatClientTest {
     }
 
     @Test
+    void configuredReplyChunks_streamMessage_passesReplyInChunksThenReturnsResponse() {
+        AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3, 2, Duration.ZERO);
+        client.startSession(1L, 101L);
+        List<String> chunks = new ArrayList<>();
+
+        AiServerSendMessageResponse response = client.streamMessage(1L, 101L, 701L, "first", chunks::add);
+
+        assertEquals(response.reply(), String.join("", chunks));
+        assertTrue(chunks.stream().allMatch(chunk -> chunk.codePointCount(0, chunk.length()) <= 2));
+        assertTrue(chunks.size() > 1);
+    }
+
+    @Test
     void invalidConfiguration_throwsException() {
         assertThrows(IllegalArgumentException.class,
-                () -> new FakeAiChatClient(Duration.ofMillis(-1), 2));
+                () -> new FakeAiChatClient(Duration.ofMillis(-1), 2, 20, Duration.ZERO));
         assertThrows(IllegalArgumentException.class,
-                () -> new FakeAiChatClient(Duration.ZERO, 0));
+                () -> new FakeAiChatClient(Duration.ZERO, 0, 20, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class,
+                () -> new FakeAiChatClient(Duration.ZERO, 2, 0, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class,
+                () -> new FakeAiChatClient(Duration.ZERO, 2, 20, Duration.ofMillis(-1)));
     }
 }

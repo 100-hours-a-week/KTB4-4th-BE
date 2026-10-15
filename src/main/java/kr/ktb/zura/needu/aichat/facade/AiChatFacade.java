@@ -10,7 +10,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
-import kr.ktb.zura.needu.aichat.client.AiChatReplyStreamClient;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
@@ -57,7 +56,6 @@ public class AiChatFacade {
     private final AiConversationLock aiConversationLock;
     private final AiGenerationStateService aiGenerationStateService;
     private final AiChatClient aiChatClient;
-    private final AiChatReplyStreamClient aiChatReplyStreamClient;
     private final AiAnalysisConfirmService aiAnalysisConfirmService;
     private final AiChatStreamService aiChatStreamService;
     private final AiChatEventPublisher aiChatEventPublisher;
@@ -71,7 +69,6 @@ public class AiChatFacade {
                         AiConversationLock aiConversationLock,
                         AiGenerationStateService aiGenerationStateService,
                         AiChatClient aiChatClient,
-                        AiChatReplyStreamClient aiChatReplyStreamClient,
                         AiAnalysisConfirmService aiAnalysisConfirmService,
                         AiChatStreamService aiChatStreamService,
                         AiChatEventPublisher aiChatEventPublisher,
@@ -84,7 +81,6 @@ public class AiChatFacade {
         this.aiConversationLock = aiConversationLock;
         this.aiGenerationStateService = aiGenerationStateService;
         this.aiChatClient = aiChatClient;
-        this.aiChatReplyStreamClient = aiChatReplyStreamClient;
         this.aiAnalysisConfirmService = aiAnalysisConfirmService;
         this.aiChatStreamService = aiChatStreamService;
         this.aiChatEventPublisher = aiChatEventPublisher;
@@ -205,7 +201,7 @@ public class AiChatFacade {
         turnEvents.accept(userMessageId, userMessage.getClientMessageId());
         try {
             AiServerSendMessageResponse response = requestReply(
-                    userId, conversationId, userMessage.getContent(), turnEvents::publishDelta);
+                    userId, conversationId, userMessage, turnEvents::publishDelta);
             AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
                     conversationId, userMessageId, response.reply(), response.progress(),
                     response.inputLocked(), toPurgeAt(response.expirationAt()));
@@ -226,11 +222,11 @@ public class AiChatFacade {
         }
     }
 
-    private AiServerSendMessageResponse requestReply(Long userId, Long conversationId, String content,
+    private AiServerSendMessageResponse requestReply(Long userId, Long conversationId, AiMessage userMessage,
                                                      Consumer<String> onDelta) {
         try {
-            AiServerSendMessageResponse response = aiChatReplyStreamClient.streamMessage(
-                    userId, conversationId, content, onDelta);
+            AiServerSendMessageResponse response = aiChatClient.streamMessage(
+                    userId, conversationId, userMessage.getId(), userMessage.getContent(), onDelta);
             validateReply(response);
             return response;
         } catch (BusinessException e) {
