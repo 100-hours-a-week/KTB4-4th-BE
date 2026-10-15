@@ -2,9 +2,9 @@ package kr.ktb.zura.needu.aichat.service;
 
 import java.util.UUID;
 
-import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.sse.AiChatAcceptedEvent;
+import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatDeltaEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatDoneEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatErrorEvent;
@@ -38,11 +38,11 @@ public class AiChatTurnEvents {
         publish(AiChatEventType.DELTA, new AiChatDeltaEvent(userMessageId, nextDeltaIndex++, text));
     }
 
-    public void complete(AiMessageResponse response) {
+    public void complete(AiChatCompletedEvent completed) {
         if (!isAccepted()) {
             return;
         }
-        publish(AiChatEventType.COMPLETED, response);
+        publish(AiChatEventType.COMPLETED, completed);
         publish(AiChatEventType.DONE, new AiChatDoneEvent(userMessageId));
     }
 

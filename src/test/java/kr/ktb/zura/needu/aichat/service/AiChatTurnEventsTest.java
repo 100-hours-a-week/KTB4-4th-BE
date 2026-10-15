@@ -2,9 +2,9 @@ package kr.ktb.zura.needu.aichat.service;
 
 import java.util.UUID;
 
-import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.sse.AiChatAcceptedEvent;
+import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatDeltaEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatDoneEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatErrorEvent;
@@ -34,18 +34,18 @@ class AiChatTurnEventsTest {
 
     @Test
     void repliedTurn_complete_publishesAcceptedDeltasCompletedAndDoneInOrder() {
-        AiMessageResponse response = new AiMessageResponse(USER_MESSAGE_ID, 202L, "좋아요", 10, false);
+        AiChatCompletedEvent completed = new AiChatCompletedEvent(USER_MESSAGE_ID, 202L, "좋아요", 10, false);
 
         turnEvents.accept(USER_MESSAGE_ID, CLIENT_MESSAGE_ID);
         turnEvents.publishDelta("좋아요");
-        turnEvents.complete(response);
+        turnEvents.complete(completed);
 
         InOrder order = inOrder(publisher);
         order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.ACCEPTED,
                 new AiChatAcceptedEvent(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
         order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.DELTA,
                 new AiChatDeltaEvent(USER_MESSAGE_ID, 0, "좋아요"));
-        order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.COMPLETED, response);
+        order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.COMPLETED, completed);
         order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.DONE,
                 new AiChatDoneEvent(USER_MESSAGE_ID));
     }
@@ -123,7 +123,7 @@ class AiChatTurnEventsTest {
 
     @Test
     void notAccepted_completeOrFail_publishesNothing() {
-        turnEvents.complete(new AiMessageResponse(USER_MESSAGE_ID, 202L, "좋아요", 10, false));
+        turnEvents.complete(new AiChatCompletedEvent(USER_MESSAGE_ID, 202L, "좋아요", 10, false));
         turnEvents.fail(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
 
         verifyNoInteractions(publisher);
@@ -138,7 +138,7 @@ class AiChatTurnEventsTest {
         turnEvents.publishDelta("가".repeat(20));
         turnEvents.publishDelta("가".repeat(20));
         turnEvents.publishDelta("가".repeat(5));
-        turnEvents.complete(new AiMessageResponse(USER_MESSAGE_ID, 202L, "가".repeat(45), 10, false));
+        turnEvents.complete(new AiChatCompletedEvent(USER_MESSAGE_ID, 202L, "가".repeat(45), 10, false));
 
         verify(publisher, times(1)).publish(eq(CONVERSATION_ID), eq(AiChatEventType.DELTA), any());
         verify(publisher, times(0)).publish(eq(CONVERSATION_ID), eq(AiChatEventType.COMPLETED), any());

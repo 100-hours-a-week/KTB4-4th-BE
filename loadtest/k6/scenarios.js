@@ -2,6 +2,7 @@ import { check, fail, sleep } from 'k6';
 import k6Crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
 import http from 'k6/http';
+import { Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const JWT_SECRET = __ENV.JWT_SECRET;
@@ -10,6 +11,11 @@ const AI_VUS = Number(__ENV.AI_VUS || 10);
 const AI_TURNS = Number(__ENV.AI_TURNS || 2);
 const MOCK_MAX_TURNS = Number(__ENV.AI_SERVER_MOCK_MAX_TURNS || 2);
 const SCENARIO = __ENV.SCENARIO || 'read';
+const AI_REPLY_TIMEOUT_SECONDS = Number(__ENV.AI_REPLY_TIMEOUT_SECONDS || 30);
+const AI_REPLY_POLL_INTERVAL_SECONDS = Number(__ENV.AI_REPLY_POLL_INTERVAL_SECONDS || 0.5);
+
+// 메시지 전송은 접수(202)만 하고 답변은 백그라운드에서 만든다 => 접수부터 답변 저장까지 걸린 시간을 따로 잰다
+const aiReplyDuration = new Trend('ai_reply_duration', true);
 
 if (!JWT_SECRET) {
     throw new Error('JWT_SECRET is required. Export loadtest/.env before running k6.');
@@ -108,7 +114,12 @@ export function aiFlowScenario() {
             }),
             named(requestParams, 'ai_message'),
         );
-        requireStatus(messageResponse, [200], `AI message ${turn} succeeds`);
+        requireStatus(messageResponse, [202], `AI message ${turn} is accepted`);
+        const userMessageId = messageResponse.json('data.userMessageId');
+        if (!userMessageId) {
+            fail('AI message response did not contain userMessageId');
+        }
+        waitForReply(conversationId, userMessageId, requestParams, turn);
     }
 
     const analysisResponse = http.post(
@@ -124,6 +135,34 @@ export function aiFlowScenario() {
         named(requestParams, 'ai_confirm'),
     );
     requireStatus(confirmResponse, [200], 'AI analysis confirmation succeeds');
+}
+
+function waitForReply(conversationId, userMessageId, requestParams, turn) {
+    const acceptedAt = Date.now();
+    const replied = pollUntilReplied(conversationId, userMessageId, requestParams, turn);
+    check(replied, { [`AI message ${turn} is replied`]: (value) => value });
+    if (!replied) {
+        fail(`AI message ${turn} was not replied within ${AI_REPLY_TIMEOUT_SECONDS}s`);
+    }
+    aiReplyDuration.add(Date.now() - acceptedAt);
+}
+
+// 답변은 SSE로 오지만 k6에는 SSE 클라이언트가 없다 => 가장 최근 메시지가 이 메시지 이후의 AI 답변이 될 때까지 목록을 조회한다
+function pollUntilReplied(conversationId, userMessageId, requestParams, turn) {
+    const deadline = Date.now() + AI_REPLY_TIMEOUT_SECONDS * 1000;
+    while (Date.now() < deadline) {
+        const response = http.get(
+            `${BASE_URL}/api/v1/ai/conversations/${conversationId}/messages?size=1`,
+            named(requestParams, 'ai_reply_poll'),
+        );
+        requireStatus(response, [200], `AI message ${turn} history is readable`);
+        const latest = response.json('data.items.0');
+        if (latest && latest.role === 'AI' && latest.messageId > userMessageId) {
+            return true;
+        }
+        sleep(AI_REPLY_POLL_INTERVAL_SECONDS);
+    }
+    return false;
 }
 
 function requestTwoPages(firstUrl, requestName) {
