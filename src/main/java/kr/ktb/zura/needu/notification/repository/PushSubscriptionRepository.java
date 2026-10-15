@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.notification.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.notification.entity.PushSubscription;
@@ -13,6 +14,8 @@ public interface PushSubscriptionRepository extends JpaRepository<PushSubscripti
     Optional<PushSubscription> findByEndpointHash(String endpointHash);
 
     List<PushSubscription> findAllByUserId(Long userId);
+
+    List<PushSubscription> findAllByUserIdIn(Collection<Long> userIds);
 
     void deleteByEndpointHashAndUserId(String endpointHash, Long userId);
 
