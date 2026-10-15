@@ -53,7 +53,6 @@ public class PurchaseCheck {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    // TODO: PURCHASE_CHECK_ALREADY_ANSWERED(409) 에러 처리 필요 => 안하면 500 에러 발생 가능
     @Version
     private Long version;
 

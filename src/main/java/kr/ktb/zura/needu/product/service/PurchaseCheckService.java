@@ -1,8 +1,19 @@
 package kr.ktb.zura.needu.product.service;
 
+import java.util.Set;
+
+import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.notification.service.NotificationCreationService;
+import kr.ktb.zura.needu.notification.type.NotificationResourceType;
+import kr.ktb.zura.needu.notification.type.NotificationType;
 import kr.ktb.zura.needu.product.dto.response.PurchaseCheckResponse;
+import kr.ktb.zura.needu.product.entity.PurchaseCheck;
+import kr.ktb.zura.needu.product.exception.ProductErrorCode;
+import kr.ktb.zura.needu.product.repository.ProductLinkClickRepository;
+import kr.ktb.zura.needu.product.repository.PurchaseCheckRepository;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,15 +22,50 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class PurchaseCheckService {
 
-    private final UserService userService;
+    private static final String NOTIFICATION_TITLE = "추천받은 상품, 구매하셨나요?";
+    private static final String NOTIFICATION_BODY = "구매 여부를 알려주시면 추천이 더 정확해져요.";
+    private static final String NOTIFICATION_DEDUP_KEY_PREFIX = "PURCHASE_CHECK:";
+    private static final long NOTIFICATION_EXPIRATION_DAYS = 7;
 
-    // TODO: 내 구매 확인이 아니면 PURCHASE_CHECK_NOT_FOUND, 이미 답했으면 PURCHASE_CHECK_ALREADY_ANSWERED.
-    //  구매 확인 생성은 하루 한 번 도는 스케줄러(ShedLock)가 맡는다
-    //  클릭 후 7일이 지났고 아직 purchase_checks가 없는 product_link_clicks로 PurchaseCheck를 만들고 PURCHASE_CHECK 알림을 보낸다
-    //  재실행/중복 실행은 uk_purchase_checks_product_link_click_id가 막는다
+    private final UserService userService;
+    private final NotificationCreationService notificationCreationService;
+    private final PurchaseCheckRepository purchaseCheckRepository;
+    private final ProductLinkClickRepository productLinkClickRepository;
+
     @Transactional
     public PurchaseCheckResponse answerPurchaseCheck(Long userId, Long purchaseCheckId, boolean purchased) {
         userService.validateActiveUser(userId);
-        throw new UnsupportedOperationException("미구현");
+
+        PurchaseCheck purchaseCheck = purchaseCheckRepository.findByIdAndUserId(purchaseCheckId, userId)
+                .orElseThrow(() -> new BusinessException(ProductErrorCode.PURCHASE_CHECK_NOT_FOUND));
+        if (purchaseCheck.isAnswered()) {
+            throw new BusinessException(ProductErrorCode.PURCHASE_CHECK_ALREADY_ANSWERED);
+        }
+
+        purchaseCheck.answer(purchased);
+        try {
+            purchaseCheckRepository.saveAndFlush(purchaseCheck);
+        } catch (OptimisticLockingFailureException e) {
+            throw new BusinessException(ProductErrorCode.PURCHASE_CHECK_ALREADY_ANSWERED);
+        }
+        return PurchaseCheckResponse.from(purchaseCheck);
+    }
+
+    @Transactional
+    public void createPurchaseCheck(Long productLinkClickId) {
+        PurchaseCheck purchaseCheck = purchaseCheckRepository.save(
+                PurchaseCheck.create(productLinkClickRepository.getReferenceById(productLinkClickId)));
+
+        notificationCreationService.createNotifications(
+                Set.of(purchaseCheck.getUserId()),
+                NotificationType.PURCHASE_STATUS,
+                null,
+                NOTIFICATION_TITLE,
+                NOTIFICATION_BODY,
+                NotificationResourceType.PURCHASE_CHECK,
+                purchaseCheck.getId(),
+                NOTIFICATION_DEDUP_KEY_PREFIX + purchaseCheck.getId(),
+                purchaseCheck.getCreatedAt().plusDays(NOTIFICATION_EXPIRATION_DAYS)
+        );
     }
 }
