@@ -11,7 +11,9 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.notification.dto.request.CreatePushSubscriptionRequest;
 import kr.ktb.zura.needu.notification.dto.request.DeletePushSubscriptionRequest;
+import kr.ktb.zura.needu.notification.dto.request.PushSubscriptionStatusRequest;
 import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionResponse;
+import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionStatusResponse;
 import kr.ktb.zura.needu.notification.entity.PushSubscription;
 import kr.ktb.zura.needu.notification.repository.PushSubscriptionRepository;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -51,6 +53,16 @@ public class PushSubscriptionService {
         PushSubscription subscription = pushSubscriptionRepository.findByEndpointHash(endpointHash)
                 .orElseThrow(() -> new IllegalStateException("Saved push subscription not found"));
         return new PushSubscriptionResponse(true, subscription.getUpdatedAt());
+    }
+
+    // 같은 브라우저 구독을 다른 계정이 가져갔을 수 있으므로 endpoint와 현재 사용자가 모두 일치해야 구독 중으로 본다.
+    public PushSubscriptionStatusResponse findSubscriptionStatus(
+            Long userId, PushSubscriptionStatusRequest request) {
+        userService.validateActiveUser(userId);
+        validateAllowedPushService(request.endpoint());
+        return new PushSubscriptionStatusResponse(
+                pushSubscriptionRepository.existsByEndpointHashAndUserId(hash(request.endpoint()), userId)
+        );
     }
 
     @Transactional

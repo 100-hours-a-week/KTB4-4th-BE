@@ -55,6 +55,9 @@ public class NotificationControllerDocs implements ControllerDocs {
                 OperationDoc.of(PushSubscriptionController.class, "subscribe")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
+                OperationDoc.of(PushSubscriptionController.class, "findSubscriptionStatus")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .build(),
                 OperationDoc.of(PushSubscriptionController.class, "unsubscribe")
                         .successStatus(HttpStatus.NO_CONTENT)
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)

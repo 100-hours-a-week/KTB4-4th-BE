@@ -8,7 +8,8 @@ enum NotificationResponseMessage {
     ALL_NOTIFICATIONS_READ("모든 알림을 읽음 처리했습니다."),
     NOTIFICATION_SETTING_FOUND("알림 설정을 조회했습니다."),
     NOTIFICATION_SETTING_UPDATED("알림 설정을 저장했습니다."),
-    PUSH_SUBSCRIBED("웹 푸시 알림을 켰습니다.");
+    PUSH_SUBSCRIBED("웹 푸시 알림을 켰습니다."),
+    PUSH_SUBSCRIPTION_STATUS_FOUND("웹 푸시 구독 상태를 조회했습니다.");
 
     private final String message;
 

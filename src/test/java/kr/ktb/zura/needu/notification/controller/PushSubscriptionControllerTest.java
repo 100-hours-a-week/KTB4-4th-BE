@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.notification.controller;
 import java.time.LocalDateTime;
 import java.util.List;
 import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionResponse;
+import kr.ktb.zura.needu.notification.dto.response.PushSubscriptionStatusResponse;
 import kr.ktb.zura.needu.notification.service.PushSubscriptionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,7 @@ class PushSubscriptionControllerTest {
 
     private static final Long LOGIN_USER_ID = 1L;
     private static final String URL = "/api/v1/users/me/push-subscriptions";
+    private static final String STATUS_URL = "/api/v1/users/me/push-subscriptions/status";
 
     @Autowired
     private MockMvc mockMvc;
@@ -88,6 +90,39 @@ class PushSubscriptionControllerTest {
                 .andExpect(status().isUnprocessableContent());
 
         verify(pushSubscriptionService, never()).unsubscribe(anyLong(), any());
+    }
+
+    @Test
+    void subscribedEndpoint_findSubscriptionStatus_returnsSubscribed() throws Exception {
+        given(pushSubscriptionService.findSubscriptionStatus(eq(LOGIN_USER_ID), any()))
+                .willReturn(new PushSubscriptionStatusResponse(true));
+
+        mockMvc.perform(post(STATUS_URL).with(authenticatedUser()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endpoint\": \"https://fcm.googleapis.com/fcm/send/abc\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("웹 푸시 구독 상태를 조회했습니다."))
+                .andExpect(jsonPath("$.data.subscribed").value(true));
+    }
+
+    @Test
+    void nonHttpsEndpoint_findSubscriptionStatus_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(post(STATUS_URL).with(authenticatedUser()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endpoint\": \"http://fcm.googleapis.com/fcm/send/abc\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(pushSubscriptionService, never()).findSubscriptionStatus(anyLong(), any());
+    }
+
+    @Test
+    void missingEndpoint_findSubscriptionStatus_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(post(STATUS_URL).with(authenticatedUser()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(pushSubscriptionService, never()).findSubscriptionStatus(anyLong(), any());
     }
 
     private static String subscriptionJson(String endpoint) {
