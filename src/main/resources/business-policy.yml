@@ -20,6 +20,10 @@ ai:
     stream-heartbeat-interval: ${AI_CHAT_STREAM_HEARTBEAT_INTERVAL:25s}
     # 연결 하나에 보내지 못하고 쌓인 이벤트가 이 수를 넘으면 그 연결을 끊는다. FE는 다시 연결해 메시지 목록으로 복구한다.
     stream-max-pending-events: ${AI_CHAT_STREAM_MAX_PENDING_EVENTS:1000}
+    # 인스턴스 하나가 동시에 만드는 AI 답변 수다. 넘으면 사용자 메시지를 저장하지 않고 503으로 거절해 AI 서버를 보호한다.
+    reply-max-concurrency: ${AI_CHAT_REPLY_MAX_CONCURRENCY:200}
+    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 중단하고 error 이벤트를 보낸다. ECS stopTimeout보다 짧게 둔다.
+    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
 
 needu:
   notification:

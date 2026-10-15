@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageAcceptedResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
@@ -36,7 +37,11 @@ import kr.ktb.zura.needu.aichat.service.AiChatTurnEvents;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
+import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
+import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
+import kr.ktb.zura.needu.common.exception.ErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.user.service.UserService;
@@ -59,6 +64,7 @@ public class AiChatFacade {
     private final AiAnalysisConfirmService aiAnalysisConfirmService;
     private final AiChatStreamService aiChatStreamService;
     private final AiChatEventPublisher aiChatEventPublisher;
+    private final AiReplyTaskExecutor aiReplyTaskExecutor;
     private final UserService userService;
     private final Duration messageRetryAfter;
     private final Duration shortCompletionCooldown;
@@ -72,6 +78,7 @@ public class AiChatFacade {
                         AiAnalysisConfirmService aiAnalysisConfirmService,
                         AiChatStreamService aiChatStreamService,
                         AiChatEventPublisher aiChatEventPublisher,
+                        AiReplyTaskExecutor aiReplyTaskExecutor,
                         UserService userService,
                         @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter,
                         @Value("${ai.chat.short-completion-cooldown:5m}") Duration shortCompletionCooldown,
@@ -84,6 +91,7 @@ public class AiChatFacade {
         this.aiAnalysisConfirmService = aiAnalysisConfirmService;
         this.aiChatStreamService = aiChatStreamService;
         this.aiChatEventPublisher = aiChatEventPublisher;
+        this.aiReplyTaskExecutor = aiReplyTaskExecutor;
         this.userService = userService;
         this.messageRetryAfter = messageRetryAfter;
         this.shortCompletionCooldown = shortCompletionCooldown;
@@ -139,28 +147,25 @@ public class AiChatFacade {
         return aiChatStreamService.connect(room);
     }
 
-    public AiMessageResponse sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
+    public AiMessageSendResult sendMessage(Long userId, Long conversationId, SendMessageRequest request) {
         userService.validateActiveUser(userId);
         // TODO: AI 정보 활용 동의 여부 확인(403) — 동의 저장 방식 확정 후 구현 (V2)
         aiChatRoomService.validateMessageSendableRoom(userId, conversationId);
+        Optional<AiMessageSendResult> resentResult = findResentResult(conversationId, request);
+        if (resentResult.isPresent()) {
+            return resentResult.get();
+        }
         Optional<AiConversationLock.Handle> lock = aiConversationLock.tryLock(conversationId);
         if (lock.isEmpty()) {
             log.info("AI message already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
         }
-        AiChatTurnEvents turnEvents = new AiChatTurnEvents(aiChatEventPublisher, conversationId);
-        AiMessageResponse response;
         try {
-            response = replyToUserMessage(userId, conversationId, request, turnEvents);
+            return acceptMessage(userId, conversationId, request, lock.get());
         } catch (RuntimeException e) {
             aiConversationLock.unlock(lock.get());
-            turnEvents.fail(e);
             throw e;
         }
-
-        aiConversationLock.unlock(lock.get());
-        turnEvents.complete(response);
-        return response;
     }
 
     private boolean hasShortCompletionCooldown(Long userId) {
@@ -169,48 +174,111 @@ public class AiChatFacade {
                 userService.findAuthenticatedUser(userId).externalId());
     }
 
-    private AiMessageResponse replyToUserMessage(Long userId, Long conversationId, SendMessageRequest request,
-                                                 AiChatTurnEvents turnEvents) {
-        Optional<AiMessage> sentMessage = aiMessageService.findUserMessage(conversationId, request.clientMessageId());
-        if (sentMessage.isEmpty()) {
-            return generateReply(userId, conversationId, createUserMessage(conversationId, request), turnEvents);
+    private Optional<AiMessageSendResult> findResentResult(Long conversationId, SendMessageRequest request) {
+        Optional<AiMessage> userMessage = aiMessageService.findUserMessage(conversationId, request.clientMessageId());
+        if (userMessage.isEmpty()) {
+            return Optional.empty();
         }
-        return replyToResentMessage(userId, conversationId, sentMessage.get(), turnEvents);
-    }
-
-    // 같은 clientMessageId로 다시 들어온 요청 => 저장된 답변 ~> 생성 중 상태 순으로 확인해서 처리
-    private AiMessageResponse replyToResentMessage(Long userId, Long conversationId, AiMessage userMessage,
-                                                   AiChatTurnEvents turnEvents) {
-        Optional<AiMessage> reply = aiMessageService.findReply(userMessage.getId());
+        Optional<AiMessage> reply = aiMessageService.findReply(userMessage.get().getId());
         if (reply.isPresent()) {
-            return AiMessageResponse.from(reply.get());
+            return Optional.of(AiMessageSendResult.replied(AiMessageResponse.from(reply.get())));
         }
-        if (aiGenerationStateService.isGenerating(conversationId, userMessage.getId())) {
-            throw new TooManyRequestsException(messageRetryAfter.toSeconds());
+        if (aiGenerationStateService.isGenerating(conversationId, userMessage.get().getId())) {
+            return Optional.of(AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(userMessage.get())));
         }
-
-        log.info("AI reply regenerating for unanswered message. userId={}, conversationId={}, userMessageId={}",
-                userId, conversationId, userMessage.getId());
-        return generateReply(userId, conversationId, userMessage, turnEvents);
+        return Optional.empty();
     }
 
-    private AiMessageResponse generateReply(Long userId, Long conversationId, AiMessage userMessage,
-                                            AiChatTurnEvents turnEvents) {
-        Long userMessageId = userMessage.getId();
-        aiGenerationStateService.startGenerating(conversationId, userMessageId);
-        turnEvents.accept(userMessageId, userMessage.getClientMessageId());
-        try {
-            AiServerSendMessageResponse response = requestReply(
-                    userId, conversationId, userMessage, turnEvents::publishDelta);
-            AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
-                    conversationId, userMessageId, response.reply(), response.progress(),
-                    response.inputLocked(), toPurgeAt(response.expirationAt()));
-            log.info("AI message replied. userId={}, conversationId={}, messageId={}",
-                    userId, conversationId, aiMessage.getId());
-            return AiMessageResponse.from(aiMessage);
-        } finally {
-            aiGenerationStateService.finishGenerating(conversationId, userMessageId);
+    // 접수에 성공하면 대화방 락은 백그라운드 작업이 답변을 끝낸 뒤 푼다
+    private AiMessageSendResult acceptMessage(Long userId, Long conversationId, SendMessageRequest request,
+                                              AiConversationLock.Handle lock) {
+        // 앞의 확인과 락 획득 사이에 이전 시도가 답변을 저장했을 수 있기에
+        Optional<AiMessage> sentMessage = aiMessageService.findUserMessage(conversationId, request.clientMessageId());
+        Optional<AiMessage> reply = sentMessage.flatMap(message -> aiMessageService.findReply(message.getId()));
+        if (reply.isPresent()) {
+            aiConversationLock.unlock(lock);
+            return AiMessageSendResult.replied(AiMessageResponse.from(reply.get()));
         }
+        AiReplyTaskExecutor.Slot slot = aiReplyTaskExecutor.tryReserve().orElseThrow(() -> {
+            log.info("AI reply capacity exceeded. userId={}, conversationId={}", userId, conversationId);
+            return new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+        });
+        try {
+            AiMessage userMessage = sentMessage.isPresent()
+                    ? sentMessage.get()
+                    : createUserMessage(conversationId, request);
+            if (sentMessage.isPresent()) {
+                log.info("AI reply regenerating for unanswered message. userId={}, conversationId={}, userMessageId={}",
+                        userId, conversationId, userMessage.getId());
+            }
+            startReply(userId, conversationId, userMessage, lock, slot);
+            return AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(userMessage));
+        } catch (RuntimeException e) {
+            slot.release();
+            throw e;
+        }
+    }
+
+    private void startReply(Long userId, Long conversationId, AiMessage userMessage,
+                            AiConversationLock.Handle lock, AiReplyTaskExecutor.Slot slot) {
+        aiGenerationStateService.startGenerating(conversationId, userMessage.getId());
+        try {
+            slot.execute(() -> replyInBackground(userId, conversationId, userMessage, lock));
+        } catch (RuntimeException e) {
+            aiGenerationStateService.finishGenerating(conversationId, userMessage.getId());
+            throw e;
+        }
+    }
+
+    private void replyInBackground(Long userId, Long conversationId, AiMessage userMessage,
+                                   AiConversationLock.Handle lock) {
+        AiChatTurnEvents turnEvents = new AiChatTurnEvents(aiChatEventPublisher, conversationId);
+        AiMessage reply;
+        try {
+            reply = generateReply(userId, conversationId, userMessage, turnEvents);
+        } catch (RuntimeException e) {
+            Thread.interrupted();
+            logReplyFailure(userId, conversationId, userMessage.getId(), e);
+            finishReply(conversationId, userMessage.getId(), lock);
+            turnEvents.fail(e);
+            return;
+        }
+        finishReply(conversationId, userMessage.getId(), lock);
+        turnEvents.complete(AiChatCompletedEvent.from(reply));
+    }
+
+    private AiMessage generateReply(Long userId, Long conversationId, AiMessage userMessage,
+                                    AiChatTurnEvents turnEvents) {
+        turnEvents.accept(userMessage.getId(), userMessage.getClientMessageId());
+        AiServerSendMessageResponse response = requestReply(
+                userId, conversationId, userMessage, turnEvents::publishDelta);
+        AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
+                conversationId, userMessage.getId(), response.reply(), response.progress(),
+                response.inputLocked(), toPurgeAt(response.expirationAt()));
+        log.info("AI message replied. userId={}, conversationId={}, messageId={}",
+                userId, conversationId, aiMessage.getId());
+        return aiMessage;
+    }
+
+    private void finishReply(Long conversationId, Long userMessageId, AiConversationLock.Handle lock) {
+        aiGenerationStateService.finishGenerating(conversationId, userMessageId);
+        aiConversationLock.unlock(lock);
+    }
+
+    private void logReplyFailure(Long userId, Long conversationId, Long userMessageId, RuntimeException e) {
+        if (!(e instanceof BusinessException businessException)) {
+            log.error("AI reply failed unexpectedly. userId={}, conversationId={}, userMessageId={}",
+                    userId, conversationId, userMessageId, e);
+            return;
+        }
+        ErrorCode errorCode = businessException.getErrorCode();
+        if (errorCode.getStatus().is5xxServerError()) {
+            log.warn("AI reply failed. userId={}, conversationId={}, userMessageId={}, code={}",
+                    userId, conversationId, userMessageId, errorCode.name(), e);
+            return;
+        }
+        log.info("AI reply failed. userId={}, conversationId={}, userMessageId={}, code={}",
+                userId, conversationId, userMessageId, errorCode.name());
     }
 
     private AiMessage createUserMessage(Long conversationId, SendMessageRequest request) {
@@ -230,15 +298,7 @@ public class AiChatFacade {
             validateReply(response);
             return response;
         } catch (BusinessException e) {
-            if (!(e.getErrorCode() instanceof AiChatErrorCode errorCode)) {
-                throw e;
-            }
             expireRoomIfSessionGone(userId, conversationId, e);
-            if (errorCode == AiChatErrorCode.AICHAT_TURN_IN_PROGRESS) {
-                // AI 서버가 이전 메시지를 처리 중 => 대화방을 그대로 두고 재시도 시각만 알려준다
-                log.info("AI turn in progress. userId={}, conversationId={}", userId, conversationId);
-                throw new TooManyRequestsException(messageRetryAfter.toSeconds());
-            }
             throw e;
         }
     }
