@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.notification.dto.request.NotificationSearchCondition;
@@ -33,8 +34,10 @@ class NotificationServiceTest {
     private static final Long USER_ID = 1L;
 
     private final NotificationRepository notificationRepository = mock(NotificationRepository.class);
+    private final NotificationPreviewService notificationPreviewService = mock(NotificationPreviewService.class);
     private final UserService userService = mock(UserService.class);
-    private final NotificationService notificationService = new NotificationService(notificationRepository, userService);
+    private final NotificationService notificationService =
+            new NotificationService(notificationRepository, notificationPreviewService, userService);
 
     @Test
     void unreadNotificationsExist_findNotificationSummary_returnsCountAndTrue() {
@@ -221,6 +224,27 @@ class NotificationServiceTest {
                 .isEqualTo(NotificationErrorCode.NOTIFICATION_NOT_FOUND);
 
         verify(notification, never()).delete();
+    }
+
+    @Test
+    void previewFound_findAllNotifications_putsPreviewOnMatchingItemOnly() {
+        Notification withPreview = createNotification(502L, NotificationType.PURCHASE_STATUS);
+        Notification withoutPreview = createNotification(501L, NotificationType.FRIEND_BIRTHDAY);
+        NotificationPreview preview = new TestPreview("섬유유연제");
+        given(notificationRepository.findAllVisibleByReceiverUserId(
+                USER_ID, List.of(NotificationType.values()), null, null, Limit.of(21)))
+                .willReturn(List.of(withPreview, withoutPreview));
+        given(notificationPreviewService.findAllPreviews(USER_ID, List.of(withPreview, withoutPreview)))
+                .willReturn(Map.of(502L, preview));
+
+        NotificationListResponse response = notificationService.findAllNotifications(
+                USER_ID, new NotificationSearchCondition(null, null, 20, null));
+
+        assertThat(response.page().items().get(0).preview()).isEqualTo(preview);
+        assertThat(response.page().items().get(1).preview()).isNull();
+    }
+
+    private record TestPreview(String productName) implements NotificationPreview {
     }
 
     private Notification createNotification(Long id, NotificationType type) {

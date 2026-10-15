@@ -23,6 +23,7 @@ public class NotificationCreatedEventListener {
 
     private final NotificationRepository notificationRepository;
     private final NotificationEventPublisher notificationEventPublisher;
+    private final NotificationPreviewService notificationPreviewService;
     private final JsonMapper jsonMapper;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -51,7 +52,9 @@ public class NotificationCreatedEventListener {
 
     private void publish(NotificationsCreatedEvent.CreatedNotification notification, long unreadCount) {
         try {
-            NotificationCreatedData data = NotificationCreatedData.from(notification);
+            NotificationPreview preview = notificationPreviewService.findPreview(
+                    notification.receiverUserId(), notification.resourceType(), notification.resourceId());
+            NotificationCreatedData data = NotificationCreatedData.from(notification, preview);
             notificationEventPublisher.publish(new NotificationRedisEvent(
                     notification.receiverUserId(),
                     jsonMapper.valueToTree(data),
@@ -76,11 +79,13 @@ public class NotificationCreatedEventListener {
             NotificationResourceType resourceType,
             Long resourceId,
             boolean targetAvailable,
+            NotificationPreview preview,
             LocalDateTime createdAt
     ) {
 
         private static NotificationCreatedData from(
-                NotificationsCreatedEvent.CreatedNotification notification
+                NotificationsCreatedEvent.CreatedNotification notification,
+                NotificationPreview preview
         ) {
             return new NotificationCreatedData(
                     notification.notificationId(),
@@ -92,6 +97,7 @@ public class NotificationCreatedEventListener {
                     notification.resourceId(),
                     notification.type() == NotificationType.POKE
                             || (notification.resourceType() != null && notification.resourceId() != null),
+                    preview,
                     notification.createdAt()
             );
         }
