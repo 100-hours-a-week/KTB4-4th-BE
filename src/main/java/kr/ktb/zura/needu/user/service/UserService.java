@@ -134,6 +134,7 @@ public class UserService {
 
     @Transactional
     public void withdraw(Long userId) {
+        userTasteProfileRepository.deleteById(userId);
         findUser(userId).withdraw();
     }
 

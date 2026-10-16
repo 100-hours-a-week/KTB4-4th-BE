@@ -36,6 +36,8 @@ import org.hibernate.annotations.CreationTimestamp;
 )
 @NoArgsConstructor(access = PROTECTED)
 public class NotificationEvent {
+
+    private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -85,5 +87,11 @@ public class NotificationEvent {
 
     public NotificationCategory getCategory() {
         return type.getCategory();
+    }
+
+    public void anonymizeActor(String nickname) {
+        actorUserId = null;
+        title = title.replace(nickname, WITHDRAWN_USER_NAME);
+        body = body.replace(nickname, WITHDRAWN_USER_NAME);
     }
 }

@@ -6,10 +6,23 @@ import java.util.Optional;
 
 import kr.ktb.zura.needu.product.entity.PurchaseCheck;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface PurchaseCheckRepository extends JpaRepository<PurchaseCheck, Long> {
+
+    @Modifying
+    @Query("""
+            delete from PurchaseCheck pc
+            where pc.userId = :userId
+               or pc.productLinkClick.id in (
+                   select plc.id
+                   from ProductLinkClick plc
+                   where plc.friendUserId = :userId
+               )
+            """)
+    void deleteAllRelatedToUserId(@Param("userId") Long userId);
 
     Optional<PurchaseCheck> findByIdAndUserId(Long id, Long userId);
 

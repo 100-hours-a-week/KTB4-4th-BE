@@ -431,6 +431,7 @@ class UserServiceTest {
 
         userService.withdraw(1L);
 
+        verify(userTasteProfileRepository).deleteById(1L);
         assertEquals(UserStatus.WITHDRAWN, user.getStatus());
         assertFalse(user.getDeletedAt().isBefore(before));
         assertNull(user.getExternalId());

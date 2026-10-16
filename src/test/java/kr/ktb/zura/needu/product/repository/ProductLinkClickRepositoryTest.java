@@ -26,6 +26,9 @@ class ProductLinkClickRepositoryTest {
     private ProductLinkClickRepository productLinkClickRepository;
 
     @Autowired
+    private PurchaseCheckRepository purchaseCheckRepository;
+
+    @Autowired
     private TestEntityManager entityManager;
 
     @Test
@@ -114,6 +117,31 @@ class ProductLinkClickRepositoryTest {
                 .containsExactly(third.getId());
     }
 
+    @Test
+    void userOwnsOrIsGiftTarget_deleteRelatedData_removesChecksBeforeClicks() {
+        Product lamp = saveProduct("탈퇴정리상품");
+        ProductLinkClick owned = saveClick(USER_ID, lamp, ProductContext.PERSONAL, null, LocalDateTime.now());
+        ProductLinkClick receivedGift = saveClick(2L, lamp, ProductContext.FRIEND_GIFT, USER_ID, LocalDateTime.now());
+        ProductLinkClick unrelated = saveClick(2L, lamp, ProductContext.FRIEND_GIFT, 3L, LocalDateTime.now());
+        purchaseCheckRepository.saveAllAndFlush(java.util.List.of(
+                PurchaseCheck.create(entityManager.find(ProductLinkClick.class, owned.getId())),
+                PurchaseCheck.create(entityManager.find(ProductLinkClick.class, receivedGift.getId())),
+                PurchaseCheck.create(entityManager.find(ProductLinkClick.class, unrelated.getId()))
+        ));
+
+        purchaseCheckRepository.deleteAllRelatedToUserId(USER_ID);
+        productLinkClickRepository.deleteAllRelatedToUserId(USER_ID);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(purchaseCheckRepository.findAll())
+                .extracting(check -> check.getProductLinkClick().getId())
+                .containsExactly(unrelated.getId());
+        assertThat(productLinkClickRepository.findAll())
+                .extracting(ProductLinkClick::getId)
+                .containsExactly(unrelated.getId());
+    }
+
     private Product saveProduct(String name) {
         return entityManager.persist(new Product(
                 PlatformType.COUPANG, name, name, null, null,
@@ -122,7 +150,18 @@ class ProductLinkClickRepositoryTest {
 
     // createdAt은 생성 시각으로 고정되어 수정할 수 없으므로, 기간 경계를 만들 때만 직접 옮긴다
     private ProductLinkClick saveClick(Long userId, Product product, ProductContext context, LocalDateTime createdAt) {
-        ProductLinkClick click = entityManager.persistAndFlush(new ProductLinkClick(userId, product, context, null));
+        return saveClick(userId, product, context, null, createdAt);
+    }
+
+    private ProductLinkClick saveClick(
+            Long userId,
+            Product product,
+            ProductContext context,
+            Long friendUserId,
+            LocalDateTime createdAt
+    ) {
+        ProductLinkClick click = entityManager.persistAndFlush(
+                new ProductLinkClick(userId, product, context, friendUserId));
         entityManager.getEntityManager()
                 .createQuery("update ProductLinkClick plc set plc.createdAt = :createdAt where plc.id = :id")
                 .setParameter("createdAt", createdAt)

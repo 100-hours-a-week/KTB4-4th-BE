@@ -8,10 +8,15 @@ import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.type.ProductCategory;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> {
+
+    @Modifying
+    @Query("delete from GiftProduct product where product.userId = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 
     @Query("""
             select new kr.ktb.zura.needu.product.repository.ProductPriceRange(min(p.price), max(p.price))
