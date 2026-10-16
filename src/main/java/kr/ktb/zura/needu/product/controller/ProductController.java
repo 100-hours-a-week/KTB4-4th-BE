@@ -1,10 +1,9 @@
 package kr.ktb.zura.needu.product.controller;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.ItemsResponse;
+import kr.ktb.zura.needu.product.dto.request.ProductDetailRequest;
 import kr.ktb.zura.needu.product.dto.request.UpdateProductFeedbackRequest;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductDetailResponse;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -44,12 +42,12 @@ public class ProductController {
     public ResponseEntity<ApiResponse<ProductDetailResponse>> findProduct(
             @AuthenticationPrincipal Long loginUserId,
             @PathVariable Long productId,
-            @RequestParam(required = false) @NotNull @Pattern(regexp = "PERSONAL|MY_GIFT|FRIEND_GIFT") String context,
-            @RequestParam(required = false) Long userId
+            @Valid ProductDetailRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.of(
                 ProductResponseMessages.PRODUCT_FOUND,
-                productService.findProduct(loginUserId, productId, ProductContext.valueOf(context), userId)
+                productService.findProduct(
+                        loginUserId, productId, ProductContext.valueOf(request.context()), request.userId())
         ));
     }
 
