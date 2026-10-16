@@ -30,6 +30,7 @@ class AuthServiceTest {
 
     private KakaoOAuthClient kakaoOAuthClient;
     private UserService userService;
+    private AuthSessionService authSessionService;
     private KakaoTokenService kakaoTokenService;
     private OAuth2AuthorizedClientManager authorizedClientManager;
     private AuthService authService;
@@ -38,12 +39,13 @@ class AuthServiceTest {
     void setUp() {
         kakaoOAuthClient = mock(KakaoOAuthClient.class);
         userService = mock(UserService.class);
+        authSessionService = mock(AuthSessionService.class);
         kakaoTokenService = mock(KakaoTokenService.class);
         authorizedClientManager = mock(OAuth2AuthorizedClientManager.class);
         authService = new AuthService(
                 kakaoOAuthClient,
                 userService,
-                mock(AuthSessionService.class),
+                authSessionService,
                 mock(AccessTokenService.class),
                 kakaoTokenService,
                 authorizedClientManager
@@ -90,6 +92,14 @@ class AuthServiceTest {
 
         verify(kakaoTokenService, never()).saveTokens(org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void existingUser_deleteUserAuthentication_deletesSessionsAndKakaoTokens() {
+        authService.deleteUserAuthentication(1L);
+
+        verify(authSessionService).deleteAllByUserId(1L);
+        verify(kakaoTokenService).deleteByUserId(1L);
     }
 
     private KakaoOAuthClient.KakaoAuthorization authorization() {

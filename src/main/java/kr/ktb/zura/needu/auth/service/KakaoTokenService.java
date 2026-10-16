@@ -120,6 +120,11 @@ public class KakaoTokenService implements OAuth2AuthorizedClientService {
         }
     }
 
+    @Transactional
+    public void deleteByUserId(Long userId) {
+        kakaoTokenRepository.deleteByUserId(userId);
+    }
+
     private void save(Long userId,
                       String accessToken,
                       String refreshToken,

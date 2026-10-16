@@ -163,6 +163,13 @@ class KakaoTokenServiceTest {
         assertEquals("encrypted-refresh", existing.getEncryptedRefreshToken());
     }
 
+    @Test
+    void existingToken_deleteByUserId_deletesToken() {
+        kakaoTokenService.deleteByUserId(1L);
+
+        verify(kakaoTokenRepository).deleteByUserId(1L);
+    }
+
     private KakaoOAuthClient.KakaoTokens tokens() {
         return new KakaoOAuthClient.KakaoTokens(
                 "access-token",
