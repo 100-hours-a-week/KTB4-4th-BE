@@ -61,7 +61,7 @@ public class AuthController {
         String state = UUID.randomUUID().toString();
         HttpSession session = request.getSession(true);
         session.setAttribute(KAKAO_STATE, state);
-        session.setAttribute(KAKAO_RETURN_URL, returnUri);
+        session.setAttribute(KAKAO_RETURN_URL, returnUri.toString());
         URI authorizationUri = authService.createKakaoAuthorizationUri(state);
         return ResponseEntity.status(HttpStatus.FOUND).location(authorizationUri).build();
     }
@@ -74,11 +74,11 @@ public class AuthController {
             HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         String expectedState = session == null ? null : (String) session.getAttribute(KAKAO_STATE);
-        URI returnUri = session == null ? null : (URI) session.getAttribute(KAKAO_RETURN_URL);
+        String returnUrl = session == null ? null : (String) session.getAttribute(KAKAO_RETURN_URL);
         if (session != null) {
             session.invalidate();
         }
-        if (expectedState == null || !expectedState.equals(state) || returnUri == null) {
+        if (expectedState == null || !expectedState.equals(state) || returnUrl == null) {
             throw new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_STATE);
         }
         if (error != null) {
@@ -88,7 +88,7 @@ public class AuthController {
             throw new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_CODE);
         }
         AuthService.Tokens tokens = authService.loginWithKakao(code);
-        return ResponseEntity.status(HttpStatus.FOUND).location(returnUri)
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(returnUrl))
                 .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
                 .cacheControl(CacheControl.noStore()).build();

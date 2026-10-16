@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.auth.service.AccessTokenService;
 import kr.ktb.zura.needu.auth.service.AuthService;
 import kr.ktb.zura.needu.guidance.service.GuidanceService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -16,10 +17,10 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -81,15 +82,19 @@ class JwtAuthenticationIntegrationTest {
                 .thenReturn(URI.create("https://kauth.kakao.com/oauth/authorize"));
         when(authService.loginWithKakao("valid-code"))
                 .thenReturn(new AuthService.Tokens("access-token", "refresh-token", Duration.ofDays(14)));
-        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+        MvcResult authorization = mockMvc.perform(get("/api/v1/auth/kakao/authorize")
                         .param("returnUrl", "https://needu.example.com/login"))
                 .andExpect(status().isFound())
-                .andReturn().getRequest().getSession(false);
+                .andReturn();
+        Cookie sessionCookie = authorization.getResponse().getCookie("SESSION");
+        ArgumentCaptor<String> stateCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authService).createKakaoAuthorizationUri(stateCaptor.capture());
+        assertThat(sessionCookie).isNotNull();
 
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(session)
+                        .cookie(sessionCookie)
                         .param("code", "valid-code")
-                        .param("state", (String) session.getAttribute("kakaoOAuthState")))
+                        .param("state", stateCaptor.getValue()))
                 .andExpect(status().isFound());
 
         verify(authService).loginWithKakao("valid-code");

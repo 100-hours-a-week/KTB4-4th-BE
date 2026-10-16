@@ -48,7 +48,7 @@ class KakaoFriendSyncControllerTest {
                 .andReturn().getRequest().getSession(false);
 
         org.junit.jupiter.api.Assertions.assertEquals(
-                URI.create("https://needu.example.com/friends?tab=kakao"),
+                "https://needu.example.com/friends?tab=kakao",
                 session.getAttribute("kakaoFriendOAuthReturnUrl"));
     }
 
@@ -87,7 +87,7 @@ class KakaoFriendSyncControllerTest {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("kakaoFriendOAuthState", "state-123");
         session.setAttribute("kakaoFriendOAuthUserId", 1L);
-        session.setAttribute("kakaoFriendOAuthReturnUrl", URI.create("https://needu.example.com/friends"));
+        session.setAttribute("kakaoFriendOAuthReturnUrl", "https://needu.example.com/friends");
         return session;
     }
 }

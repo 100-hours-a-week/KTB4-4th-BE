@@ -101,7 +101,7 @@ public class FriendController {
         HttpSession session = request.getSession(true);
         session.setAttribute(KAKAO_FRIEND_STATE, state);
         session.setAttribute(KAKAO_FRIEND_USER_ID, userId);
-        session.setAttribute(KAKAO_FRIEND_RETURN_URL, returnUri);
+        session.setAttribute(KAKAO_FRIEND_RETURN_URL, returnUri.toString());
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(kakaoFriendSyncService.createAuthorizationUri(userId, state))
                 .build();
@@ -115,14 +115,16 @@ public class FriendController {
             HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         String expectedState = session == null ? null : (String) session.getAttribute(KAKAO_FRIEND_STATE);
-        Long userId = session == null ? null : (Long) session.getAttribute(KAKAO_FRIEND_USER_ID);
-        URI returnUri = session == null ? null : (URI) session.getAttribute(KAKAO_FRIEND_RETURN_URL);
+        Number storedUserId = session == null ? null : (Number) session.getAttribute(KAKAO_FRIEND_USER_ID);
+        Long userId = storedUserId == null ? null : storedUserId.longValue();
+        String returnUrl = session == null ? null : (String) session.getAttribute(KAKAO_FRIEND_RETURN_URL);
         if (session != null) {
             session.invalidate();
         }
-        if (userId == null || expectedState == null || !expectedState.equals(state) || returnUri == null) {
+        if (userId == null || expectedState == null || !expectedState.equals(state) || returnUrl == null) {
             throw new BusinessException(FriendErrorCode.FRIEND_KAKAO_INVALID_STATE);
         }
+        URI returnUri = URI.create(returnUrl);
         if (error != null) {
             return redirect(returnUri, "cancelled");
         }
