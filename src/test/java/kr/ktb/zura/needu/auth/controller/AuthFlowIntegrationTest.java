@@ -8,10 +8,10 @@ import kr.ktb.zura.needu.auth.client.KakaoOAuthClient;
 import kr.ktb.zura.needu.auth.repository.AuthSessionRepository;
 import kr.ktb.zura.needu.common.security.AuthCookieNames;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -58,12 +59,17 @@ class AuthFlowIntegrationTest {
         assertThat(csrfCookie).isNotNull();
         assertThat(csrfCookie.isHttpOnly()).isTrue();
 
-        MockHttpSession oauthSession = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+        MvcResult authorization = mockMvc.perform(get("/api/v1/auth/kakao/authorize")
                         .param("returnUrl", "https://needu.example.com/login"))
-                .andExpect(status().isFound()).andReturn().getRequest().getSession(false);
+                .andExpect(status().isFound()).andReturn();
+        Cookie oauthSessionCookie = authorization.getResponse().getCookie("SESSION");
+        ArgumentCaptor<String> stateCaptor = ArgumentCaptor.forClass(String.class);
+        verify(kakaoOAuthClient).createAuthorizationUri(stateCaptor.capture());
+        assertThat(oauthSessionCookie).isNotNull();
+
         MvcResult login = mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(oauthSession).param("code", "valid-code")
-                        .param("state", (String) oauthSession.getAttribute("kakaoOAuthState")))
+                        .cookie(oauthSessionCookie).param("code", "valid-code")
+                        .param("state", stateCaptor.getValue()))
                 .andExpect(status().isFound()).andReturn();
         Cookie accessCookie = login.getResponse().getCookie(AuthCookieNames.ACCESS_TOKEN);
         Cookie refreshCookie = login.getResponse().getCookie(AuthCookieNames.REFRESH_TOKEN);
