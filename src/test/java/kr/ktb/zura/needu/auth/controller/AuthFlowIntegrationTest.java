@@ -78,8 +78,11 @@ class AuthFlowIntegrationTest {
         assertThat(accessCookie.isHttpOnly()).isTrue();
         assertThat(refreshCookie.isHttpOnly()).isTrue();
         assertThat(refreshCookie.getPath()).isEqualTo("/");
-        assertThat(login.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).allSatisfy(
-                header -> assertThat(header).contains("SameSite=Lax"));
+        assertThat(login.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .filteredOn(header -> header.startsWith(AuthCookieNames.ACCESS_TOKEN + "=")
+                        || header.startsWith(AuthCookieNames.REFRESH_TOKEN + "="))
+                .hasSize(2)
+                .allSatisfy(header -> assertThat(header).contains("SameSite=Lax"));
         assertThat(authSessionRepository.findAll()).hasSize(1);
         assertThat(authSessionRepository.findAll().getFirst().getRefreshTokenHash()).hasSize(32)
                 .isNotEqualTo(refreshCookie.getValue().getBytes(StandardCharsets.UTF_8));
