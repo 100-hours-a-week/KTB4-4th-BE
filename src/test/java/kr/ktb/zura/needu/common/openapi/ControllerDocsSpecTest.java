@@ -68,6 +68,24 @@ class ControllerDocsSpecTest {
                         .value(contains(true)));
     }
 
+    @Test
+    void requestObjectWithoutAnnotation_expandsToQueryParametersExceptPrincipal() throws Exception {
+        requestSpec()
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/personal-recommendations'].get.parameters[*].name")
+                        .value(containsInAnyOrder("minPrice", "maxPrice", "category", "cursor", "size")))
+                .andExpect(jsonPath("$.paths['/api/v1/notifications'].get.parameters[*].name")
+                        .value(containsInAnyOrder("category", "cursor", "size", "since")));
+    }
+
+    @Test
+    void requestObjectWithNonStringField_hasInvalidRequestResponse() throws Exception {
+        requestSpec()
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/personal-recommendations'].get.responses['400']"
+                        + ".content['application/json'].examples.COMMON_INVALID_REQUEST").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/notifications'].get.responses['400']"
+                        + ".content['application/json'].examples.COMMON_INVALID_REQUEST").exists());
+    }
+
     private ResultActions requestSpec() throws Exception {
         return mockMvc.perform(get("/v3/api-docs"));
     }

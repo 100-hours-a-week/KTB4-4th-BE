@@ -18,6 +18,7 @@ import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 import org.springframework.validation.annotation.Validated;
@@ -102,7 +103,17 @@ public class OperationResponseCustomizer implements OperationCustomizer {
         if (requestHeader != null) {
             return requestHeader.required() || parameter.getParameterType() != String.class;
         }
+        // 쿼리 파라미터를 묶은 요청 객체는 문자열이 아닌 필드의 타입이 맞지 않으면 바인딩 단계에서 400이 된다.
+        if (isRequestObject(parameter)) {
+            return Arrays.stream(parameter.getParameterType().getRecordComponents())
+                    .anyMatch(component -> component.getType() != String.class);
+        }
         return false;
+    }
+
+    private boolean isRequestObject(MethodParameter parameter) {
+        return parameter.getParameterType().isRecord()
+                && !parameter.hasParameterAnnotation(AuthenticationPrincipal.class);
     }
 
     private boolean isValidated(MethodParameter parameter) {
