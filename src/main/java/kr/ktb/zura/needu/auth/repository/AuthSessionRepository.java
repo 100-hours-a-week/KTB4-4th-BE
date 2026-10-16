@@ -10,4 +10,6 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> 
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<AuthSession> findByRefreshTokenHash(byte[] refreshTokenHash);
+
+    void deleteAllByUserId(Long userId);
 }

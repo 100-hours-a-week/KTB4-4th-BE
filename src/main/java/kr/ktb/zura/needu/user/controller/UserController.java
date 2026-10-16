@@ -12,7 +12,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,11 +38,8 @@ public class UserController {
     }
 
     @DeleteMapping
-    public ResponseEntity<ApiResponse<Void>> withdraw(
-            @AuthenticationPrincipal Long userId,
-            @CookieValue(name = AuthCookieNames.REFRESH_TOKEN, required = false) String refreshToken
-    ) {
-        userWithdrawalService.withdraw(userId, refreshToken);
+    public ResponseEntity<ApiResponse<Void>> withdraw(@AuthenticationPrincipal Long userId) {
+        userWithdrawalService.withdraw(userId);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, expiredCookie(AuthCookieNames.ACCESS_TOKEN).toString())
                 .header(HttpHeaders.SET_COOKIE, expiredCookie(AuthCookieNames.REFRESH_TOKEN).toString())

@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.Set;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -37,7 +38,8 @@ class KakaoOAuthClientTest {
         server = MockRestServiceServer.bindTo(builder).build();
         client = new KakaoOAuthClient(builder, "rest-key", "secret",
                 "http://localhost:8080/api/v1/auth/kakao/callback",
-                "http://localhost:8080/api/v1/friends/kakao/callback");
+                "http://localhost:8080/api/v1/friends/kakao/callback",
+                "admin-key");
     }
 
     @Test
@@ -112,6 +114,67 @@ class KakaoOAuthClientTest {
                 () -> client.findUserInfo("invalid"));
 
         assertEquals(AuthErrorCode.AUTH_KAKAO_INVALID_CODE, exception.getErrorCode());
+        server.verify();
+    }
+
+    @Test
+    void linkedUser_unlink_sendsAdminRequest() {
+        server.expect(once(), requestTo("https://kapi.kakao.com/v1/user/unlink"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "KakaoAK admin-key"))
+                .andExpect(content().string(containsString("target_id_type=user_id")))
+                .andExpect(content().string(containsString("target_id=42")))
+                .andRespond(withSuccess("{\"id\":42}", MediaType.APPLICATION_JSON));
+
+        client.unlink(42L);
+
+        server.verify();
+    }
+
+    @Test
+    void responseForDifferentUser_unlink_returnsServiceUnavailable() {
+        server.expect(once(), requestTo("https://kapi.kakao.com/v1/user/unlink"))
+                .andRespond(withSuccess("{\"id\":43}", MediaType.APPLICATION_JSON));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> client.unlink(42L));
+
+        assertEquals(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE, exception.getErrorCode());
+        server.verify();
+    }
+
+    @Test
+    void alreadyUnlinkedUser_unlink_returnsNormally() {
+        server.expect(once(), requestTo("https://kapi.kakao.com/v1/user/unlink"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"code\":-101,\"msg\":\"NotRegisteredUserException\"}"));
+
+        client.unlink(42L);
+
+        server.verify();
+    }
+
+    @Test
+    void kakaoUnavailable_unlink_returnsServiceUnavailable() {
+        server.expect(once(), requestTo("https://kapi.kakao.com/v1/user/unlink"))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> client.unlink(42L));
+
+        assertEquals(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE, exception.getErrorCode());
+        server.verify();
+    }
+
+    @Test
+    void malformedKakaoError_unlink_returnsServiceUnavailable() {
+        server.expect(once(), requestTo("https://kapi.kakao.com/v1/user/unlink"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("not-json"));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> client.unlink(42L));
+
+        assertEquals(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE, exception.getErrorCode());
         server.verify();
     }
 

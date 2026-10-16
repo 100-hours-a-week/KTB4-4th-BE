@@ -84,6 +84,16 @@ public class AuthService {
         authSessionService.revoke(refreshToken);
     }
 
+    public void unlinkKakaoAccount(Long externalId) {
+        kakaoOAuthClient.unlink(externalId);
+    }
+
+    @Transactional
+    public void deleteUserAuthentication(Long userId) {
+        authSessionService.deleteAllByUserId(userId);
+        kakaoTokenService.deleteByUserId(userId);
+    }
+
     public AuthSessionResponse findSession(Long userId) {
         return AuthSessionResponse.from(userService.findAuthenticatedUser(userId));
     }

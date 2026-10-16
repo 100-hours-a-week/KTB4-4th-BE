@@ -12,6 +12,10 @@ import org.springframework.data.repository.query.Param;
 public interface FriendSyncRequestRepository extends JpaRepository<FriendSyncRequest, Long> {
 
     @Modifying
+    @Query("delete from FriendSyncRequest request where request.userId = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
+
+    @Modifying
     @Query(value = """
             insert ignore into friend_sync_requests (user_id, requested_at, next_attempt_at, retry_count)
             values (:userId, :requestedAt, :requestedAt, 0)

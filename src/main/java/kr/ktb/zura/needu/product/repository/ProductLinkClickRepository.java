@@ -7,10 +7,15 @@ import kr.ktb.zura.needu.product.entity.ProductLinkClick;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ProductLinkClickRepository extends JpaRepository<ProductLinkClick, Long> {
+
+    @Modifying
+    @Query("delete from ProductLinkClick click where click.userId = :userId or click.friendUserId = :userId")
+    void deleteAllRelatedToUserId(@Param("userId") Long userId);
 
     @Query("""
             select count(plc) > 0

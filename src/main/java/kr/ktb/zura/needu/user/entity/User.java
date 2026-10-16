@@ -21,6 +21,8 @@ import static lombok.AccessLevel.PROTECTED;
 @NoArgsConstructor(access = PROTECTED)
 public class User {
 
+    private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false)
@@ -106,7 +108,16 @@ public class User {
 
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
-        this.deletedAt = LocalDateTime.now();
+        this.deletedAt = LocalDateTime.now(ZoneOffset.UTC);
+        this.externalId = null;
+        this.nickname = WITHDRAWN_NICKNAME;
+        this.profileImageUrl = null;
+        this.gender = Gender.NONE;
+        this.birthDate = null;
+        this.onboardingCompleted = false;
+        this.tasteAnalysisCompleted = false;
+        this.lastLoginAt = null;
+        this.kakaoFriendSyncedAt = null;
     }
 
     public boolean isActive() {

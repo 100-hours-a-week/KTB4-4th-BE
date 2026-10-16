@@ -9,10 +9,15 @@ import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface FriendRepository extends JpaRepository<Friend, Long> {
+
+    @Modifying
+    @Query("delete from Friend f where f.ownerUserId = :userId or f.friendUserId = :userId")
+    void deleteAllRelatedToUserId(@Param("userId") Long userId);
 
     boolean existsByOwnerUserIdAndFriendUserId(Long ownerUserId, Long friendUserId);
 

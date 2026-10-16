@@ -16,6 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
+    @Modifying
+    @Query("delete from Notification notification where notification.receiverUserId = :receiverUserId")
+    void deleteAllByReceiverUserId(@Param("receiverUserId") Long receiverUserId);
+
     @EntityGraph(attributePaths = "event")
     Optional<Notification> findOneById(Long id);
 

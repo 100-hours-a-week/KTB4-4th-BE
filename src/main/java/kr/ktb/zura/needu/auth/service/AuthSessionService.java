@@ -70,6 +70,11 @@ public class AuthSessionService {
         }
     }
 
+    @Transactional
+    public void deleteAllByUserId(Long userId) {
+        authSessionRepository.deleteAllByUserId(userId);
+    }
+
     private String generateToken() {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);

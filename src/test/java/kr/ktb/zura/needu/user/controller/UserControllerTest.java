@@ -80,7 +80,7 @@ class UserControllerTest {
                         startsWith("NEEDU_ACCESS_TOKEN=; Path=/; Max-Age=0"),
                         startsWith("NEEDU_REFRESH_TOKEN=; Path=/; Max-Age=0"))));
 
-        verify(userWithdrawalService).withdraw(LOGIN_USER_ID, "refresh-token");
+        verify(userWithdrawalService).withdraw(LOGIN_USER_ID);
     }
 
     private static RequestPostProcessor authenticatedUser() {

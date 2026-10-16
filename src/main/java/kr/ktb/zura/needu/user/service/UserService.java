@@ -133,6 +133,12 @@ public class UserService {
     }
 
     @Transactional
+    public void withdraw(Long userId) {
+        userTasteProfileRepository.deleteById(userId);
+        findUser(userId).withdraw();
+    }
+
+    @Transactional
     public void completeOnboarding(Long userId, Gender gender, LocalDate birthDate, Map<String, Object> onboardingTastes) {
         User user = findUser(userId);
         UserTasteProfile profile = userTasteProfileRepository.findById(userId)

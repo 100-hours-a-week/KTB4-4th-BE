@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.user.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -410,6 +412,37 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         assertFalse(userService.isOnboardingCompleted(1L));
+    }
+
+    @Test
+    void existingUser_withdraw_anonymizesPersonalData() {
+        User user = new User(
+                42L,
+                "니듀",
+                "https://example.com/profile.jpg",
+                Gender.FEMALE,
+                LocalDate.of(2000, 1, 1));
+        user.completeOnboarding(Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        user.completeTasteAnalysis();
+        user.recordLogin();
+        user.completeKakaoFriendSync();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+
+        userService.withdraw(1L);
+
+        verify(userTasteProfileRepository).deleteById(1L);
+        assertEquals(UserStatus.WITHDRAWN, user.getStatus());
+        assertFalse(user.getDeletedAt().isBefore(before));
+        assertNull(user.getExternalId());
+        assertEquals("탈퇴한 사용자", user.getNickname());
+        assertNull(user.getProfileImageUrl());
+        assertEquals(Gender.NONE, user.getGender());
+        assertNull(user.getBirthDate());
+        assertFalse(user.isOnboardingCompleted());
+        assertFalse(user.isTasteAnalysisCompleted());
+        assertNull(user.getLastLoginAt());
+        assertNull(user.getKakaoFriendSyncedAt());
     }
 
     private User createOnboardingUser() {

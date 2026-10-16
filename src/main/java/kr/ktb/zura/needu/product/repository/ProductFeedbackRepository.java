@@ -8,10 +8,15 @@ import kr.ktb.zura.needu.product.entity.ProductFeedback;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ProductFeedbackRepository extends JpaRepository<ProductFeedback, Long> {
+
+    @Modifying
+    @Query("delete from ProductFeedback feedback where feedback.userId = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 
     Optional<ProductFeedback> findByUserIdAndProductIdAndContext(Long userId, Long productId, ProductContext context);
 
