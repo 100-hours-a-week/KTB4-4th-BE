@@ -86,7 +86,7 @@ class AuthControllerTest {
                 .andReturn().getRequest().getSession(false);
 
         assertNotNull(session.getAttribute("kakaoOAuthState"));
-        assertEquals(URI.create("https://needu.example.com/login?next=%2Fhome"),
+        assertEquals("https://needu.example.com/login?next=%2Fhome",
                 session.getAttribute("kakaoOAuthReturnUrl"));
     }
 
@@ -161,7 +161,7 @@ class AuthControllerTest {
     private MockHttpSession sessionWithState(String state) {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("kakaoOAuthState", state);
-        session.setAttribute("kakaoOAuthReturnUrl", URI.create("https://needu.example.com/login"));
+        session.setAttribute("kakaoOAuthReturnUrl", "https://needu.example.com/login");
         return session;
     }
 }
