@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
@@ -61,6 +62,9 @@ class FriendControllerTest {
 
     @MockitoBean
     private PokeService pokeService;
+
+    @MockitoBean
+    private KakaoOAuthTransactionService kakaoOAuthTransactionService;
 
     @Test
     void friendsExist_findAllFriends_returnsFriendPage() throws Exception {

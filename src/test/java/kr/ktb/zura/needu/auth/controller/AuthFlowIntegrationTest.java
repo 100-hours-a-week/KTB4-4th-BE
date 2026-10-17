@@ -62,19 +62,21 @@ class AuthFlowIntegrationTest {
         MvcResult authorization = mockMvc.perform(get("/api/v1/auth/kakao/authorize")
                         .param("returnUrl", "https://needu.example.com/login"))
                 .andExpect(status().isFound()).andReturn();
-        Cookie oauthSessionCookie = authorization.getResponse().getCookie("SESSION");
+        Cookie oauthCookie = authorization.getResponse().getCookie(AuthCookieNames.KAKAO_LOGIN_OAUTH);
         ArgumentCaptor<String> stateCaptor = ArgumentCaptor.forClass(String.class);
         verify(kakaoOAuthClient).createAuthorizationUri(stateCaptor.capture());
-        assertThat(oauthSessionCookie).isNotNull();
+        assertThat(oauthCookie).isNotNull();
+        assertThat(authorization.getResponse().getCookie("SESSION")).isNull();
 
         MvcResult login = mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .cookie(oauthSessionCookie).param("code", "valid-code")
+                        .cookie(oauthCookie).param("code", "valid-code")
                         .param("state", stateCaptor.getValue()))
                 .andExpect(status().isFound()).andReturn();
         Cookie accessCookie = login.getResponse().getCookie(AuthCookieNames.ACCESS_TOKEN);
         Cookie refreshCookie = login.getResponse().getCookie(AuthCookieNames.REFRESH_TOKEN);
         assertThat(accessCookie).isNotNull();
         assertThat(refreshCookie).isNotNull();
+        assertThat(login.getResponse().getCookie(AuthCookieNames.KAKAO_LOGIN_OAUTH).getMaxAge()).isZero();
         assertThat(accessCookie.isHttpOnly()).isTrue();
         assertThat(refreshCookie.isHttpOnly()).isTrue();
         assertThat(refreshCookie.getPath()).isEqualTo("/");
