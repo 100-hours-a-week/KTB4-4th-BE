@@ -1,18 +1,21 @@
 package kr.ktb.zura.needu.auth.controller;
 
+import jakarta.servlet.http.Cookie;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.Optional;
 import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
 import kr.ktb.zura.needu.auth.dto.response.SessionUserResponse;
 import kr.ktb.zura.needu.auth.service.AuthService;
+import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
+import kr.ktb.zura.needu.auth.type.KakaoOAuthContext;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -22,8 +25,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasItem;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -38,14 +39,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerTest {
 
     private AuthService authService;
+    private KakaoOAuthTransactionService kakaoOAuthTransactionService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         authService = mock(AuthService.class);
+        kakaoOAuthTransactionService = mock(KakaoOAuthTransactionService.class);
+        when(kakaoOAuthTransactionService.getTtl()).thenReturn(Duration.ofMinutes(10));
         when(authService.loginWithKakao(anyString()))
                 .thenReturn(new AuthService.Tokens("access-token", "refresh-token", Duration.ofDays(14)));
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, true, Duration.ofMinutes(15)))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(
+                        authService, kakaoOAuthTransactionService, true, Duration.ofMinutes(15)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -75,56 +80,58 @@ class AuthControllerTest {
 
     @Test
     void authorize_redirectsToKakaoWithStoredState() throws Exception {
+        when(kakaoOAuthTransactionService.createLoginState("https://needu.example.com/login?next=%2Fhome"))
+                .thenReturn("state-123");
         when(authService.createKakaoAuthorizationUri(anyString()))
                 .thenAnswer(invocation -> URI.create("https://kauth.kakao.com/oauth/authorize?state="
                         + invocation.getArgument(0)));
 
-        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+        mockMvc.perform(get("/api/v1/auth/kakao/authorize")
                         .param("returnUrl", "https://needu.example.com/login?next=%2Fhome"))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", containsString("https://kauth.kakao.com/oauth/authorize")))
-                .andReturn().getRequest().getSession(false);
-
-        assertNotNull(session.getAttribute("kakaoOAuthState"));
-        assertEquals("https://needu.example.com/login?next=%2Fhome",
-                session.getAttribute("kakaoOAuthReturnUrl"));
+                .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
+                        containsString("NEEDU_KAKAO_LOGIN_OAUTH=state-123"),
+                        containsString("Path=/api/v1/auth/kakao/callback"),
+                        containsString("Max-Age=600"), containsString("HttpOnly"),
+                        containsString("Secure"), containsString("SameSite=Lax")))));
     }
 
     @Test
     void validCallback_redirectsToStoredReturnUrl() throws Exception {
-        when(authService.createKakaoAuthorizationUri(anyString()))
-                .thenReturn(URI.create("https://kauth.kakao.com/oauth/authorize"));
-        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
-                        .param("returnUrl", "https://needu.example.com/login?next=%2Fhome"))
-                .andReturn().getRequest().getSession(false);
-        String state = (String) session.getAttribute("kakaoOAuthState");
+        when(kakaoOAuthTransactionService.consumeLoginState("state-123", "state-123"))
+                .thenReturn(Optional.of(context("https://needu.example.com/login?next=%2Fhome")));
 
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(session).param("code", "valid-code").param("state", state))
+                        .cookie(oauthCookie()).param("code", "valid-code").param("state", "state-123"))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", "https://needu.example.com/login?next=%2Fhome"))
                 .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
                         containsString("NEEDU_ACCESS_TOKEN=access-token"),
                         containsString("Max-Age=900"), containsString("HttpOnly"),
-                        containsString("Secure"), containsString("SameSite=Lax")))));
+                        containsString("Secure"), containsString("SameSite=Lax")))))
+                .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
+                        containsString("NEEDU_KAKAO_LOGIN_OAUTH="), containsString("Max-Age=0")))));
         verify(authService).loginWithKakao("valid-code");
     }
 
     @Test
     void reusedState_returnsBadRequest() throws Exception {
-        MockHttpSession session = sessionWithState("state-123");
+        when(kakaoOAuthTransactionService.consumeLoginState("state-123", "state-123"))
+                .thenReturn(Optional.of(context("https://needu.example.com/login")), Optional.empty());
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(session).param("code", "valid-code").param("state", "state-123"))
+                        .cookie(oauthCookie()).param("code", "valid-code").param("state", "state-123"))
                 .andExpect(status().isFound());
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .param("code", "valid-code").param("state", "state-123"))
+                        .cookie(oauthCookie()).param("code", "valid-code").param("state", "state-123"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void invalidState_returnsBadRequest() throws Exception {
+        when(kakaoOAuthTransactionService.consumeLoginState("wrong", "expected")).thenReturn(Optional.empty());
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(sessionWithState("expected"))
+                        .cookie(new Cookie("NEEDU_KAKAO_LOGIN_OAUTH", "expected"))
                         .param("code", "valid-code").param("state", "wrong"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(authService);
@@ -132,8 +139,10 @@ class AuthControllerTest {
 
     @Test
     void cancelledLogin_returnsBadRequest() throws Exception {
+        when(kakaoOAuthTransactionService.consumeLoginState("state-123", "state-123"))
+                .thenReturn(Optional.of(context("https://needu.example.com/login")));
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(sessionWithState("state-123"))
+                        .cookie(oauthCookie())
                         .param("state", "state-123").param("error", "access_denied"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(authService);
@@ -141,11 +150,13 @@ class AuthControllerTest {
 
     @Test
     void kakaoFailure_returnsServiceUnavailable() throws Exception {
+        when(kakaoOAuthTransactionService.consumeLoginState("state-123", "state-123"))
+                .thenReturn(Optional.of(context("https://needu.example.com/login")));
         doThrow(new BusinessException(AuthErrorCode.AUTH_KAKAO_UNAVAILABLE))
                 .when(authService).loginWithKakao("code");
 
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(sessionWithState("state-123"))
+                        .cookie(oauthCookie())
                         .param("code", "code").param("state", "state-123"))
                 .andExpect(status().isServiceUnavailable());
     }
@@ -158,10 +169,11 @@ class AuthControllerTest {
         verifyNoInteractions(authService);
     }
 
-    private MockHttpSession sessionWithState(String state) {
-        MockHttpSession session = new MockHttpSession();
-        session.setAttribute("kakaoOAuthState", state);
-        session.setAttribute("kakaoOAuthReturnUrl", "https://needu.example.com/login");
-        return session;
+    private Cookie oauthCookie() {
+        return new Cookie("NEEDU_KAKAO_LOGIN_OAUTH", "state-123");
+    }
+
+    private KakaoOAuthContext context(String returnUrl) {
+        return new KakaoOAuthContext(returnUrl, null);
     }
 }
