@@ -20,6 +20,12 @@ public class AiChatControllerDocs implements ControllerDocs {
     private static final List<UserErrorCode> ACTIVE_USER_ERRORS = List.of(
             UserErrorCode.USER_BLOCKED,
             UserErrorCode.USER_ONBOARDING_REQUIRED);
+    // AI 서버를 동기로 호출하는 API에서 발생. 모두 503이지만 문구가 원인별로 달라 각각 예시로 남긴다
+    private static final List<AiChatErrorCode> AI_SERVER_ERRORS = List.of(
+            AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE,
+            AiChatErrorCode.AICHAT_REQUEST_TIMEOUT,
+            AiChatErrorCode.AICHAT_INVALID_RESPONSE,
+            AiChatErrorCode.AICHAT_REQUEST_REJECTED);
 
     @Override
     public List<OperationDoc> operations() {
@@ -28,7 +34,8 @@ public class AiChatControllerDocs implements ControllerDocs {
                         .successStatus(HttpStatus.CREATED, HttpStatus.OK)
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(AiChatErrorCode.AICHAT_CONSENT_REQUIRED)
-                        .errors(AiChatErrorCode.AICHAT_CONVERSATION_STARTING, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+                        .errors(AiChatErrorCode.AICHAT_CONVERSATION_STARTING)
+                        .errors(AI_SERVER_ERRORS)
                         .build(),
                 OperationDoc.of(AiChatController.class, "findAllMessages")
                         .errors(ACTIVE_USER_ERRORS)
@@ -52,17 +59,17 @@ public class AiChatControllerDocs implements ControllerDocs {
                         .errors(CONVERSATION_ACCESS_ERRORS)
                         .errors(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY)
                         .error(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE, new RestartRequiredResponse(true))
-                        .errors(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+                        .errors(AI_SERVER_ERRORS)
                         .build(),
                 OperationDoc.of(AiChatController.class, "patchAnalysis")
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(CONVERSATION_ACCESS_ERRORS)
-                        .errors(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+                        .errors(AI_SERVER_ERRORS)
                         .build(),
                 OperationDoc.of(AiChatController.class, "confirmAnalysis")
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(CONVERSATION_ACCESS_ERRORS)
-                        .errors(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE)
+                        .errors(AI_SERVER_ERRORS)
                         .build()
         );
     }
