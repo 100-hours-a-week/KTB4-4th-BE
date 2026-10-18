@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +31,8 @@ import static org.mockito.BDDMockito.willThrow;
 // 같은 클릭을 기간 안에 다시 기록하지 않는 규칙은 실제 저장 결과로 확인해야 해서 실제 JPA(H2) 위에서 검증한다.
 @DataJpaTest
 @Import(ProductLinkClickService.class)
+// business-policy.yml 값이 바뀌어도 기간 경계 검증이 흔들리지 않도록 고정한다.
+@TestPropertySource(properties = "needu.product.link-click.duplicate-window=7d")
 class ProductLinkClickServiceTest {
 
     private static final Long USER_ID = 1L;

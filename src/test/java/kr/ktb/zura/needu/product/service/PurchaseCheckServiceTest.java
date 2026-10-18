@@ -33,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +52,8 @@ import static org.mockito.Mockito.verify;
 // 소유자 조건 조회, @Version 충돌, 유니크 제약은 실제 저장 결과로 확인해야 해서 실제 JPA(H2) 위에서 검증한다.
 @DataJpaTest
 @Import(PurchaseCheckService.class)
+// business-policy.yml 값이 바뀌어도 만료 시각 검증이 흔들리지 않도록 고정한다.
+@TestPropertySource(properties = "needu.product.purchase-check.notification-expiration=7d")
 class PurchaseCheckServiceTest {
 
     private static final Long USER_ID = 1L;
