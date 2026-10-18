@@ -8,7 +8,7 @@ public enum NotificationType {
     POKE(NotificationCategory.POKE, NotificationSettingType.POKE),
     FRIEND_BIRTHDAY(NotificationCategory.EVENT, NotificationSettingType.FRIEND_BIRTHDAY),
     FRIEND_JOINED(NotificationCategory.FRIEND_JOINED, NotificationSettingType.FRIEND_JOINED),
-    PURCHASE_STATUS(NotificationCategory.PURCHASE_STATUS, NotificationSettingType.PURCHASE_STATUS);
+    PURCHASE_STATUS(NotificationCategory.PURCHASE_STATUS, NotificationSettingType.PURCHASE_FEEDBACK);
 
     private final NotificationCategory category;
     private final NotificationSettingType settingType;
