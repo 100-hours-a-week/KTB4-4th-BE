@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.product.service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
@@ -18,13 +19,12 @@ import kr.ktb.zura.needu.product.repository.ProductLinkClickRepository;
 import kr.ktb.zura.needu.product.repository.PurchaseCheckRepository;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.user.service.UserService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class PurchaseCheckService {
 
@@ -33,13 +33,29 @@ public class PurchaseCheckService {
     private static final String FRIEND_GIFT_NOTIFICATION_TITLE = "친구 선물로 본 상품, 구매하셨나요?";
     private static final String NOTIFICATION_BODY = "구매 여부를 알려주시면 추천이 더 정확해져요.";
     private static final String NOTIFICATION_DEDUP_KEY_PREFIX = "PURCHASE_CHECK:";
-    private static final long NOTIFICATION_EXPIRATION_DAYS = 7;
 
     private final UserService userService;
     private final FriendService friendService;
     private final NotificationCreationService notificationCreationService;
     private final PurchaseCheckRepository purchaseCheckRepository;
     private final ProductLinkClickRepository productLinkClickRepository;
+    private final Duration notificationExpiration;
+
+    public PurchaseCheckService(
+            UserService userService,
+            FriendService friendService,
+            NotificationCreationService notificationCreationService,
+            PurchaseCheckRepository purchaseCheckRepository,
+            ProductLinkClickRepository productLinkClickRepository,
+            @Value("${needu.product.purchase-check.notification-expiration}") Duration notificationExpiration
+    ) {
+        this.userService = userService;
+        this.friendService = friendService;
+        this.notificationCreationService = notificationCreationService;
+        this.purchaseCheckRepository = purchaseCheckRepository;
+        this.productLinkClickRepository = productLinkClickRepository;
+        this.notificationExpiration = notificationExpiration;
+    }
 
     public PurchaseCheckDetailResponse findPurchaseCheck(Long userId, Long purchaseCheckId) {
         userService.validateActiveUser(userId);
@@ -83,7 +99,7 @@ public class PurchaseCheckService {
                 NotificationResourceType.PURCHASE_CHECK,
                 purchaseCheck.getId(),
                 NOTIFICATION_DEDUP_KEY_PREFIX + purchaseCheck.getId(),
-                purchaseCheck.getCreatedAt().plusDays(NOTIFICATION_EXPIRATION_DAYS)
+                purchaseCheck.getCreatedAt().plus(notificationExpiration)
         );
     }
 

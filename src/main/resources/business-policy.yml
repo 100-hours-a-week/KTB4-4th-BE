@@ -64,4 +64,6 @@ needu:
       batch-size: ${PURCHASE_CHECK_BATCH_SIZE:100}
       lock-at-most-for: ${PURCHASE_CHECK_LOCK_AT_MOST_FOR:10m}
       lock-at-least-for: ${PURCHASE_CHECK_LOCK_AT_LEAST_FOR:1m}
+      # 구매 여부 확인 알림이 알림 목록에 남아 있는 기간
+      notification-expiration: ${PURCHASE_CHECK_NOTIFICATION_EXPIRATION:7d}
 
