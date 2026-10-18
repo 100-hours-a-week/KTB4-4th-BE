@@ -23,8 +23,7 @@ public record RateLimitProperties(@Valid Map<String, Policy> policies) {
             @NotNull HttpMethod method,
             @NotBlank String pathPattern,
             @Positive long limit,
-            @NotNull Duration window,
-            @Positive long maximumSize
+            @NotNull Duration window
     ) {
     }
 }

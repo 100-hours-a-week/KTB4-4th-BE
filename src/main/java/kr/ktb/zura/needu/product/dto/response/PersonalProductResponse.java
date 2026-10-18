@@ -2,8 +2,9 @@ package kr.ktb.zura.needu.product.dto.response;
 
 import java.math.BigDecimal;
 
-import kr.ktb.zura.needu.product.entity.PersonalProduct;
-import kr.ktb.zura.needu.product.entity.Product;
+import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 
 public record PersonalProductResponse(
         Long recommendationId,
@@ -11,23 +12,24 @@ public record PersonalProductResponse(
         String name,
         String productImageUrl,
         String purchaseUrl,
-        String category,
+        ProductCategory category,
         Long price,
         BigDecimal score,
-        String reason) {
+        String reason,
+        ProductFeedbackType myFeedback) {
 
-    public static PersonalProductResponse from(PersonalProduct personalProduct) {
-        Product product = personalProduct.getProduct();
+    public static PersonalProductResponse from(PersonalProductSummary personalProduct) {
         return new PersonalProductResponse(
-                personalProduct.getId(),
-                product.getId(),
-                product.getName(),
-                product.getImageUrl(),
-                product.getPurchaseUrl(),
-                product.getCategory(),
-                toPrice(product.getPrice()),
-                personalProduct.getScore(),
-                personalProduct.getReason()
+                personalProduct.id(),
+                personalProduct.productId(),
+                personalProduct.productName(),
+                personalProduct.productImageUrl(),
+                personalProduct.purchaseUrl(),
+                personalProduct.category(),
+                toPrice(personalProduct.price()),
+                personalProduct.score(),
+                personalProduct.reason(),
+                personalProduct.feedback()
         );
     }
 

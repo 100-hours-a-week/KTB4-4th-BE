@@ -9,11 +9,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class KakaoFriendSyncServiceTest {
 
@@ -34,14 +33,12 @@ class KakaoFriendSyncServiceTest {
 
     @Test
     void differentKakaoAccount_doesNotRequestOrSaveFriends() {
-        when(authService.authorizeKakaoFriend("code"))
-                .thenReturn(new AuthService.KakaoAuthorization(99L, "kakao-access"));
         doThrow(new BusinessException(UserErrorCode.USER_KAKAO_ACCOUNT_MISMATCH))
-                .when(userService).validateKakaoIdentity(1L, 99L);
+                .when(authService).authorizeKakaoFriend(1L, "code");
 
         assertThrows(BusinessException.class, () -> syncService.sync(1L, "code"));
 
-        verify(kakaoFriendClient, never()).findAllFriendIds("kakao-access");
+        verify(kakaoFriendClient, never()).findAllFriendIds(org.mockito.ArgumentMatchers.anyString());
         verify(friendService, never()).syncKakaoFriends(org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyList());
     }

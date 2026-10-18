@@ -27,6 +27,7 @@ import static org.mockito.Mockito.times;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -91,7 +92,7 @@ class GlobalExceptionHandlerTest {
     void invalidRequestBody_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\"}"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
     }
 
@@ -99,7 +100,7 @@ class GlobalExceptionHandlerTest {
     void outOfRangeParameter_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(get("/test/param").param("size", "101"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
     }
 
     @Test
@@ -115,6 +116,24 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."))
                 .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    // EventSource는 Accept: text/event-stream으로 요청
+    @Test
+    void eventStreamRequestBusinessException_returnsJsonErrorResponse() throws Exception {
+        mockMvc.perform(get("/test/stream/rate-limit").accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.message").value("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."))
+                .andExpect(jsonPath("$.data.retryAfterSeconds").value(10));
+    }
+
+    @Test
+    void eventStreamRequestUnexpectedException_returnsJsonInternalServerError() throws Exception {
+        mockMvc.perform(get("/test/stream/unexpected").accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.message").value("요청을 처리하지 못했습니다."));
     }
 
     @Test
@@ -150,6 +169,16 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/test/unexpected")
         void throwUnexpectedException() {
+            throw new IllegalStateException();
+        }
+
+        @GetMapping(value = "/test/stream/rate-limit", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        void throwTooManyRequestsExceptionOnStream() {
+            throw new TooManyRequestsException(10);
+        }
+
+        @GetMapping(value = "/test/stream/unexpected", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        void throwUnexpectedExceptionOnStream() {
             throw new IllegalStateException();
         }
 

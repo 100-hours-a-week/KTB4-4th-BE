@@ -7,10 +7,11 @@
 - `KAKAO_REST_API_KEY`: REST API 키
 - `KAKAO_CLIENT_SECRET`: REST API 키의 클라이언트 시크릿
 - `KAKAO_REDIRECT_URI`: 등록한 리다이렉트 URI와 정확히 같은 값
+- `KAKAO_TOKEN_ENCRYPTION_KEY`: `openssl rand -base64 32`로 생성한 카카오 토큰 암호화 키
 - `JWT_SECRET`: `openssl rand -base64 32`로 생성한 Base64 인코딩 비밀키 (디코딩 후 최소 32바이트)
 - `AUTH_COOKIE_SECURE`: 운영 HTTPS에서는 기본값 `true`, 로컬 HTTP에서만 `false`
 
-`.env.example`을 `.env`로 복사한 뒤 실제 FE 주소와 비밀값을 입력합니다. `JWT_SECRET`은 위 명령으로 새로 생성합니다.
+`.env.example`을 `.env`로 복사한 뒤 실제 FE 주소와 비밀값을 입력합니다. `JWT_SECRET`과 `KAKAO_TOKEN_ENCRYPTION_KEY`는 위 명령으로 각각 생성합니다.
 
 카카오 로그인 성공 후 콜백은 15분 액세스 JWT와 14일 리프레시 토큰을 각각 `NEEDU_ACCESS_TOKEN`, `NEEDU_REFRESH_TOKEN` 쿠키로 내려줍니다. 두 쿠키는 `HttpOnly`, `SameSite=Lax`, `Path=/`, 운영 환경에서 `Secure`이며 호스트 전용입니다. 리프레시 토큰의 원문은 DB에 저장하지 않고 SHA-256 해시만 `auth_sessions`에 저장합니다. MySQL에 [`db/auth_sessions.sql`](db/auth_sessions.sql)을 적용해야 합니다.
 

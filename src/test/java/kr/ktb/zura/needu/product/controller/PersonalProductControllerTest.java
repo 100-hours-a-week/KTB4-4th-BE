@@ -18,6 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -35,7 +36,7 @@ class PersonalProductControllerTest {
     private static final Long USER_ID = 1L;
     private static final String URL = "/api/v1/users/me/personal-recommendations";
     private static final PersonalProductSearchCondition FIRST_PAGE_CONDITION =
-            new PersonalProductSearchCondition(30000L, 60000L, null, 20);
+            new PersonalProductSearchCondition(30000L, 60000L, null, null, 20);
     private static final PersonalProductResponse LAMP =
             new PersonalProductResponse(
                     5001L,
@@ -43,10 +44,11 @@ class PersonalProductControllerTest {
                     "미니멀 테이블 램프",
                     "https://image.test/lamp.png",
                     "https://shop.test/lamp",
-                    "LIVING",
+                    ProductCategory.LIVING,
                     52000L,
                     new BigDecimal("0.900000"),
-                    "미니멀한 취향과 잘 맞아요.");
+                    "미니멀한 취향과 잘 맞아요.",
+                    null);
 
     @Autowired
     private MockMvc mockMvc;
@@ -80,7 +82,7 @@ class PersonalProductControllerTest {
 
     @Test
     void cursorAndSizeGiven_findAllPersonalProducts_passesThemToService() throws Exception {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "cursor", 10);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, null, "cursor", 10);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -98,8 +100,25 @@ class PersonalProductControllerTest {
     }
 
     @Test
+    void categoryGiven_findAllPersonalProducts_passesItToService() throws Exception {
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "LIVING", null, 20);
+        given(personalProductService.findAllPersonalProducts(USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(LAMP), new PriceRangeResponse(30000L, 60000L), null, false));
+
+        mockMvc.perform(get(URL)
+                        .param("minPrice", "30000")
+                        .param("maxPrice", "60000")
+                        .param("category", "LIVING")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].category").value("LIVING"))
+                .andExpect(jsonPath("$.data.items[0].myFeedback").isEmpty());
+    }
+
+    @Test
     void priceRangeOmitted_findAllPersonalProducts_usesDefaults() throws Exception {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, 20);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(0L, 99999999L, null, null, 20);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -117,7 +136,7 @@ class PersonalProductControllerTest {
                         .param("maxPrice", "60000")
                         .with(authenticatedUser()))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
 
         mockMvc.perform(get(URL)
@@ -144,7 +163,7 @@ class PersonalProductControllerTest {
 
     @Test
     void invalidCursor_findAllPersonalProducts_returnsBadRequest() throws Exception {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, "invalid", 20);
+        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(30000L, 60000L, null, "invalid", 20);
         given(personalProductService.findAllPersonalProducts(USER_ID, condition))
                 .willThrow(new BusinessException(CommonErrorCode.COMMON_INVALID_REQUEST));
 

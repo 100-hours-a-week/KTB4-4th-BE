@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.feedback.dto.response.ErrorReportResponse;
 import kr.ktb.zura.needu.feedback.entity.ErrorReport;
 import kr.ktb.zura.needu.feedback.exception.FeedbackErrorCode;
 import kr.ktb.zura.needu.feedback.repository.ErrorReportRepository;
+import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -34,6 +35,9 @@ class ErrorReportServiceTest {
     @Mock
     private ErrorReportRepository errorReportRepository;
 
+    @Mock
+    private UserService userService;
+
     @InjectMocks
     private ErrorReportService errorReportService;
 
@@ -50,6 +54,7 @@ class ErrorReportServiceTest {
         ErrorReportResponse response = errorReportService.createErrorReport(
                 USER_ID, IDEMPOTENCY_KEY, createRequest("추천 목록이 열리지 않아요."));
 
+        verify(userService).validateAuthenticatableUser(USER_ID);
         assertThat(response.errorReportId()).isEqualTo(101L);
         ArgumentCaptor<ErrorReport> captor = ArgumentCaptor.forClass(ErrorReport.class);
         verify(errorReportRepository).saveAndFlush(captor.capture());

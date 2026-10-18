@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,6 +13,7 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.server.PathContainer;
@@ -36,6 +38,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                            ErrorResponseWriter errorResponseWriter) {
         this.rules = properties.policies().entrySet().stream()
                 .map(entry -> RateLimitRule.from(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(RateLimitRule::pathPattern, PathPattern.SPECIFICITY_COMPARATOR))
                 .toList();
         this.rateLimitCounter = rateLimitCounter;
         this.errorResponseWriter = errorResponseWriter;
@@ -53,7 +56,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         String userId = authentication.getName();
-        RateLimitUsage usage = rateLimitCounter.increment(rule.get().name(), userId);
+        RateLimitUsage usage;
+        try {
+            usage = rateLimitCounter.increment(rule.get().name(), userId);
+        } catch (DataAccessException exception) {
+            log.warn("Rate limit Redis unavailable. policy={}, userId={}", rule.get().name(), userId, exception);
+            errorResponseWriter.write(response, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+            return;
+        }
         if (usage.count() <= rule.get().limit()) {
             filterChain.doFilter(request, response);
             return;

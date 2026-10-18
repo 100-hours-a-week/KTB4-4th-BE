@@ -21,6 +21,8 @@ import static lombok.AccessLevel.PROTECTED;
 @NoArgsConstructor(access = PROTECTED)
 public class User {
 
+    private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false)
@@ -43,14 +45,14 @@ public class User {
     private LocalDate birthDate;
 
     @Column(nullable = false)
-    private boolean onboardingCompleted = true; // V2 온보딩 추가 기준, true -> false 변경 필요
+    private boolean onboardingCompleted = false;
 
     @Column(nullable = false)
     private boolean tasteAnalysisCompleted = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private UserStatus status = UserStatus.ACTIVE; // V2 온보딩 추가 기준, ACTIVE -> ONBOARDING 변경 필요
+    private UserStatus status = UserStatus.ONBOARDING;
 
     @Column
     private LocalDateTime blockedAt;
@@ -80,7 +82,9 @@ public class User {
         this.birthDate = birthDate;
     }
 
-    public void completeOnboarding() {
+    public void completeOnboarding(Gender gender, LocalDate birthDate) {
+        this.gender = gender;
+        this.birthDate = birthDate;
         this.onboardingCompleted = true;
         this.status = UserStatus.ACTIVE;
     }
@@ -104,7 +108,16 @@ public class User {
 
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
-        this.deletedAt = LocalDateTime.now();
+        this.deletedAt = LocalDateTime.now(ZoneOffset.UTC);
+        this.externalId = null;
+        this.nickname = WITHDRAWN_NICKNAME;
+        this.profileImageUrl = null;
+        this.gender = Gender.NONE;
+        this.birthDate = null;
+        this.onboardingCompleted = false;
+        this.tasteAnalysisCompleted = false;
+        this.lastLoginAt = null;
+        this.kakaoFriendSyncedAt = null;
     }
 
     public boolean isActive() {

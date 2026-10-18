@@ -7,10 +7,10 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
-import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorPageResponse;
-import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
+import kr.ktb.zura.needu.product.repository.PersonalProductSummary;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
@@ -24,22 +24,25 @@ public class PersonalProductService {
 
     private final UserService userService;
     private final PersonalProductRepository personalProductRepository;
+    private final ProductPriceRangeCacheService productPriceRangeCacheService;
 
     public ProductCursorPageResponse<PersonalProductResponse> findAllPersonalProducts(
             Long userId, PersonalProductSearchCondition condition) {
         validatePriceRange(condition);
+        ProductCategory category = toCategory(condition.category());
         userService.validateActiveUser(userId);
 
         int size = condition.size();
         // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회한다.
-        List<PersonalProduct> personalProducts = findPersonalProducts(userId, condition, Limit.of(size + 1));
+        List<PersonalProductSummary> personalProducts =
+                findPersonalProducts(userId, condition, category, Limit.of(size + 1));
         boolean hasNext = personalProducts.size() > size;
-        List<PersonalProduct> pageItems = hasNext ? personalProducts.subList(0, size) : personalProducts;
+        List<PersonalProductSummary> pageItems = hasNext ? personalProducts.subList(0, size) : personalProducts;
 
         String nextCursor = hasNext ? PersonalProductCursor.from(pageItems.getLast()).encode() : null;
         return new ProductCursorPageResponse<>(
                 pageItems.stream().map(PersonalProductResponse::from).toList(),
-                PriceRangeResponse.from(personalProductRepository.findPriceRangeByUserId(userId)),
+                productPriceRangeCacheService.findPersonalPriceRange(userId),
                 nextCursor,
                 hasNext
         );
@@ -51,16 +54,21 @@ public class PersonalProductService {
         }
     }
 
-    private List<PersonalProduct> findPersonalProducts(
-            Long userId, PersonalProductSearchCondition condition, Limit limit) {
+    private ProductCategory toCategory(String category) {
+        return category == null ? null : ProductCategory.fromCode(category);
+    }
+
+    private List<PersonalProductSummary> findPersonalProducts(
+            Long userId, PersonalProductSearchCondition condition, ProductCategory category, Limit limit) {
         BigDecimal minPrice = BigDecimal.valueOf(condition.minPrice());
         BigDecimal maxPrice = BigDecimal.valueOf(condition.maxPrice());
 
         if (condition.cursor() == null) {
-            return personalProductRepository.findAllByUserIdAndPriceRange(userId, minPrice, maxPrice, limit);
+            return personalProductRepository.findAllByUserIdAndPriceRange(
+                    userId, minPrice, maxPrice, category, limit);
         }
         PersonalProductCursor decodedCursor = PersonalProductCursor.decode(condition.cursor());
         return personalProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
-                userId, minPrice, maxPrice, decodedCursor.score(), decodedCursor.id(), limit);
+                userId, minPrice, maxPrice, category, decodedCursor.score(), decodedCursor.id(), limit);
     }
 }

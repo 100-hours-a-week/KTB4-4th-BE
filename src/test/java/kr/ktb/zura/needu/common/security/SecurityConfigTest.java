@@ -18,7 +18,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "management.endpoints.web.exposure.include=health,metrics,prometheus")
+@SpringBootTest(properties = {
+        "management.endpoints.web.exposure.include=health,metrics,prometheus",
+        "needu.rate-limit.enabled=false",
+        "notification.webpush.public-key=test-public-key"
+})
 @AutoConfigureMockMvc
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class SecurityConfigTest {
@@ -50,6 +54,22 @@ class SecurityConfigTest {
         mockMvc.perform(get("/actuator/health")
                         .cookie(new Cookie(AuthCookieNames.ACCESS_TOKEN, "malformed")))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void noAuthentication_findVapidPublicKey_returnsConfiguredKey() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications/web-push/public-key"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("VAPID 공개키를 조회했습니다."))
+                .andExpect(jsonPath("$.data.publicKey").value("test-public-key"));
+    }
+
+    @Test
+    void invalidAccessCookie_findVapidPublicKey_returnsConfiguredKey() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications/web-push/public-key")
+                        .cookie(new Cookie(AuthCookieNames.ACCESS_TOKEN, "malformed")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.publicKey").value("test-public-key"));
     }
 
     @Test

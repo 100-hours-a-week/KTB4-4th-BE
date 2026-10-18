@@ -1,14 +1,13 @@
 package kr.ktb.zura.needu.auth.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.net.URI;
 import java.time.Duration;
-import java.util.UUID;
 import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
 import kr.ktb.zura.needu.auth.dto.response.CsrfTokenResponse;
-import kr.ktb.zura.needu.auth.service.AuthService;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
+import kr.ktb.zura.needu.auth.service.AuthService;
+import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
+import kr.ktb.zura.needu.auth.type.KakaoOAuthContext;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.security.AuthCookieNames;
@@ -32,22 +31,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
-    private static final String KAKAO_STATE = "kakaoOAuthState";
-    private static final String KAKAO_RETURN_URL = "kakaoOAuthReturnUrl";
+    private static final String KAKAO_CALLBACK_PATH = "/api/v1/auth/kakao/callback";
 
     private final AuthService authService;
+    private final KakaoOAuthTransactionService kakaoOAuthTransactionService;
     private final boolean cookieSecure;
     private final Duration accessTokenExpiration;
 
-    public AuthController(AuthService authService, @Value("${auth.cookie.secure}") boolean cookieSecure,
+    public AuthController(AuthService authService,
+                          KakaoOAuthTransactionService kakaoOAuthTransactionService,
+                          @Value("${auth.cookie.secure}") boolean cookieSecure,
                           @Value("${auth.jwt.access-token-expiration}") Duration accessTokenExpiration) {
         this.authService = authService;
+        this.kakaoOAuthTransactionService = kakaoOAuthTransactionService;
         this.cookieSecure = cookieSecure;
         this.accessTokenExpiration = accessTokenExpiration;
     }
 
     @GetMapping("/kakao/authorize")
-    public ResponseEntity<Void> authorize(@RequestParam String returnUrl, HttpServletRequest request) {
+    public ResponseEntity<Void> authorize(@RequestParam String returnUrl) {
         URI returnUri;
         try {
             returnUri = URI.create(returnUrl);
@@ -58,12 +60,13 @@ public class AuthController {
                 || returnUri.getHost() == null || returnUri.getUserInfo() != null) {
             throw new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_RETURN_URL);
         }
-        String state = UUID.randomUUID().toString();
-        HttpSession session = request.getSession(true);
-        session.setAttribute(KAKAO_STATE, state);
-        session.setAttribute(KAKAO_RETURN_URL, returnUri);
+        String state = kakaoOAuthTransactionService.createLoginState(returnUri.toString());
         URI authorizationUri = authService.createKakaoAuthorizationUri(state);
-        return ResponseEntity.status(HttpStatus.FOUND).location(authorizationUri).build();
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(authorizationUri)
+                .header(HttpHeaders.SET_COOKIE,
+                        oauthCookie(state, kakaoOAuthTransactionService.getTtl()).toString())
+                .build();
     }
 
     @GetMapping("/kakao/callback")
@@ -71,16 +74,10 @@ public class AuthController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error,
-            HttpServletRequest request) {
-        HttpSession session = request.getSession(false);
-        String expectedState = session == null ? null : (String) session.getAttribute(KAKAO_STATE);
-        URI returnUri = session == null ? null : (URI) session.getAttribute(KAKAO_RETURN_URL);
-        if (session != null) {
-            session.invalidate();
-        }
-        if (expectedState == null || !expectedState.equals(state) || returnUri == null) {
-            throw new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_STATE);
-        }
+            @CookieValue(name = AuthCookieNames.KAKAO_LOGIN_OAUTH, required = false) String cookieState) {
+        KakaoOAuthContext context = kakaoOAuthTransactionService
+                .consumeLoginState(state, cookieState)
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_STATE));
         if (error != null) {
             throw new BusinessException(AuthErrorCode.AUTH_KAKAO_CANCELLED);
         }
@@ -88,9 +85,10 @@ public class AuthController {
             throw new BusinessException(AuthErrorCode.AUTH_KAKAO_INVALID_CODE);
         }
         AuthService.Tokens tokens = authService.loginWithKakao(code);
-        return ResponseEntity.status(HttpStatus.FOUND).location(returnUri)
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(context.returnUrl()))
                 .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
+                .header(HttpHeaders.SET_COOKIE, oauthCookie("", Duration.ZERO).toString())
                 .cacheControl(CacheControl.noStore()).build();
     }
 
@@ -136,6 +134,12 @@ public class AuthController {
         return ResponseCookie.from(AuthCookieNames.REFRESH_TOKEN, value)
                 .httpOnly(true).secure(cookieSecure).sameSite("Lax")
                 .path("/").maxAge(maxAge).build();
+    }
+
+    private ResponseCookie oauthCookie(String value, Duration maxAge) {
+        return ResponseCookie.from(AuthCookieNames.KAKAO_LOGIN_OAUTH, value)
+                .httpOnly(true).secure(cookieSecure).sameSite("Lax")
+                .path(KAKAO_CALLBACK_PATH).maxAge(maxAge).build();
     }
 
 

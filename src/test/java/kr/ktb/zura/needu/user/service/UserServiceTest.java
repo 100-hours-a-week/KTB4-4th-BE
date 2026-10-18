@@ -1,16 +1,24 @@
 package kr.ktb.zura.needu.user.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.user.dto.response.MyPageResponse;
+import kr.ktb.zura.needu.user.dto.response.UserAiProfileResponse;
+import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.entity.UserTasteProfile;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.repository.UserTasteProfileRepository;
+import kr.ktb.zura.needu.user.type.AiSummaryStatus;
 import kr.ktb.zura.needu.user.type.Gender;
+import kr.ktb.zura.needu.user.type.TasteProfileStatus;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +30,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -55,12 +65,14 @@ class UserServiceTest {
         assertEquals(42L, user.externalId());
         assertEquals("사용자", user.nickname());
         assertEquals(Gender.NONE, userCaptor.getValue().getGender());
+        assertFalse(user.onboardingCompleted());
+        assertEquals(UserStatus.ONBOARDING, userCaptor.getValue().getStatus());
         assertNotNull(userCaptor.getValue().getLastLoginAt());
     }
 
     @Test
     void returningUser_reusesExistingUser() {
-        User existing = new User(42L, "기존회원", null, Gender.FEMALE, null);
+        User existing = createActiveUser("기존회원");
         when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(existing));
 
         UserResponse user = userService.findOrCreateKakaoUser(42L, "카카오닉네임", null);
@@ -126,7 +138,7 @@ class UserServiceTest {
 
     @Test
     void activeUser_findUserSummary_returnsSummary() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
 
         assertEquals("니듀", userService.findUserSummary(1L).nickname());
     }
@@ -134,6 +146,18 @@ class UserServiceTest {
     @Test
     void onboardingUser_validateActiveUser_throwsOnboardingRequired() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(createOnboardingUser()));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.validateActiveUser(1L));
+
+        assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
+    void onboardingIncompleteActiveUser_validateActiveUser_throwsOnboardingRequired() {
+        User user = new User(42L, "온보딩회원", null, Gender.NONE, null);
+        ReflectionTestUtils.setField(user, "status", UserStatus.ACTIVE);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> userService.validateActiveUser(1L));
@@ -153,7 +177,7 @@ class UserServiceTest {
 
     @Test
     void activeUser_validateActiveUser_passes() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
 
         assertDoesNotThrow(() -> userService.validateActiveUser(1L));
     }
@@ -198,7 +222,7 @@ class UserServiceTest {
 
     @Test
     void activeUser_findUserById_returnsDetails() {
-        User user = new User(42L, "친구", "https://example.com/profile.jpg", Gender.NONE, LocalDate.of(2000, 2, 29));
+        User user = createActiveUser("친구", "https://example.com/profile.jpg", LocalDate.of(2000, 2, 29));
         user.completeTasteAnalysis();
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
@@ -232,6 +256,41 @@ class UserServiceTest {
     }
 
     @Test
+    void onboardingUser_completeOnboarding_savesProfileAndTastesAndActivates() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        ReflectionTestUtils.setField(user, "status", UserStatus.ONBOARDING);
+        ReflectionTestUtils.setField(user, "onboardingCompleted", false);
+        Map<String, Object> tastes = Map.of("interestCategoryCodes", List.of("BEAUTY"));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        userService.completeOnboarding(1L, Gender.FEMALE, LocalDate.of(2000, 1, 1), tastes);
+
+        assertEquals(Gender.FEMALE, user.getGender());
+        assertEquals(LocalDate.of(2000, 1, 1), user.getBirthDate());
+        assertTrue(user.isOnboardingCompleted());
+        assertEquals(UserStatus.ACTIVE, user.getStatus());
+        ArgumentCaptor<UserTasteProfile> profileCaptor = ArgumentCaptor.forClass(UserTasteProfile.class);
+        verify(userTasteProfileRepository).save(profileCaptor.capture());
+        assertEquals(tastes, profileCaptor.getValue().getOnboardingTastes());
+    }
+
+    @Test
+    void tasteProfileExists_completeOnboarding_replacesOnboardingTastesOnly() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        profile.updateAnalysis("요약", "[\"취향\"]", "[\"관심\"]");
+        Map<String, Object> tastes = Map.of("allergyCodes", List.of("MILK"));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        userService.completeOnboarding(1L, Gender.MALE, LocalDate.of(1999, 12, 31), tastes);
+
+        assertEquals(tastes, profile.getOnboardingTastes());
+        assertEquals("요약", profile.getAiSummary());
+    }
+
+    @Test
     void missingUser_findUserById_returnsEmpty() {
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -248,10 +307,155 @@ class UserServiceTest {
         assertTrue(userService.findUserById(1L).isEmpty());
     }
 
+    @Test
+    void tasteAnalysisCompleted_findMyPage_returnsKeywordsAndSummary() {
+        User user = createActiveUser("니듀", "https://example.com/profile.jpg", LocalDate.of(2000, 1, 1));
+        user.completeTasteAnalysis();
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        profile.updateAnalysis("홈카페를 좋아해요.", "[\"미니멀\",\"홈카페\"]", "[\"야구\"]");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(user.getId())).thenReturn(Optional.of(profile));
+
+        MyPageResponse response = userService.findMyPage(1L);
+
+        assertEquals("니듀", response.user().name());
+        assertEquals(LocalDate.of(2000, 1, 1), response.user().birthDate());
+        assertEquals(TasteProfileStatus.COMPLETED, response.tasteProfile().analysisStatus());
+        assertEquals(List.of("미니멀", "홈카페"), response.tasteProfile().preferenceKeywords());
+        assertEquals(List.of("야구"), response.tasteProfile().interestKeywords());
+        assertEquals(AiSummaryStatus.READY, response.tasteProfile().aiSummary().status());
+        assertEquals("홈카페를 좋아해요.", response.tasteProfile().aiSummary().content());
+    }
+
+    @Test
+    void tasteAnalysisNotStarted_findMyPage_returnsEmptyTasteProfile() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
+
+        MyPageResponse response = userService.findMyPage(1L);
+
+        assertEquals(TasteProfileStatus.NOT_STARTED, response.tasteProfile().analysisStatus());
+        assertTrue(response.tasteProfile().preferenceKeywords().isEmpty());
+        assertEquals(AiSummaryStatus.NOT_READY, response.tasteProfile().aiSummary().status());
+        assertNull(response.tasteProfile().aiSummary().content());
+    }
+
+    @Test
+    void onboardingUser_findMyPage_throwsOnboardingRequired() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createOnboardingUser()));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> userService.findMyPage(1L));
+
+        assertEquals(UserErrorCode.USER_ONBOARDING_REQUIRED, exception.getErrorCode());
+    }
+
+    @Test
+    void onboardedUser_findUserAiProfile_returnsUserInfoAndOnboardingTastes() {
+        User user = new User(42L, "니듀", null, Gender.NONE, null);
+        user.completeOnboarding(Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of(
+                "interestCategoryCodes", List.of("COFFEE_TEA", "TRAVEL"),
+                "allergyCodes", List.of("PEANUT"),
+                "giftExclusionCodes", List.of("ALCOHOL")));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        UserAiProfileResponse response = userService.findUserAiProfile(1L);
+
+        assertEquals(new UserAiProfileResponse(
+                "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE,
+                List.of("COFFEE_TEA", "TRAVEL"), List.of("PEANUT"), List.of("ALCOHOL")), response);
+    }
+
+    @Test
+    void userWithoutTasteProfile_findUserAiProfile_returnsEmptyOnboardingTastes() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        UserAiProfileResponse response = userService.findUserAiProfile(1L);
+
+        assertEquals("니듀", response.nickname());
+        assertTrue(response.interestCategoryCodes().isEmpty());
+        assertTrue(response.allergyCodes().isEmpty());
+        assertTrue(response.giftExclusionCodes().isEmpty());
+    }
+
+    @Test
+    void missingUser_findUserAiProfile_throwsUserNotFound() {
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findUserAiProfile(1L));
+
+        assertEquals(UserErrorCode.USER_NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void mixedUserStatuses_findAllActiveUsersByIds_returnsOnlyActiveUsers() {
+        User activeUser = createActiveUser("친구");
+        ReflectionTestUtils.setField(activeUser, "id", 2L);
+        User blockedUser = createActiveUser("차단회원");
+        ReflectionTestUtils.setField(blockedUser, "id", 3L);
+        blockedUser.block();
+        when(userRepository.findAllById(List.of(2L, 3L))).thenReturn(List.of(activeUser, blockedUser));
+
+        List<UserDetailResponse> response = userService.findAllActiveUsersByIds(List.of(2L, 3L));
+
+        assertEquals(1, response.size());
+        assertEquals(2L, response.getFirst().id());
+        assertEquals("친구", response.getFirst().nickname());
+    }
+
+    @Test
+    void onboardingUser_isOnboardingCompleted_returnsFalseWithoutThrowing() {
+        User user = createOnboardingUser();
+        ReflectionTestUtils.setField(user, "onboardingCompleted", false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertFalse(userService.isOnboardingCompleted(1L));
+    }
+
+    @Test
+    void existingUser_withdraw_anonymizesPersonalData() {
+        User user = new User(
+                42L,
+                "니듀",
+                "https://example.com/profile.jpg",
+                Gender.FEMALE,
+                LocalDate.of(2000, 1, 1));
+        user.completeOnboarding(Gender.FEMALE, LocalDate.of(2000, 1, 1));
+        user.completeTasteAnalysis();
+        user.recordLogin();
+        user.completeKakaoFriendSync();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+
+        userService.withdraw(1L);
+
+        verify(userTasteProfileRepository).deleteById(1L);
+        assertEquals(UserStatus.WITHDRAWN, user.getStatus());
+        assertFalse(user.getDeletedAt().isBefore(before));
+        assertNull(user.getExternalId());
+        assertEquals("탈퇴한 사용자", user.getNickname());
+        assertNull(user.getProfileImageUrl());
+        assertEquals(Gender.NONE, user.getGender());
+        assertNull(user.getBirthDate());
+        assertFalse(user.isOnboardingCompleted());
+        assertFalse(user.isTasteAnalysisCompleted());
+        assertNull(user.getLastLoginAt());
+        assertNull(user.getKakaoFriendSyncedAt());
+    }
+
     private User createOnboardingUser() {
-        User user = new User(42L, "온보딩회원", null, Gender.NONE, null);
-        // 현재 User 기본 상태는 ACTIVE이고 ONBOARDING으로 바꾸는 도메인 메서드가 없어 테스트에서만 직접 설정한다.
-        ReflectionTestUtils.setField(user, "status", UserStatus.ONBOARDING);
+        return new User(42L, "온보딩회원", null, Gender.NONE, null);
+    }
+
+    private User createActiveUser(String nickname) {
+        return createActiveUser(nickname, null, null);
+    }
+
+    private User createActiveUser(String nickname, String profileImageUrl, LocalDate birthDate) {
+        User user = new User(42L, nickname, profileImageUrl, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
         return user;
     }
 }

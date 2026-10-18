@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
@@ -14,8 +15,14 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Getter
-@Table(name = "friends", uniqueConstraints =
-        @UniqueConstraint(name = "uk_friends_owner_friend", columnNames = {"owner_user_id", "friend_user_id"}))
+@Table(
+        name = "friends",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_friends_owner_friend",
+                columnNames = {"owner_user_id", "friend_user_id"}
+        ),
+        indexes = @Index(name = "idx_friends_friend_user_id", columnList = "friend_user_id")
+)
 @NoArgsConstructor(access = PROTECTED)
 public class Friend {
 

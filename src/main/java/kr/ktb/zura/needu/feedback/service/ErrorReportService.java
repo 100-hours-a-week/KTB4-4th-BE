@@ -8,6 +8,7 @@ import kr.ktb.zura.needu.feedback.dto.response.ErrorReportResponse;
 import kr.ktb.zura.needu.feedback.entity.ErrorReport;
 import kr.ktb.zura.needu.feedback.exception.FeedbackErrorCode;
 import kr.ktb.zura.needu.feedback.repository.ErrorReportRepository;
+import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -22,6 +23,7 @@ public class ErrorReportService {
     private static final int MAX_DETAIL_LENGTH = 500;
 
     private final ErrorReportRepository errorReportRepository;
+    private final UserService userService;
 
     @Transactional
     public ErrorReportResponse createErrorReport(
@@ -29,6 +31,7 @@ public class ErrorReportService {
             UUID idempotencyKey,
             CreateErrorReportRequest request
     ) {
+        userService.validateAuthenticatableUser(userId);
         validateDetailLength(request.detail());
         validateNotDuplicated(userId, idempotencyKey);
         ErrorReport errorReport = saveErrorReport(toErrorReport(userId, idempotencyKey, request));

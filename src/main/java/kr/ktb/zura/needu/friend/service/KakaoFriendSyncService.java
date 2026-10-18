@@ -11,19 +11,23 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class KakaoFriendSyncService {
 
+    private static final String FRIENDS_SCOPE = "friends";
+
     private final AuthService authService;
     private final UserService userService;
     private final KakaoFriendClient kakaoFriendClient;
     private final FriendService friendService;
 
-    public URI createAuthorizationUri(String state) {
+    public URI createAuthorizationUri(Long userId, String state) {
+        userService.validateActiveUser(userId);
         return authService.createKakaoFriendAuthorizationUri(state);
     }
 
     public void sync(Long userId, String code) {
-        AuthService.KakaoAuthorization authorization = authService.authorizeKakaoFriend(code);
-        userService.validateKakaoIdentity(userId, authorization.kakaoUserId());
+        userService.validateActiveUser(userId);
+        authService.authorizeKakaoFriend(userId, code);
+        String accessToken = authService.findKakaoAccessToken(userId, FRIENDS_SCOPE);
         friendService.syncKakaoFriends(userId,
-                kakaoFriendClient.findAllFriendIds(authorization.accessToken()));
+                kakaoFriendClient.findAllFriendIds(accessToken));
     }
 }

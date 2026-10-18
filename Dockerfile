@@ -51,4 +51,4 @@ USER app
 EXPOSE 8080
 
 # Application 실행
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseG1GC", "-jar", "app.jar"]

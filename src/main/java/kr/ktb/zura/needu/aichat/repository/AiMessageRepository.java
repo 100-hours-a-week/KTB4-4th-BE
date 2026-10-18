@@ -7,10 +7,15 @@ import java.util.UUID;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AiMessageRepository extends JpaRepository<AiMessage, Long> {
+
+    @Modifying
+    @Query("delete from AiMessage m where m.aiChatRoom.id in :aiChatRoomIds")
+    void deleteAllByAiChatRoomIdIn(@Param("aiChatRoomIds") List<Long> aiChatRoomIds);
 
     Optional<AiMessage> findByAiChatRoomIdAndClientMessageId(Long aiChatRoomId, UUID clientMessageId);
 

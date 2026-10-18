@@ -7,8 +7,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
@@ -33,12 +35,16 @@ public class FakeAiChatClient implements AiChatClient {
 
     private final Duration latency;
     private final int maxTurns;
+    private final int replyChunkCodePoints;
+    private final Duration replyChunkInterval;
     private final Map<Long, Integer> mockTurns = new ConcurrentHashMap<>();
     private final Map<Long, AiServerAnalysisResponse> mockAnalyses = new ConcurrentHashMap<>();
 
     public FakeAiChatClient(
             @Value("${ai.server.mock-latency:0s}") Duration latency,
-            @Value("${ai.server.mock-max-turns:2}") int maxTurns
+            @Value("${ai.server.mock-max-turns:2}") int maxTurns,
+            @Value("${ai.server.mock-reply-chunk-code-points:20}") int replyChunkCodePoints,
+            @Value("${ai.server.mock-reply-chunk-interval:0s}") Duration replyChunkInterval
     ) {
         if (latency.isNegative()) {
             throw new IllegalArgumentException("AI mock latency must not be negative");
@@ -46,12 +52,21 @@ public class FakeAiChatClient implements AiChatClient {
         if (maxTurns < 1) {
             throw new IllegalArgumentException("AI mock max turns must be positive");
         }
+        if (replyChunkCodePoints < 1) {
+            throw new IllegalArgumentException("AI mock reply chunk code points must be positive");
+        }
+        if (replyChunkInterval.isNegative()) {
+            throw new IllegalArgumentException("AI mock reply chunk interval must not be negative");
+        }
         this.latency = latency;
         this.maxTurns = maxTurns;
+        this.replyChunkCodePoints = replyChunkCodePoints;
+        this.replyChunkInterval = replyChunkInterval;
     }
 
     @Override
-    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId) {
+    public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId,
+                                                     AiServerUserProfileRequest userProfile) {
         pause();
         mockTurns.put(conversationRoomId, 0);
         return new AiServerStartSessionResponse(
@@ -78,6 +93,23 @@ public class FakeAiChatClient implements AiChatClient {
                 inputLocked,
                 inputLocked,
                 Math.min(100, turn * 100 / maxTurns));
+    }
+
+    // 완성된 목 답변을 정해진 크기·간격으로 나눠 넘겨 AI 서버 스트리밍처럼 보이게 한다
+    @Override
+    public AiServerSendMessageResponse streamMessage(Long userId, Long conversationRoomId, Long userMessageId,
+                                                     String message, Consumer<String> onDelta) {
+        AiServerSendMessageResponse response = sendMessage(userId, conversationRoomId, message);
+        // 이모지가 쪼개지지 않게 char가 아닌 코드 포인트로 센다
+        int[] codePoints = response.reply().codePoints().toArray();
+        for (int start = 0; start < codePoints.length; start += replyChunkCodePoints) {
+            if (start > 0) {
+                sleep(replyChunkInterval);
+            }
+            int count = Math.min(replyChunkCodePoints, codePoints.length - start);
+            onDelta.accept(new String(codePoints, start, count));
+        }
+        return response;
     }
 
     @Override
@@ -144,8 +176,15 @@ public class FakeAiChatClient implements AiChatClient {
     }
 
     private void pause() {
+        sleep(latency);
+    }
+
+    private void sleep(Duration duration) {
+        if (duration.isZero()) {
+            return;
+        }
         try {
-            Thread.sleep(latency);
+            Thread.sleep(duration);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("AI mock call was interrupted", exception);

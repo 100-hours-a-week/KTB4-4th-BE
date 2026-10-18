@@ -27,8 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "needu.rate-limit.policies.friend-list.method=GET",
         "needu.rate-limit.policies.friend-list.path-pattern=/api/v1/friends",
         "needu.rate-limit.policies.friend-list.limit=" + FriendListIntegrationTest.RATE_LIMIT,
-        "needu.rate-limit.policies.friend-list.window=1m",
-        "needu.rate-limit.policies.friend-list.maximum-size=1000"
+        "needu.rate-limit.policies.friend-list.window=1m"
 })
 @AutoConfigureMockMvc
 class FriendListIntegrationTest {
@@ -70,18 +69,71 @@ class FriendListIntegrationTest {
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].name").value("두 번째"))
                 .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(false))
+                .andExpect(jsonPath("$.totalCount").value(2))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(0))
                 .andExpect(jsonPath("$.hasNext").value(true))
                 .andExpect(jsonPath("$.nextCursor").isString());
+    }
 
-        owner.completeKakaoFriendSync();
-        userRepository.save(owner);
+    @Test
+    void favoriteTrue_findAllFriends_returnsOnlyFavoriteFriends() throws Exception {
+        User owner = saveUser("사용자", LocalDate.of(2000, 1, 1));
+        User regular = saveUser("가나", LocalDate.of(2000, 3, 1));
+        User favorite = saveUser("다라", LocalDate.of(2000, 3, 2));
+        Friend favoriteFriend = new Friend(owner.getId(), favorite.getId());
+        favoriteFriend.markAsFavorite();
+        friendRepository.saveAll(List.of(new Friend(owner.getId(), regular.getId()), favoriteFriend));
 
-        mockMvc.perform(validRequest().param("sort", "birthday").with(authenticatedUser(owner.getId())))
+        mockMvc.perform(validRequest().param("favorite", "true").with(authenticatedUser(owner.getId())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].name").value("첫 번째"))
-                .andExpect(jsonPath("$.data.isKakaoFriendSynced").value(true))
-                .andExpect(jsonPath("$.hasNext").value(true))
-                .andExpect(jsonPath("$.nextCursor").isString());
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("다라"))
+                .andExpect(jsonPath("$.data.items[0].isFavorite").value(true))
+                .andExpect(jsonPath("$.totalCount").value(2))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(1))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void inactiveFriends_findAllFriends_returnsOnlyActiveFriends() throws Exception {
+        User owner = saveUser("사용자", LocalDate.of(2000, 1, 1));
+        User active = saveUser("다라", LocalDate.of(2000, 3, 1));
+        User withdrawn = saveUser("가나", LocalDate.of(2000, 3, 2));
+        withdrawn.withdraw();
+        userRepository.save(withdrawn);
+        User blocked = saveUser("나다", LocalDate.of(2000, 3, 3));
+        blocked.block();
+        userRepository.save(blocked);
+        friendRepository.saveAll(List.of(
+                new Friend(owner.getId(), active.getId()),
+                new Friend(owner.getId(), withdrawn.getId()),
+                new Friend(owner.getId(), blocked.getId())
+        ));
+
+        mockMvc.perform(validRequest().with(authenticatedUser(owner.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("다라"))
+                .andExpect(jsonPath("$.totalCount").value(1))
+                .andExpect(jsonPath("$.favoriteTotalCount").value(0))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void keyword_findAllFriends_returnsFriendsWhoseNameStartsWithKeyword() throws Exception {
+        User owner = saveUser("사용자", LocalDate.of(2000, 1, 1));
+        User kimChulsoo = saveUser("김철수", LocalDate.of(2000, 3, 1));
+        User parkKimji = saveUser("박김지", LocalDate.of(2000, 3, 2));
+        friendRepository.saveAll(List.of(
+                new Friend(owner.getId(), kimChulsoo.getId()),
+                new Friend(owner.getId(), parkKimji.getId())
+        ));
+
+        mockMvc.perform(validRequest().param("keyword", "김").with(authenticatedUser(owner.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("김철수"))
+                .andExpect(jsonPath("$.hasNext").value(false));
     }
 
     @Test
@@ -130,7 +182,9 @@ class FriendListIntegrationTest {
     }
 
     private User saveUser(String name, LocalDate birthDate) {
-        return userRepository.save(new User(nextExternalId(), name, null, Gender.NONE, birthDate));
+        User user = new User(nextExternalId(), name, null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.save(user);
     }
 
     private long nextExternalId() {

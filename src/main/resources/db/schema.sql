@@ -1,5 +1,5 @@
 -- NeedU Backend 스키마 (MySQL 8.4)
--- 현재 구현된 Entity 11개 기준. ddl-auto=validate가 이 스키마를 검증한다.
+-- 현재 구현된 Entity 기준. ddl-auto=validate가 이 스키마를 검증한다.
 --
 -- 규칙
 --  * Entity를 바꾸면 이 파일도 함께 바꾼다. 어긋나면 애플리케이션이 부팅에 실패한다
@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS user_taste_profiles (
     CONSTRAINT fk_user_taste_profiles_user FOREIGN KEY (user_id) REFERENCES users (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- 사용자 동의·철회 이력. 수정 없이 쌓기만 하고 항목별 가장 최근 행이 현재 상태다
+-- 동의 항목(제목, 내용, 필수 여부, 버전)은 코드(ConsentType)로 관리해 테이블이 없다
+CREATE TABLE IF NOT EXISTS user_consents (
+    id           BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id      BIGINT      NOT NULL,
+    consent_type VARCHAR(50) NOT NULL COMMENT 'PRIVACY_COLLECTION, AI_CONVERSATION, FRIEND_TASTE_SHARING, PRODUCT_ACTIVITY',
+    version      VARCHAR(20) NOT NULL COMMENT '동의 당시의 ConsentType.version',
+    agreed       TINYINT(1)  NOT NULL,
+    created_at   DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    -- 사용자·항목별 최신 이력(order by id desc)을 찾는다
+    KEY idx_user_consents_user_id_consent_type_id (user_id, consent_type, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- auth
 -- ---------------------------------------------------------------------------
@@ -72,6 +86,47 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     UNIQUE KEY uk_auth_sessions_refresh_token_hash (refresh_token_hash)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS kakao_tokens (
+    id                       BIGINT        NOT NULL AUTO_INCREMENT,
+    user_id                  BIGINT        NOT NULL,
+    encrypted_access_token   VARCHAR(1024) NOT NULL COMMENT 'AES-256-GCM 암호문',
+    encrypted_refresh_token  VARCHAR(1024) NOT NULL COMMENT 'AES-256-GCM 암호문',
+    access_token_expires_at  DATETIME(6)   NOT NULL,
+    refresh_token_expires_at DATETIME(6)   NOT NULL,
+    scopes                   VARCHAR(1000) NOT NULL DEFAULT '',
+    version                  BIGINT        NOT NULL DEFAULT 0 COMMENT '낙관적 락(@Version)',
+    created_at               DATETIME(6)   NOT NULL,
+    updated_at               DATETIME(6)   NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_kakao_tokens_user_id (user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_kakao_token_scopes = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE kakao_tokens ADD COLUMN scopes VARCHAR(1000) NOT NULL DEFAULT ''friends''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'kakao_tokens'
+      AND column_name = 'scopes'
+);
+PREPARE add_kakao_token_scopes_statement FROM @add_kakao_token_scopes;
+EXECUTE add_kakao_token_scopes_statement;
+DEALLOCATE PREPARE add_kakao_token_scopes_statement;
+
+SET @add_kakao_token_version = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE kakao_tokens ADD COLUMN version BIGINT NOT NULL DEFAULT 0 COMMENT ''낙관적 락(@Version)''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'kakao_tokens'
+      AND column_name = 'version'
+);
+PREPARE add_kakao_token_version_statement FROM @add_kakao_token_version;
+EXECUTE add_kakao_token_version_statement;
+DEALLOCATE PREPARE add_kakao_token_version_statement;
+
 -- ---------------------------------------------------------------------------
 -- friend
 -- ---------------------------------------------------------------------------
@@ -83,8 +138,106 @@ CREATE TABLE IF NOT EXISTS friends (
     is_favorite    TINYINT(1) NOT NULL,
     PRIMARY KEY (id),
     -- owner_user_id 단독 조회도 이 인덱스의 선두 컬럼으로 처리된다
-    UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id)
+    UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id),
+    KEY idx_friends_friend_user_id (friend_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS friend_sync_requests (
+    user_id         BIGINT      NOT NULL,
+    requested_at    DATETIME(6) NOT NULL,
+    next_attempt_at DATETIME(6) NOT NULL,
+    retry_count     INT         NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id),
+    KEY idx_friend_sync_requests_next_attempt (next_attempt_at, user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- notification
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS shedlock (
+    name       VARCHAR(64)  NOT NULL,
+    lock_until DATETIME(6)  NOT NULL,
+    locked_at  DATETIME(6)  NOT NULL,
+    locked_by  VARCHAR(255) NOT NULL,
+    PRIMARY KEY (name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 사용자가 변경 요청한 알림 설정. 미저장 항목은 애플리케이션의 enum 기본값을 사용한다.
+CREATE TABLE IF NOT EXISTS notification_settings (
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id      BIGINT       NOT NULL,
+    setting_type VARCHAR(30)  NOT NULL COMMENT 'CHAT, POKE, FRIEND_JOINED, FRIEND_BIRTHDAY, PURCHASE_STATUS, ANNIVERSARY_EVENT, MARKETING, PURCHASE_FEEDBACK',
+    enabled      TINYINT(1)   NOT NULL,
+    created_at   DATETIME(6)  NOT NULL,
+    updated_at   DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_notification_settings_user_type (user_id, setting_type)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 웹 푸시는 기기별 구독(push_subscriptions)으로만 관리한다. 제거된 WEB_PUSH 설정 행이 남으면 Enum 변환에 실패한다.
+DELETE FROM notification_settings
+WHERE setting_type = 'WEB_PUSH';
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id            BIGINT        NOT NULL AUTO_INCREMENT,
+    user_id       BIGINT        NOT NULL,
+    endpoint      VARCHAR(1000) NOT NULL,
+    endpoint_hash CHAR(64)      NOT NULL COMMENT 'SHA-256(endpoint)',
+    p256dh        VARCHAR(255)  NOT NULL,
+    auth          VARCHAR(100)  NOT NULL,
+    created_at    DATETIME(6)   NOT NULL,
+    updated_at    DATETIME(6)   NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_push_subscriptions_endpoint_hash (endpoint_hash),
+    KEY idx_push_subscriptions_user_id (user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_push_subscription_endpoint_hash = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE push_subscriptions ADD COLUMN endpoint_hash CHAR(64) NULL COMMENT ''SHA-256(endpoint)''',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'push_subscriptions'
+      AND column_name = 'endpoint_hash'
+);
+PREPARE add_push_subscription_endpoint_hash_statement FROM @add_push_subscription_endpoint_hash;
+EXECUTE add_push_subscription_endpoint_hash_statement;
+DEALLOCATE PREPARE add_push_subscription_endpoint_hash_statement;
+
+UPDATE push_subscriptions
+SET endpoint_hash = SHA2(endpoint, 256)
+WHERE endpoint_hash IS NULL;
+
+ALTER TABLE push_subscriptions
+    MODIFY COLUMN endpoint_hash CHAR(64) NOT NULL COMMENT 'SHA-256(endpoint)';
+
+SET @drop_push_subscription_endpoint_unique = (
+    SELECT IF(COUNT(*) > 0,
+              'ALTER TABLE push_subscriptions DROP INDEX uk_push_subscriptions_endpoint',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'push_subscriptions'
+      AND index_name = 'uk_push_subscriptions_endpoint'
+);
+PREPARE drop_push_subscription_endpoint_unique_statement FROM @drop_push_subscription_endpoint_unique;
+EXECUTE drop_push_subscription_endpoint_unique_statement;
+DEALLOCATE PREPARE drop_push_subscription_endpoint_unique_statement;
+
+SET @add_push_subscription_endpoint_hash_unique = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE push_subscriptions ADD UNIQUE INDEX uk_push_subscriptions_endpoint_hash (endpoint_hash)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'push_subscriptions'
+      AND index_name = 'uk_push_subscriptions_endpoint_hash'
+);
+PREPARE add_push_subscription_endpoint_hash_unique_statement FROM @add_push_subscription_endpoint_hash_unique;
+EXECUTE add_push_subscription_endpoint_hash_unique_statement;
+DEALLOCATE PREPARE add_push_subscription_endpoint_hash_unique_statement;
 
 -- ---------------------------------------------------------------------------
 -- aichat
@@ -205,7 +358,7 @@ CREATE TABLE IF NOT EXISTS products (
     platform_type VARCHAR(20)    NOT NULL COMMENT 'COUPANG, KAKAO, ELEVEN_STREET, HOMEPLUS',
     external_id   VARCHAR(255)   NOT NULL COMMENT '플랫폼의 상품 ID',
     name          VARCHAR(300)   NOT NULL,
-    category      VARCHAR(100)   NULL,
+    category      VARCHAR(100)   NULL COMMENT 'ProductCategory 코드(VOUCHER, LIVING, BEAUTY 등). 분류 없으면 NULL. 한글 분류명은 db/manual/product-category-codes.sql로 변환',
     description   TEXT           NULL,
     price         DECIMAL(12, 2) NULL,
     image_url     VARCHAR(2048)  NULL,
@@ -228,6 +381,7 @@ CREATE TABLE IF NOT EXISTS personal_recommendations (
     reason     VARCHAR(500)  NULL,
     created_at DATETIME(6)   NOT NULL,
     updated_at DATETIME(6)   NOT NULL,
+    deleted_at DATETIME(6)   NULL COMMENT '사용자가 DISLIKE하면 채운다',
     PRIMARY KEY (id),
     -- 커서 페이지네이션(order by score desc, id desc)은 이 인덱스를 역방향으로 스캔한다
     KEY idx_personal_recommendations_user_id_score_id (user_id, score, id),
@@ -244,9 +398,59 @@ CREATE TABLE IF NOT EXISTS gift_recommendations (
     taste_keywords JSON          NULL,
     created_at     DATETIME(6)   NOT NULL,
     updated_at     DATETIME(6)   NOT NULL,
+    deleted_at     DATETIME(6)   NULL COMMENT '사용자가 DISLIKE하면 채운다',
     PRIMARY KEY (id),
     KEY idx_gift_recommendations_user_id_score_id (user_id, score, id),
     CONSTRAINT fk_gift_recommendations_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 추천 상품 만족도. (user, product, context)마다 한 행이고 값을 바꾸면 같은 행을 갱신한다
+-- DISLIKE하면 context와 관계없이 그 상품의 추천 행(personal_recommendations, gift_recommendations) deleted_at을 모두 채운다
+CREATE TABLE IF NOT EXISTS product_feedbacks (
+    id            BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id       BIGINT      NOT NULL,
+    product_id    BIGINT      NOT NULL,
+    context       VARCHAR(20) NOT NULL COMMENT 'PERSONAL, MY_GIFT',
+    feedback_type VARCHAR(20) NOT NULL COMMENT 'LIKE, DISLIKE',
+    created_at    DATETIME(6) NOT NULL,
+    updated_at    DATETIME(6) NOT NULL,
+    deleted_at    DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_product_feedbacks_user_product_context (user_id, product_id, context),
+    CONSTRAINT fk_product_feedbacks_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 외부 상품 링크 클릭 기록. 구매 확인의 대상이 된다
+-- 같은 (user, product, context) 클릭이 최근 7일 안에 있으면 새 행을 만들지 않아, 행 하나가 구매 확인 하나가 된다
+CREATE TABLE IF NOT EXISTS product_link_clicks (
+    id                BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id           BIGINT      NOT NULL,
+    product_id        BIGINT      NOT NULL,
+    context           VARCHAR(20) NOT NULL COMMENT 'PERSONAL, MY_GIFT, FRIEND_GIFT',
+    friend_user_id    BIGINT      NULL COMMENT 'FRIEND_GIFT일 때만 있다',
+    created_at        DATETIME(6) NOT NULL,
+    updated_at        DATETIME(6) NOT NULL,
+    deleted_at        DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    -- 하루 한 번 도는 구매 확인 스케줄러가 7일이 지난 클릭을 시간순으로 훑는다
+    KEY idx_product_link_clicks_created_at (created_at),
+    -- 클릭 저장 전 최근 7일 안의 같은 클릭 존재 여부 확인
+    KEY idx_product_link_clicks_user_product_context_created_at (user_id, product_id, context, created_at),
+    CONSTRAINT fk_product_link_clicks_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS purchase_checks (
+    id                    BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id               BIGINT      NOT NULL,
+    product_link_click_id BIGINT      NOT NULL,
+    purchased             TINYINT(1)  NULL COMMENT '답하기 전에는 NULL',
+    answered_at           DATETIME(6) NULL,
+    created_at            DATETIME(6) NOT NULL,
+    version               BIGINT      NOT NULL COMMENT '낙관적 락(@Version)',
+    PRIMARY KEY (id),
+    -- 같은 클릭으로 구매 확인이 두 번 만들어지지 않도록 막는다
+    UNIQUE KEY uk_purchase_checks_product_link_click_id (product_link_click_id),
+    CONSTRAINT fk_purchase_checks_product_link_click FOREIGN KEY (product_link_click_id) REFERENCES product_link_clicks (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

@@ -6,7 +6,11 @@ import java.util.List;
 
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.Product;
+import kr.ktb.zura.needu.product.entity.ProductFeedback;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.product.type.ProductCategory;
+import kr.ktb.zura.needu.product.type.ProductContext;
+import kr.ktb.zura.needu.product.type.ProductFeedbackType;
 import kr.ktb.zura.needu.product.type.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +20,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @DataJpaTest
 class GiftProductRepositoryTest {
@@ -40,10 +45,10 @@ class GiftProductRepositoryTest {
         saveGiftProduct(OTHER_USER_ID, "0.990000", saveProduct("다른 사용자", "40000.00"));
         entityManager.clear();
 
-        List<GiftProduct> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+        List<GiftProductSummary> result =
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId)
+        assertThat(result).extracting(GiftProductSummary::id)
                 .containsExactly(high.getId(), sameScoreSecond.getId(), sameScoreFirst.getId(), low.getId());
     }
 
@@ -55,10 +60,10 @@ class GiftProductRepositoryTest {
         saveGiftProduct(USER_ID, "0.800000", saveProduct("최대 초과", "50001.00"));
         entityManager.clear();
 
-        List<GiftProduct> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+        List<GiftProductSummary> result =
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId).containsExactly(maxBoundary.getId(), minBoundary.getId());
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(maxBoundary.getId(), minBoundary.getId());
     }
 
     @Test
@@ -91,10 +96,10 @@ class GiftProductRepositoryTest {
         entityManager.flush();
         entityManager.clear();
 
-        List<GiftProduct> result =
-                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(10));
+        List<GiftProductSummary> result =
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId).containsExactly(active.getId());
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(active.getId());
     }
 
     @Test
@@ -105,30 +110,213 @@ class GiftProductRepositoryTest {
         saveGiftProduct(USER_ID, "0.900000", saveProduct("높은 점수", "40000.00"));
         entityManager.clear();
 
-        List<GiftProduct> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
-                USER_ID, MIN_PRICE, MAX_PRICE, new BigDecimal("0.500000"), sameScoreSecond.getId(), Limit.of(10));
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, null, new BigDecimal("0.500000"), sameScoreSecond.getId(), Limit.of(10));
 
-        assertThat(result).extracting(GiftProduct::getId).containsExactly(sameScoreFirst.getId(), low.getId());
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(sameScoreFirst.getId(), low.getId());
     }
 
     @Test
-    void giftProductsFound_findAllByUserIdAndPriceRange_fetchesProductAndKeywordsTogether() {
-        saveGiftProduct(USER_ID, "0.100000", saveProduct("램프", "40000.00"));
+    void giftProductsFound_findAllByUserIdAndPriceRange_returnsProductFieldsAndKeywords() {
+        Product lamp = saveProduct("램프", "40000.00");
+        GiftProduct saved = saveGiftProduct(USER_ID, "0.100000", lamp);
         entityManager.clear();
 
-        GiftProduct result = giftProductRepository
-                .findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, Limit.of(1)).getFirst();
+        GiftProductSummary result = giftProductRepository
+                .findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(1)).getFirst();
 
-        assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
-                .isLoaded(result, "product")).isTrue();
-        assertThat(result.getProduct().getName()).isEqualTo("램프");
-        assertThat(result.getTasteKeywords()).containsExactly("인테리어", "감성");
+        assertThat(result.id()).isEqualTo(saved.getId());
+        assertThat(result.productId()).isEqualTo(lamp.getId());
+        assertThat(result.productName()).isEqualTo("램프");
+        assertThat(result.category()).isEqualTo(ProductCategory.LIVING);
+        assertThat(result.price()).isEqualByComparingTo("40000.00");
+        assertThat(result.score()).isEqualByComparingTo("0.100000");
+        assertThat(result.reason()).isEqualTo("이유");
+        assertThat(result.tasteKeywords()).containsExactly("인테리어", "감성");
+    }
+
+    @Test
+    void deletedRecommendation_findAllByUserIdAndPriceRange_excludesItem() {
+        GiftProduct kept = saveGiftProduct(USER_ID, "0.900000", saveProduct("유지", "40000.00"));
+        GiftProduct deleted = saveGiftProduct(USER_ID, "0.800000", saveProduct("별로예요", "40000.00"));
+        deleted.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GiftProductSummary> result =
+                giftProductRepository.findAllByUserIdAndPriceRange(USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(kept.getId());
+    }
+
+    @Test
+    void deletedRecommendation_findAllByUserIdAndPriceRangeAfterCursor_excludesItem() {
+        GiftProduct cursorItem = saveGiftProduct(USER_ID, "0.900000", saveProduct("커서", "40000.00"));
+        GiftProduct deleted = saveGiftProduct(USER_ID, "0.700000", saveProduct("별로예요", "40000.00"));
+        GiftProduct next = saveGiftProduct(USER_ID, "0.500000", saveProduct("다음", "40000.00"));
+        deleted.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, null, new BigDecimal("0.900000"), cursorItem.getId(), Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(next.getId());
+    }
+
+    @Test
+    void deletedRecommendation_findPriceRangeByUserId_excludesItemPrice() {
+        saveGiftProduct(USER_ID, "0.100000", saveProduct("최저가", "10000.00"));
+        saveGiftProduct(USER_ID, "0.200000", saveProduct("최고가", "90000.00"));
+        GiftProduct deleted = saveGiftProduct(USER_ID, "0.300000", saveProduct("별로예요", "100000.00"));
+        deleted.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        ProductPriceRange result = giftProductRepository.findPriceRangeByUserId(USER_ID);
+
+        assertThat(result.minPrice()).isEqualByComparingTo("10000.00");
+        assertThat(result.maxPrice()).isEqualByComparingTo("90000.00");
+    }
+
+    @Test
+    void deletedRecommendation_existsActiveByUserIdAndProductId_returnsTrue() {
+        Product disliked = saveProduct("별로예요", "40000.00");
+        saveGiftProduct(USER_ID, "0.100000", disliked).delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, disliked.getId())).isTrue();
+    }
+
+    @Test
+    void ownActiveRecommendation_existsActiveByUserIdAndProductId_returnsTrue() {
+        Product lamp = saveProduct("램프", "40000.00");
+        saveGiftProduct(USER_ID, "0.100000", lamp);
+        entityManager.clear();
+
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, lamp.getId())).isTrue();
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(OTHER_USER_ID, lamp.getId())).isFalse();
+    }
+
+    @Test
+    void inactiveOrDeletedProduct_existsActiveByUserIdAndProductId_returnsFalse() {
+        Product soldOut = saveProduct("품절", "40000.00");
+        Product deleted = saveProduct("삭제됨", "40000.00");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
+        saveGiftProduct(USER_ID, "0.100000", soldOut);
+        saveGiftProduct(USER_ID, "0.200000", deleted);
+        entityManager.clear();
+
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, soldOut.getId())).isFalse();
+        assertThat(giftProductRepository.existsActiveByUserIdAndProductId(USER_ID, deleted.getId())).isFalse();
+    }
+
+    @Test
+    void categoryGiven_findAllByUserIdAndPriceRange_returnsOnlyThatCategory() {
+        GiftProduct living = saveGiftProduct(USER_ID, "0.900000", saveProduct("램프", ProductCategory.LIVING));
+        saveGiftProduct(USER_ID, "0.800000", saveProduct("립밤", ProductCategory.BEAUTY));
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.LIVING, Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(living.getId());
+    }
+
+    @Test
+    void categoryAndDeletedRecommendation_findAllByUserIdAndPriceRangeAfterCursor_paginatesFilteredItems() {
+        GiftProduct cursorItem = saveGiftProduct(USER_ID, "0.900000", saveProduct("커서", ProductCategory.LIVING));
+        GiftProduct disliked = saveGiftProduct(USER_ID, "0.800000", saveProduct("별로예요", ProductCategory.LIVING));
+        saveGiftProduct(USER_ID, "0.700000", saveProduct("다른 카테고리", ProductCategory.BEAUTY));
+        GiftProduct next = saveGiftProduct(USER_ID, "0.600000", saveProduct("다음", ProductCategory.LIVING));
+        disliked.delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRangeAfterCursor(
+                USER_ID, MIN_PRICE, MAX_PRICE, ProductCategory.LIVING,
+                new BigDecimal("0.900000"), cursorItem.getId(), Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id).containsExactly(next.getId());
+    }
+
+    @Test
+    void feedbackSaved_findAllByUserIdAndPriceRange_returnsOnlyOwnersMyGiftFeedback() {
+        Product liked = saveProduct("마음에 들어요", "40000.00");
+        Product likedInPersonal = saveProduct("개인 추천에서만 마음에 들어요", "40000.00");
+        Product likedByOther = saveProduct("다른 사용자만 마음에 들어요", "40000.00");
+        GiftProduct likedItem = saveGiftProduct(USER_ID, "0.900000", liked);
+        GiftProduct likedInPersonalItem = saveGiftProduct(USER_ID, "0.800000", likedInPersonal);
+        GiftProduct likedByOtherItem = saveGiftProduct(USER_ID, "0.700000", likedByOther);
+        saveFeedback(USER_ID, liked, ProductContext.MY_GIFT);
+        saveFeedback(USER_ID, likedInPersonal, ProductContext.PERSONAL);
+        saveFeedback(OTHER_USER_ID, likedByOther, ProductContext.MY_GIFT);
+        entityManager.clear();
+
+        List<GiftProductSummary> result = giftProductRepository.findAllByUserIdAndPriceRange(
+                USER_ID, MIN_PRICE, MAX_PRICE, null, Limit.of(10));
+
+        assertThat(result).extracting(GiftProductSummary::id, GiftProductSummary::feedback)
+                .containsExactly(
+                        tuple(likedItem.getId(), ProductFeedbackType.LIKE),
+                        tuple(likedInPersonalItem.getId(), null),
+                        tuple(likedByOtherItem.getId(), null));
+    }
+
+    @Test
+    void recommendationsSaved_findAllActiveByUserIdAndProductId_returnsOwnRowsByScoreDesc() {
+        Product lamp = saveProduct("램프", "40000.00");
+        GiftProduct low = saveGiftProduct(USER_ID, "0.100000", lamp);
+        GiftProduct high = saveGiftProduct(USER_ID, "0.900000", lamp);
+        saveGiftProduct(OTHER_USER_ID, "0.990000", lamp);
+        entityManager.clear();
+
+        List<GiftProduct> result = giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, lamp.getId());
+
+        assertThat(result).extracting(GiftProduct::getId).containsExactly(high.getId(), low.getId());
+        assertThat(result.getFirst().getProduct().getName()).isEqualTo("램프");
+    }
+
+    @Test
+    void deletedRecommendation_findAllActiveByUserIdAndProductId_returnsEmpty() {
+        Product disliked = saveProduct("별로예요", "40000.00");
+        saveGiftProduct(USER_ID, "0.100000", disliked).delete();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, disliked.getId())).isEmpty();
+    }
+
+    @Test
+    void inactiveOrDeletedProduct_findAllActiveByUserIdAndProductId_returnsEmpty() {
+        Product soldOut = saveProduct("품절", "40000.00");
+        Product deleted = saveProduct("삭제됨", "40000.00");
+        ReflectionTestUtils.setField(soldOut, "status", ProductStatus.SOLD_OUT);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.now());
+        saveGiftProduct(USER_ID, "0.100000", soldOut);
+        saveGiftProduct(USER_ID, "0.200000", deleted);
+        entityManager.clear();
+
+        assertThat(giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, soldOut.getId())).isEmpty();
+        assertThat(giftProductRepository.findAllActiveByUserIdAndProductId(USER_ID, deleted.getId())).isEmpty();
     }
 
     private Product saveProduct(String name, String price) {
         return entityManager.persist(new Product(
-                PlatformType.COUPANG, name, name, "LIVING", null,
+                PlatformType.COUPANG, name, name, ProductCategory.LIVING, null,
                 new BigDecimal(price), null, null, null));
+    }
+
+    private Product saveProduct(String name, ProductCategory category) {
+        return entityManager.persist(new Product(
+                PlatformType.COUPANG, name, name, category, null,
+                new BigDecimal("40000.00"), null, null, null));
+    }
+
+    private void saveFeedback(Long userId, Product product, ProductContext context) {
+        entityManager.persistAndFlush(new ProductFeedback(userId, product, context, ProductFeedbackType.LIKE));
     }
 
     private GiftProduct saveGiftProduct(Long userId, String score, Product product) {

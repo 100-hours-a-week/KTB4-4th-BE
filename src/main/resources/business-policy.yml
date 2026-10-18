@@ -14,3 +14,56 @@ ai:
     short-completion-cooldown: ${AI_CHAT_SHORT_COMPLETION_COOLDOWN:5m}
     # 같은 대화방의 메시지가 처리 중일 때 클라이언트에 안내할 재시도 시간이다.
     message-retry-after: ${AI_CHAT_MESSAGE_RETRY_AFTER:10s}
+    # AI 대화 SSE 연결 유지 시간이다. 지나면 FE EventSource가 자동으로 다시 연결한다.
+    stream-timeout: ${AI_CHAT_STREAM_TIMEOUT:30m}
+    # nginx proxy_read_timeout보다 짧게 둬서 유휴 연결이 끊기지 않게 한다.
+    stream-heartbeat-interval: ${AI_CHAT_STREAM_HEARTBEAT_INTERVAL:25s}
+    # 연결 하나에 보내지 못하고 쌓인 이벤트가 이 수를 넘으면 그 연결을 끊는다. FE는 다시 연결해 메시지 목록으로 복구한다.
+    stream-max-pending-events: ${AI_CHAT_STREAM_MAX_PENDING_EVENTS:1000}
+    # 인스턴스 하나가 동시에 만드는 AI 답변 수다. 넘으면 사용자 메시지를 저장하지 않고 503으로 거절해 AI 서버를 보호한다.
+    reply-max-concurrency: ${AI_CHAT_REPLY_MAX_CONCURRENCY:200}
+    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 중단하고 error 이벤트를 보낸다. ECS stopTimeout보다 짧게 둔다.
+    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
+
+needu:
+  user:
+    withdrawal:
+      lock-ttl: ${USER_WITHDRAWAL_LOCK_TTL:120s}
+  notification:
+    stream-timeout: ${NOTIFICATION_STREAM_TIMEOUT:30m}
+    heartbeat-interval: ${NOTIFICATION_HEARTBEAT_INTERVAL:25s}
+    friend-birthday:
+      cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
+      zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}
+      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7}
+      lock-at-most-for: ${FRIEND_BIRTHDAY_LOCK_AT_MOST_FOR:10m}
+      lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
+  friend:
+    poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
+    sync:
+      fixed-delay: ${FRIEND_SYNC_FIXED_DELAY:1m}
+      batch-size: ${FRIEND_SYNC_BATCH_SIZE:20}
+      max-retry-count: ${FRIEND_SYNC_MAX_RETRY_COUNT:3}
+      retry-delay: ${FRIEND_SYNC_RETRY_DELAY:5m}
+      lock-at-most-for: ${FRIEND_SYNC_LOCK_AT_MOST_FOR:10m}
+      lock-at-least-for: ${FRIEND_SYNC_LOCK_AT_LEAST_FOR:10s}
+  product:
+    price-range-cache:
+      ttl: ${PRODUCT_PRICE_RANGE_CACHE_TTL:10m}
+      maximum-size: ${PRODUCT_PRICE_RANGE_CACHE_MAXIMUM_SIZE:100000}
+    link-click:
+      # 같은 사용자-상품-context의 클릭을 다시 기록하지 않는 기간
+      duplicate-window: ${PRODUCT_LINK_CLICK_DUPLICATE_WINDOW:5m}
+    purchase-check:
+      cron: ${PURCHASE_CHECK_CRON:0 * * * * *}
+      zone: ${PURCHASE_CHECK_ZONE:Asia/Seoul}
+      # 링크 클릭 후 구매 여부를 묻기까지의 기간
+      delay: ${PURCHASE_CHECK_DELAY:5m}
+      # delay가 지난 클릭을 이 기간만큼 거슬러 찾는다. 스케줄러가 며칠 멈춰도 놓치지 않고, 이보다 오래된 클릭은 묻지 않는다
+      lookback: ${PURCHASE_CHECK_LOOKBACK:1h}
+      batch-size: ${PURCHASE_CHECK_BATCH_SIZE:100}
+      lock-at-most-for: ${PURCHASE_CHECK_LOCK_AT_MOST_FOR:10m}
+      lock-at-least-for: ${PURCHASE_CHECK_LOCK_AT_LEAST_FOR:10s}
+      # 구매 여부 확인 알림이 알림 목록에 남아 있는 기간
+      notification-expiration: ${PURCHASE_CHECK_NOTIFICATION_EXPIRATION:30m}
+

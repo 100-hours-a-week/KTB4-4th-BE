@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
+import kr.ktb.zura.needu.aichat.dto.response.AiMessageAcceptedResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
@@ -18,6 +19,7 @@ import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
+import kr.ktb.zura.needu.aichat.facade.AiMessageSendResult;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -28,10 +30,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,7 +47,9 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AiChatController.class)
@@ -54,6 +60,7 @@ class AiChatControllerTest {
     private static final String URL = "/api/v1/ai/conversations";
     private static final String MESSAGES_URL = URL + "/" + CONVERSATION_ID + "/messages";
     private static final String ANALYSIS_URL = URL + "/" + CONVERSATION_ID + "/analysis";
+    private static final String STREAM_URL = URL + "/" + CONVERSATION_ID + "/stream";
     private static final UUID CLIENT_MESSAGE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
 
@@ -106,13 +113,24 @@ class AiChatControllerTest {
     }
 
     @Test
-    void aiServerUnavailable_startOrResumeConversation_returnsServiceUnavailable() throws Exception {
+    void aiConversationNotAgreed_startOrResumeConversation_returnsForbidden() throws Exception {
+        given(aiChatFacade.startOrResumeConversation(USER_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONSENT_REQUIRED));
+
+        mockMvc.perform(postConversation())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("AI 대화를 이용하려면 정보 활용 동의가 필요합니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void aiRequestTimeout_startOrResumeConversation_returnsServiceUnavailable() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
 
         mockMvc.perform(postConversation())
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.message").value("일시적으로 서비스를 이용할 수 없습니다."))
+                .andExpect(jsonPath("$.message").value("AI 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
     }
 
@@ -123,15 +141,29 @@ class AiChatControllerTest {
     }
 
     @Test
-    void validRequest_sendMessage_returnsOk() throws Exception {
+    void validRequest_sendMessage_returnsAccepted() throws Exception {
         given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
-                .willReturn(new AiMessageResponse(
+                .willReturn(AiMessageSendResult.accepted(
+                        new AiMessageAcceptedResponse(201L, CLIENT_MESSAGE_ID)));
+
+        mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message").value("메시지를 접수했습니다."))
+                .andExpect(jsonPath("$.data.userMessageId").value(201))
+                .andExpect(jsonPath("$.data.clientMessageId").value(CLIENT_MESSAGE_ID.toString()))
+                .andExpect(jsonPath("$.data.messageId").doesNotExist());
+    }
+
+    @Test
+    void answeredMessageResent_sendMessage_returnsOkWithSavedReply() throws Exception {
+        given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
+                .willReturn(AiMessageSendResult.replied(new AiMessageResponse(
                         201L,
                         202L,
                         "러닝을 좋아하시는군요.",
                         15,
                         true
-                ));
+                )));
 
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
                 .andExpect(status().isOk())
@@ -142,6 +174,17 @@ class AiChatControllerTest {
                 .andExpect(jsonPath("$.data.progress").value(15))
                 .andExpect(jsonPath("$.data.inputLocked").value(true))
                 .andExpect(jsonPath("$.data.analysis").doesNotExist());
+    }
+
+    @Test
+    void aiConversationNotAgreed_sendMessage_returnsForbidden() throws Exception {
+        given(aiChatFacade.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), any(SendMessageRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONSENT_REQUIRED));
+
+        mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), USER_CONTENT)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("AI 대화를 이용하려면 정보 활용 동의가 필요합니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
@@ -158,7 +201,7 @@ class AiChatControllerTest {
     void blankContent_sendMessage_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(postMessage(messageBody(CLIENT_MESSAGE_ID.toString(), " ")))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
         verifyNoInteractions(aiChatFacade);
     }
@@ -335,7 +378,7 @@ class AiChatControllerTest {
     void sizeOverMax_findAllMessages_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(getMessages("?size=51"))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."));
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
         verifyNoInteractions(aiChatFacade);
     }
 
@@ -383,6 +426,55 @@ class AiChatControllerTest {
     }
 
     @Test
+    void activeConversation_connectStream_startsSseConnection() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID)).willReturn(new SseEmitter());
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL,
+                        "no-cache, no-store, max-age=0, must-revalidate, no-transform"))
+                .andExpect(header().string("X-Accel-Buffering", "no"))
+                .andExpect(request().asyncStarted());
+    }
+
+    @Test
+    void inputLockedConversation_connectStream_returnsConflict() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_INPUT_LOCKED));
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("AI 대화의 사용자 입력이 잠겨 있습니다."));
+    }
+
+    @Test
+    void expiredConversation_connectStream_returnsGone() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_EXPIRED));
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.message").value("AI 대화 세션이 만료되었습니다."));
+    }
+
+    @Test
+    void conversationOwnedByAnotherUser_connectStream_returnsForbidden() throws Exception {
+        given(aiChatFacade.connectStream(USER_ID, CONVERSATION_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN));
+
+        mockMvc.perform(getStream())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 AI 대화에 접근할 수 없습니다."));
+    }
+
+    @Test
+    void unauthenticated_connectStream_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get(STREAM_URL))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(aiChatFacade);
+    }
+
+    @Test
     void validRequest_confirmAnalysis_confirmsConversation() throws Exception {
         given(aiChatFacade.confirmAnalysis(USER_ID, CONVERSATION_ID))
                 .willReturn(ProductRecommendationStatusResponse.success());
@@ -393,6 +485,13 @@ class AiChatControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("취향 분석을 확정했습니다."))
                 .andExpect(jsonPath("$.data.isRecommendationCompleted").value(true));
+    }
+
+    // EventSource는 Accept: text/event-stream으로 요청한다
+    private static MockHttpServletRequestBuilder getStream() {
+        return get(STREAM_URL)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .with(authentication(new UsernamePasswordAuthenticationToken(USER_ID, null, List.of())));
     }
 
     private static MockHttpServletRequestBuilder getMessages(String query) {

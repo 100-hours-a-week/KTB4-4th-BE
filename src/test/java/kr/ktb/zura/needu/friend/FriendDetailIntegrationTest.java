@@ -26,8 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "needu.rate-limit.policies.friend-detail.method=GET",
         "needu.rate-limit.policies.friend-detail.path-pattern=/api/v1/friends/{userId}",
         "needu.rate-limit.policies.friend-detail.limit=120",
-        "needu.rate-limit.policies.friend-detail.window=1m",
-        "needu.rate-limit.policies.friend-detail.maximum-size=100000"
+        "needu.rate-limit.policies.friend-detail.window=1m"
 })
 @AutoConfigureMockMvc
 class FriendDetailIntegrationTest {
@@ -59,11 +58,15 @@ class FriendDetailIntegrationTest {
         mockMvc.perform(get(URL, friend.getId()).with(authenticatedUser(owner.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("친구 정보를 조회했습니다."))
-                .andExpect(jsonPath("$.data.id").value(friend.getId()))
-                .andExpect(jsonPath("$.data.nickname").value("친구"))
+                .andExpect(jsonPath("$.data.userId").value(friend.getId()))
+                .andExpect(jsonPath("$.data.name").value("친구"))
                 .andExpect(jsonPath("$.data.profileImageUrl").isEmpty())
                 .andExpect(jsonPath("$.data.tasteAnalysisCompleted").value(false))
-                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"));
+                .andExpect(jsonPath("$.data.birthDate").value("2000-02-29"))
+                .andExpect(jsonPath("$.data.tasteKeywords").isEmpty())
+                .andExpect(jsonPath("$.data.interestKeywords").isEmpty())
+                .andExpect(jsonPath("$.data.interestSummary").isEmpty())
+                .andExpect(jsonPath("$.data.isFavorite").value(false));
     }
 
     @Test
@@ -105,7 +108,9 @@ class FriendDetailIntegrationTest {
     }
 
     private User saveUser(String nickname, LocalDate birthDate) {
-        return userRepository.save(new User(null, nickname, null, Gender.NONE, birthDate));
+        User user = new User(null, nickname, null, Gender.NONE, birthDate);
+        user.completeOnboarding(Gender.NONE, birthDate);
+        return userRepository.save(user);
     }
 
     private RequestPostProcessor authenticatedUser(Long userId) {

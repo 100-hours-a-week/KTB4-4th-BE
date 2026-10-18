@@ -1,27 +1,37 @@
 package kr.ktb.zura.needu.friend.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.Valid;
 import java.net.URI;
-import java.util.UUID;
+import java.time.Duration;
+import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
+import kr.ktb.zura.needu.auth.type.KakaoOAuthContext;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
+import kr.ktb.zura.needu.common.security.AuthCookieNames;
+import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
+import kr.ktb.zura.needu.friend.dto.request.UpdateFavoriteRequest;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
+import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListApiResponse;
+import kr.ktb.zura.needu.friend.dto.response.PokeResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
-import lombok.RequiredArgsConstructor;
+import kr.ktb.zura.needu.friend.service.PokeService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,27 +39,39 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 @Slf4j
 @RestController
-@RequiredArgsConstructor
 @RequestMapping("/api/v1/friends")
 public class FriendController {
 
-    private static final String KAKAO_FRIEND_STATE = "kakaoFriendOAuthState";
-    private static final String KAKAO_FRIEND_USER_ID = "kakaoFriendOAuthUserId";
-    private static final String KAKAO_FRIEND_RETURN_URL = "kakaoFriendOAuthReturnUrl";
+    private static final String KAKAO_CALLBACK_PATH = "/api/v1/friends/kakao/callback";
 
     private final FriendService friendService;
     private final KakaoFriendSyncService kakaoFriendSyncService;
+    private final PokeService pokeService;
+    private final KakaoOAuthTransactionService kakaoOAuthTransactionService;
+    private final boolean cookieSecure;
+
+    public FriendController(
+            FriendService friendService,
+            KakaoFriendSyncService kakaoFriendSyncService,
+            PokeService pokeService,
+            KakaoOAuthTransactionService kakaoOAuthTransactionService,
+            @Value("${auth.cookie.secure}") boolean cookieSecure
+    ) {
+        this.friendService = friendService;
+        this.kakaoFriendSyncService = kakaoFriendSyncService;
+        this.pokeService = pokeService;
+        this.kakaoOAuthTransactionService = kakaoOAuthTransactionService;
+        this.cookieSecure = cookieSecure;
+    }
 
     @GetMapping
     public ResponseEntity<FriendListApiResponse> findAllFriends(
             @AuthenticationPrincipal Long userId,
-            @RequestParam(required = false) @Pattern(regexp = "birthday") String sort,
-            @RequestParam(required = false) String cursor,
-            @RequestParam @Min(FriendPageLimits.MIN_PAGE_SIZE) @Max(FriendPageLimits.MAX_PAGE_SIZE) int size
+            @Valid FriendSearchCondition condition
     ) {
         return ResponseEntity.ok(FriendListApiResponse.of(
                 FriendResponseMessages.FRIENDS_FOUND,
-                friendService.findAllFriends(userId, sort, cursor, size)
+                friendService.findAllFriends(userId, condition)
         ));
     }
 
@@ -64,18 +86,37 @@ public class FriendController {
         ));
     }
 
+    @PutMapping("/{userId}/favorite")
+    public ResponseEntity<ApiResponse<FriendFavoriteResponse>> updateFavorite(
+            @AuthenticationPrincipal Long loginUserId,
+            @PathVariable Long userId,
+            @Valid @RequestBody UpdateFavoriteRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                FriendResponseMessages.FAVORITE_UPDATED,
+                friendService.updateFavorite(loginUserId, userId, request.isFavorite())
+        ));
+    }
+
+    @PostMapping("/{userId}/pokes")
+    public ResponseEntity<ApiResponse<PokeResponse>> createPoke(
+            @AuthenticationPrincipal Long loginUserId,
+            @PathVariable Long userId
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(
+                FriendResponseMessages.POKE_CREATED,
+                pokeService.createPoke(loginUserId, userId)
+        ));
+    }
+
     @GetMapping("/kakao/authorize")
     public ResponseEntity<Void> authorize(@AuthenticationPrincipal Long userId,
-                                          @RequestParam String returnUrl,
-                                          HttpServletRequest request) {
+                                          @RequestParam String returnUrl) {
         URI returnUri = validateReturnUri(returnUrl);
-        String state = UUID.randomUUID().toString();
-        HttpSession session = request.getSession(true);
-        session.setAttribute(KAKAO_FRIEND_STATE, state);
-        session.setAttribute(KAKAO_FRIEND_USER_ID, userId);
-        session.setAttribute(KAKAO_FRIEND_RETURN_URL, returnUri);
+        String state = kakaoOAuthTransactionService.createFriendState(userId, returnUri.toString());
         return ResponseEntity.status(HttpStatus.FOUND)
-                .location(kakaoFriendSyncService.createAuthorizationUri(state))
+                .location(kakaoFriendSyncService.createAuthorizationUri(userId, state))
+                .header(HttpHeaders.SET_COOKIE, oauthCookie(state, kakaoOAuthTransactionService.getTtl()).toString())
                 .build();
     }
 
@@ -84,17 +125,15 @@ public class FriendController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error,
-            HttpServletRequest request) {
-        HttpSession session = request.getSession(false);
-        String expectedState = session == null ? null : (String) session.getAttribute(KAKAO_FRIEND_STATE);
-        Long userId = session == null ? null : (Long) session.getAttribute(KAKAO_FRIEND_USER_ID);
-        URI returnUri = session == null ? null : (URI) session.getAttribute(KAKAO_FRIEND_RETURN_URL);
-        if (session != null) {
-            session.invalidate();
-        }
-        if (userId == null || expectedState == null || !expectedState.equals(state) || returnUri == null) {
+            @CookieValue(name = AuthCookieNames.KAKAO_FRIEND_OAUTH, required = false) String cookieState) {
+        KakaoOAuthContext context = kakaoOAuthTransactionService
+                .consumeFriendState(state, cookieState)
+                .orElseThrow(() -> new BusinessException(FriendErrorCode.FRIEND_KAKAO_INVALID_STATE));
+        Long userId = context.userId();
+        if (userId == null) {
             throw new BusinessException(FriendErrorCode.FRIEND_KAKAO_INVALID_STATE);
         }
+        URI returnUri = URI.create(context.returnUrl());
         if (error != null) {
             return redirect(returnUri, "cancelled");
         }
@@ -130,7 +169,14 @@ public class FriendController {
                 .build().encode().toUri();
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(location)
+                .header(HttpHeaders.SET_COOKIE, oauthCookie("", Duration.ZERO).toString())
                 .cacheControl(CacheControl.noStore())
                 .build();
+    }
+
+    private ResponseCookie oauthCookie(String value, Duration maxAge) {
+        return ResponseCookie.from(AuthCookieNames.KAKAO_FRIEND_OAUTH, value)
+                .httpOnly(true).secure(cookieSecure).sameSite("Lax")
+                .path(KAKAO_CALLBACK_PATH).maxAge(maxAge).build();
     }
 }

@@ -5,59 +5,112 @@ import java.util.Collection;
 import java.util.List;
 
 import kr.ktb.zura.needu.product.entity.GiftProduct;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface GiftProductRepository extends JpaRepository<GiftProduct, Long> {
+
+    @Modifying
+    @Query("delete from GiftProduct product where product.userId = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 
     @Query("""
             select new kr.ktb.zura.needu.product.repository.ProductPriceRange(min(p.price), max(p.price))
             from GiftProduct gp
             join gp.product p
             where gp.userId = :userId
+              and gp.deletedAt is null
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
             """)
     ProductPriceRange findPriceRangeByUserId(@Param("userId") Long userId);
 
     @Query("""
-            select gp
+            select new kr.ktb.zura.needu.product.repository.GiftProductSummary(
+                gp.id, p.id, p.name, p.imageUrl, p.purchaseUrl, p.category, p.price,
+                gp.score, gp.reason, gp.tasteKeywords, pf.feedbackType)
             from GiftProduct gp
-            join fetch gp.product p
+            join gp.product p
+            left join ProductFeedback pf
+                on pf.userId = gp.userId
+                and pf.product.id = p.id
+                and pf.context = kr.ktb.zura.needu.product.type.ProductContext.MY_GIFT
+                and pf.deletedAt is null
             where gp.userId = :userId
+              and gp.deletedAt is null
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and p.price between :minPrice and :maxPrice
+              and (:category is null or p.category = :category)
             order by gp.score desc, gp.id desc
             """)
-    List<GiftProduct> findAllByUserIdAndPriceRange(
+    List<GiftProductSummary> findAllByUserIdAndPriceRange(
             @Param("userId") Long userId,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
+            @Param("category") ProductCategory category,
             Limit limit
     );
 
     @Query("""
-            select gp
+            select new kr.ktb.zura.needu.product.repository.GiftProductSummary(
+                gp.id, p.id, p.name, p.imageUrl, p.purchaseUrl, p.category, p.price,
+                gp.score, gp.reason, gp.tasteKeywords, pf.feedbackType)
             from GiftProduct gp
-            join fetch gp.product p
+            join gp.product p
+            left join ProductFeedback pf
+                on pf.userId = gp.userId
+                and pf.product.id = p.id
+                and pf.context = kr.ktb.zura.needu.product.type.ProductContext.MY_GIFT
+                and pf.deletedAt is null
             where gp.userId = :userId
+              and gp.deletedAt is null
               and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
               and p.deletedAt is null
               and p.price between :minPrice and :maxPrice
               and (gp.score < :score or (gp.score = :score and gp.id < :id))
+              and (:category is null or p.category = :category)
             order by gp.score desc, gp.id desc
             """)
-    List<GiftProduct> findAllByUserIdAndPriceRangeAfterCursor(
+    List<GiftProductSummary> findAllByUserIdAndPriceRangeAfterCursor(
             @Param("userId") Long userId,
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice,
+            @Param("category") ProductCategory category,
             @Param("score") BigDecimal score,
             @Param("id") Long id,
             Limit limit
     );
 
     List<GiftProduct> findAllByUserIdAndProductIdIn(Long userId, Collection<Long> productIds);
+
+    List<GiftProduct> findAllByUserIdAndProductId(Long userId, Long productId);
+
+    @Query("""
+            select gp
+            from GiftProduct gp
+            join fetch gp.product p
+            where gp.userId = :userId
+              and gp.deletedAt is null
+              and p.id = :productId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            order by gp.score desc, gp.id desc
+            """)
+    List<GiftProduct> findAllActiveByUserIdAndProductId(@Param("userId") Long userId, @Param("productId") Long productId);
+
+    @Query("""
+            select count(gp) > 0
+            from GiftProduct gp
+            join gp.product p
+            where gp.userId = :userId
+              and p.id = :productId
+              and p.status = kr.ktb.zura.needu.product.type.ProductStatus.ACTIVE
+              and p.deletedAt is null
+            """)
+    boolean existsActiveByUserIdAndProductId(@Param("userId") Long userId, @Param("productId") Long productId);
 }

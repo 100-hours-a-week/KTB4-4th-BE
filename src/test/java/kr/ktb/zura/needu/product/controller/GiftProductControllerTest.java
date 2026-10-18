@@ -20,6 +20,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import kr.ktb.zura.needu.product.type.ProductCategory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -38,10 +39,10 @@ class GiftProductControllerTest {
     private static final Long FRIEND_USER_ID = 123L;
     private static final String URL = "/api/v1/users/{userId}/gift-recommendations";
     private static final GiftProductSearchCondition FIRST_PAGE_CONDITION =
-            new GiftProductSearchCondition(30000L, 50000L, null, 20);
+            new GiftProductSearchCondition(30000L, 50000L, null, null, 20);
     private static final GiftProductResponse CROSS_BAG = new GiftProductResponse(
             101L, 1001L, "https://example.com/products/1001.jpg", "https://example.com/products/1001",
-            "FASHION", "미니 크로스백", 49000L,
+            ProductCategory.FASHION, "미니 크로스백", 49000L,
             new BigDecimal("0.900000"),
             List.of("미니멀", "데일리"), "데일리룩을 즐겨 입어요.");
 
@@ -95,7 +96,7 @@ class GiftProductControllerTest {
 
     @Test
     void cursorGiven_findAllGiftProducts_passesConditionToService() throws Exception {
-        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "cursor", 10);
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, null, "cursor", 10);
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -113,7 +114,7 @@ class GiftProductControllerTest {
 
     @Test
     void priceRangeOmitted_findAllGiftProducts_usesDefaults() throws Exception {
-        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, 20);
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, null, 20);
         given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
                 .willReturn(new ProductCursorPageResponse<>(
                         List.of(), new PriceRangeResponse(null, null), null, false));
@@ -127,16 +128,57 @@ class GiftProductControllerTest {
     }
 
     @Test
-    void sizeMissing_findAllGiftProducts_returnsBadRequest() throws Exception {
+    void sizeMissing_findAllGiftProducts_usesDefaultSize() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, null, null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
+
         mockMvc.perform(get(URL, FRIEND_USER_ID)
                         .param("minPrice", "30000")
                         .param("maxPrice", "50000")
                         .with(authenticatedUser()))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(status().isOk());
 
-        verify(giftProductService, never()).findAllGiftProducts(anyLong(), anyLong(), any());
+        verify(giftProductService).findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition);
+    }
+
+    @Test
+    void allQueryOmitted_findAllGiftProducts_usesSameDefaultsAsPersonalProducts() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(0L, 99999999L, null, null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(), new PriceRangeResponse(null, null), null, false));
+
+        mockMvc.perform(get(URL, FRIEND_USER_ID).with(authenticatedUser()))
+                .andExpect(status().isOk());
+
+        verify(giftProductService).findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition);
+    }
+
+    @Test
+    void categoryGiven_findAllGiftProducts_passesItAndKeepsResponseWithoutMyFeedback() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "FASHION", null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willReturn(new ProductCursorPageResponse<>(
+                        List.of(CROSS_BAG), new PriceRangeResponse(15000L, 230000L), null, false));
+
+        mockMvc.perform(firstPageRequest().param("category", "FASHION"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].category").value("FASHION"))
+                .andExpect(jsonPath("$.data.items[0].matchingKeywords[0]").value("미니멀"))
+                .andExpect(jsonPath("$.data.items[0].myFeedback").doesNotExist());
+    }
+
+    @Test
+    void unknownCategory_findAllGiftProducts_returnsUnprocessableContent() throws Exception {
+        GiftProductSearchCondition condition = new GiftProductSearchCondition(30000L, 50000L, "UNKNOWN", null, 20);
+        given(giftProductService.findAllGiftProducts(LOGIN_USER_ID, FRIEND_USER_ID, condition))
+                .willThrow(new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT));
+
+        mockMvc.perform(firstPageRequest().param("category", "UNKNOWN"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
@@ -165,7 +207,7 @@ class GiftProductControllerTest {
                         .param("size", "20")
                         .with(authenticatedUser()))
                 .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("입력값이 유효하지 않습니다. 입력 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
 
         mockMvc.perform(get(URL, FRIEND_USER_ID)

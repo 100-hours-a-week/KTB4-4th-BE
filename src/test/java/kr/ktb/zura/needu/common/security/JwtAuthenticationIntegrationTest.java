@@ -6,8 +6,11 @@ import java.time.Duration;
 import jakarta.servlet.http.Cookie;
 import kr.ktb.zura.needu.auth.service.AccessTokenService;
 import kr.ktb.zura.needu.auth.service.AuthService;
+import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
+import kr.ktb.zura.needu.auth.type.KakaoOAuthContext;
 import kr.ktb.zura.needu.guidance.service.GuidanceService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -16,10 +19,10 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,6 +43,9 @@ class JwtAuthenticationIntegrationTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private KakaoOAuthTransactionService kakaoOAuthTransactionService;
 
     private final MockMvc mockMvc;
     private final AccessTokenService accessTokenService;
@@ -76,20 +82,31 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
-    void statelessSecurity_keepsKakaoOAuthStateSession() throws Exception {
+    void statelessSecurity_usesDedicatedKakaoOAuthCookieWithoutSession() throws Exception {
+        when(kakaoOAuthTransactionService.createLoginState("https://needu.example.com/login"))
+                .thenReturn("state-123");
+        when(kakaoOAuthTransactionService.getTtl()).thenReturn(Duration.ofMinutes(10));
+        when(kakaoOAuthTransactionService.consumeLoginState("state-123", "state-123"))
+                .thenReturn(java.util.Optional.of(new KakaoOAuthContext(
+                        "https://needu.example.com/login", null)));
         when(authService.createKakaoAuthorizationUri(anyString()))
                 .thenReturn(URI.create("https://kauth.kakao.com/oauth/authorize"));
         when(authService.loginWithKakao("valid-code"))
                 .thenReturn(new AuthService.Tokens("access-token", "refresh-token", Duration.ofDays(14)));
-        MockHttpSession session = (MockHttpSession) mockMvc.perform(get("/api/v1/auth/kakao/authorize")
+        MvcResult authorization = mockMvc.perform(get("/api/v1/auth/kakao/authorize")
                         .param("returnUrl", "https://needu.example.com/login"))
                 .andExpect(status().isFound())
-                .andReturn().getRequest().getSession(false);
+                .andReturn();
+        Cookie oauthCookie = authorization.getResponse().getCookie(AuthCookieNames.KAKAO_LOGIN_OAUTH);
+        ArgumentCaptor<String> stateCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authService).createKakaoAuthorizationUri(stateCaptor.capture());
+        assertThat(oauthCookie).isNotNull();
+        assertThat(authorization.getResponse().getCookie("SESSION")).isNull();
 
         mockMvc.perform(get("/api/v1/auth/kakao/callback")
-                        .session(session)
+                        .cookie(oauthCookie)
                         .param("code", "valid-code")
-                        .param("state", (String) session.getAttribute("kakaoOAuthState")))
+                        .param("state", "state-123"))
                 .andExpect(status().isFound());
 
         verify(authService).loginWithKakao("valid-code");

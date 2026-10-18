@@ -1,22 +1,22 @@
 package kr.ktb.zura.needu.aichat.controller;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-
+import kr.ktb.zura.needu.aichat.dto.request.AiMessageSearchCondition;
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
-import kr.ktb.zura.needu.aichat.dto.response.AiMessageResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.facade.AiChatFacade;
 import kr.ktb.zura.needu.aichat.facade.AiConversationStartResult;
+import kr.ktb.zura.needu.aichat.facade.AiMessageSendResult;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,8 +25,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequiredArgsConstructor
@@ -53,23 +53,39 @@ public class AiChatController {
     public ResponseEntity<CursorApiResponse<AiMessageSummaryResponse>> findAllMessages(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long conversationId,
-            @RequestParam(required = false) String cursor,
-            @RequestParam @Min(AiChatPageLimits.MIN_PAGE_SIZE) @Max(AiChatPageLimits.MAX_PAGE_SIZE) int size
+            @Valid AiMessageSearchCondition condition
     ) {
         return ResponseEntity.ok(CursorApiResponse.of(
                 AiChatResponseMessages.MESSAGES_FOUND,
-                aiChatFacade.findAllMessages(userId, conversationId, cursor, size)
+                aiChatFacade.findAllMessages(userId, conversationId, condition.cursor(), condition.size())
         ));
     }
 
+    // 연결 전 오류 => HTTP 오류로, 연결 후 오류 => error 이벤트로
+    @GetMapping(value = "/{conversationId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> connectStream(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long conversationId
+    ) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL,
+                        "no-cache, no-store, max-age=0, must-revalidate, no-transform")
+                .header("X-Accel-Buffering", "no")
+                .body(aiChatFacade.connectStream(userId, conversationId));
+    }
+
     @PostMapping("/{conversationId}/messages")
-    public ResponseEntity<ApiResponse<AiMessageResponse>> sendMessage(
+    public ResponseEntity<ApiResponse<Object>> sendMessage(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long conversationId,
             @Valid @RequestBody SendMessageRequest request
     ) {
-        AiMessageResponse response = aiChatFacade.sendMessage(userId, conversationId, request);
-        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.MESSAGE_SENT, response));
+        AiMessageSendResult result = aiChatFacade.sendMessage(userId, conversationId, request);
+        if (result.isAccepted()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(ApiResponse.of(AiChatResponseMessages.MESSAGE_ACCEPTED, result.accepted()));
+        }
+        return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.MESSAGE_SENT, result.reply()));
     }
 
     @PostMapping("/{conversationId}/analysis")
@@ -99,6 +115,5 @@ public class AiChatController {
         ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(userId, conversationId);
         return ResponseEntity.ok(ApiResponse.of(AiChatResponseMessages.CONVERSATION_COMPLETED, response));
     }
-
 
 }

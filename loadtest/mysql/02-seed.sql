@@ -18,12 +18,34 @@ SELECT
     NULL,
     IF(MOD(number, 2) = 0, 'FEMALE', 'MALE'),
     DATE_ADD('1990-01-01', INTERVAL MOD(number * 17, 3650) DAY),
+    -- AI 대화 API는 온보딩을 마친 사용자만 쓸 수 있다 => AI 시나리오 사용자(201~400)도 온보딩 완료, 취향 분석만 전
+    TRUE,
     number <= 200,
-    number <= 200,
-    IF(number <= 200, 'ACTIVE', 'ONBOARDING'),
+    'ACTIVE',
     UTC_TIMESTAMP(6),
     UTC_TIMESTAMP(6)
 FROM sequence;
+
+-- AI 대화 시작·메시지 전송은 AI 대화 정보 활용 동의를 확인한다 => 필수 동의 4종을 현재 버전(ConsentType.version)으로 동의
+INSERT INTO user_consents (user_id, consent_type, version, agreed, created_at)
+WITH RECURSIVE sequence AS (
+    SELECT 1 AS number
+    UNION ALL
+    SELECT number + 1 FROM sequence WHERE number < 400
+)
+SELECT
+    sequence.number,
+    consent.consent_type,
+    '1.0',
+    TRUE,
+    UTC_TIMESTAMP(6)
+FROM sequence
+CROSS JOIN (
+    SELECT 'PRIVACY_COLLECTION' AS consent_type
+    UNION ALL SELECT 'AI_CONVERSATION'
+    UNION ALL SELECT 'FRIEND_TASTE_SHARING'
+    UNION ALL SELECT 'PRODUCT_ACTIVITY'
+) AS consent;
 
 INSERT INTO friends (owner_user_id, friend_user_id, is_favorite)
 WITH RECURSIVE owners AS (
@@ -60,7 +82,8 @@ SELECT
         ELSE CONCAT('loadtest-', number)
     END,
     CONCAT('loadtest-product-', LPAD(number, 4, '0')),
-    CONCAT('category-', MOD(number, 10)),
+    ELT(MOD(number, 10) + 1, 'VOUCHER', 'LIVING', 'BEAUTY', 'FASHION', 'FOOD',
+        'DIGITAL', 'HEALTH', 'LUXURY', 'BOOKS_TICKETS', 'SPORTS'),
     'Local load test product',
     1000 + number * 100,
     NULL,

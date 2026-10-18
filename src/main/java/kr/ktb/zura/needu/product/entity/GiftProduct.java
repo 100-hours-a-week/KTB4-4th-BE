@@ -32,7 +32,7 @@ public class GiftProduct {
     private Long id;
 
     @Column(nullable = false)
-    private Long userId; //user 엔티티 연결 필요
+    private Long userId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
@@ -55,6 +55,8 @@ public class GiftProduct {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    private LocalDateTime deletedAt;
+
     public GiftProduct(Long userId, Product product, BigDecimal score, String reason, List<String> tasteKeywords) {
         this.userId = userId;
         this.product = product;
@@ -65,5 +67,15 @@ public class GiftProduct {
 
     public void updateScore(BigDecimal score) {
         this.score = score;
+    }
+
+    public void delete() {
+        if (!isDeleted()) {
+            deletedAt = LocalDateTime.now();
+        }
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 }

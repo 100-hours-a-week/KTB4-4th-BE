@@ -11,6 +11,7 @@ public enum AiChatErrorCode implements ErrorCode {
 
     AICHAT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 대화를 찾을 수 없습니다."),
     AICHAT_CONVERSATION_FORBIDDEN(HttpStatus.FORBIDDEN, "해당 AI 대화에 접근할 수 없습니다."),
+    AICHAT_CONSENT_REQUIRED(HttpStatus.FORBIDDEN, "AI 대화를 이용하려면 정보 활용 동의가 필요합니다."),
     AICHAT_INPUT_LOCKED(HttpStatus.CONFLICT, "AI 대화의 사용자 입력이 잠겨 있습니다."),
     AICHAT_ANALYSIS_NOT_READY(HttpStatus.CONFLICT, "취향 분석을 생성할 수 없는 상태입니다."),
 
@@ -25,12 +26,13 @@ public enum AiChatErrorCode implements ErrorCode {
     AICHAT_TURN_IN_PROGRESS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 
     // AI 서버 장애는 FE 명세상 500/503만 노출 => 공통 문구로 응답, 원인은 코드 이름으로 구분
-    AICHAT_SERVER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
-    AICHAT_REQUEST_TIMEOUT(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
-    AICHAT_INVALID_RESPONSE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
+    AICHAT_SERVER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    AICHAT_REQUEST_TIMEOUT(HttpStatus.SERVICE_UNAVAILABLE, "AI 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요."),
+    AICHAT_INVALID_RESPONSE(HttpStatus.SERVICE_UNAVAILABLE, "AI 응답을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."),
+    // 서비스 토큰 설정 문제라 사용자가 할 수 있는 일이 없음 => 내부 원인을 드러내지 않고 공통 500 문구를 쓴다
     AICHAT_AUTHENTICATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "요청을 처리하지 못했습니다."),
-    AICHAT_REQUEST_REJECTED(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
-    AICHAT_CONVERSATION_STARTING(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 서비스를 이용할 수 없습니다."),
+    AICHAT_REQUEST_REJECTED(HttpStatus.SERVICE_UNAVAILABLE, "AI가 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    AICHAT_CONVERSATION_STARTING(HttpStatus.SERVICE_UNAVAILABLE, "AI 대화를 준비하고 있습니다. 잠시 후 다시 시도해 주세요."),
     AICHAT_CONVERSATION_EXPIRED(HttpStatus.GONE,"AI 대화 세션이 만료되었습니다." );
 
     private final HttpStatus status;

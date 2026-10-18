@@ -1,8 +1,6 @@
 package kr.ktb.zura.needu.product.controller;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.Valid;
 import kr.ktb.zura.needu.product.dto.request.PersonalProductSearchCondition;
 import kr.ktb.zura.needu.product.dto.response.PersonalProductResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductCursorApiResponse;
@@ -12,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -25,13 +22,8 @@ public class PersonalProductController {
     @GetMapping
     public ResponseEntity<ProductCursorApiResponse<PersonalProductResponse>> findAllPersonalProducts(
             @AuthenticationPrincipal Long userId,
-            @RequestParam(defaultValue = "0") @PositiveOrZero long minPrice,
-            @RequestParam(defaultValue = "99999999") @PositiveOrZero long maxPrice,
-            @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = PersonalProductPageLimits.DEFAULT_PAGE_SIZE)
-            @Min(PersonalProductPageLimits.MIN_PAGE_SIZE) @Max(PersonalProductPageLimits.MAX_PAGE_SIZE) int size
+            @Valid PersonalProductSearchCondition condition
     ) {
-        PersonalProductSearchCondition condition = new PersonalProductSearchCondition(minPrice, maxPrice, cursor, size);
         return ResponseEntity.ok(ProductCursorApiResponse.of(
                 ProductResponseMessages.PERSONAL_PRODUCTS_FOUND,
                 personalProductService.findAllPersonalProducts(userId, condition)
