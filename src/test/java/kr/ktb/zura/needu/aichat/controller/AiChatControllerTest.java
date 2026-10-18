@@ -124,13 +124,13 @@ class AiChatControllerTest {
     }
 
     @Test
-    void aiServerUnavailable_startOrResumeConversation_returnsServiceUnavailable() throws Exception {
+    void aiRequestTimeout_startOrResumeConversation_returnsServiceUnavailable() throws Exception {
         given(aiChatFacade.startOrResumeConversation(USER_ID))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
 
         mockMvc.perform(postConversation())
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.message").value("일시적으로 서비스를 이용할 수 없습니다."))
+                .andExpect(jsonPath("$.message").value("AI 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요."))
                 .andExpect(jsonPath("$.data").isEmpty());
     }
 
