@@ -49,7 +49,10 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
           IMAGE_SHA: ${{ inputs.image_sha }}
+          AWS_CD_ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
         run: |
+          set -euo pipefail
+
           if [[ ! "$DEPLOY_ENVIRONMENT" =~ ^(dev|staging|prod)$ ]]; then
             echo "지원하지 않는 배포 환경입니다: $DEPLOY_ENVIRONMENT"
             exit 1
@@ -62,6 +65,11 @@ jobs:
 
           if [[ -z "$ECR_REPOSITORY_URI" ]]; then
             echo "GitHub Repository Variable AWS_ECR_REPOSITORY_URI가 필요합니다."
+            exit 1
+          fi
+
+          if [[ -z "$AWS_CD_ROLE_ARN" ]]; then
+            echo "GitHub Environment '${{ inputs.github_environment }}'에 AWS_CD_ROLE_ARN 변수가 필요합니다."
             exit 1
           fi
 
@@ -176,7 +184,10 @@ jobs:
       - name: Verify Deployment
         env:
           EXPECTED_TASK_DEFINITION_ARN: ${{ steps.task-definition.outputs.task_definition_arn }}
+          EXPECTED_IMAGE: ${{ vars.AWS_ECR_REPOSITORY_URI }}:v2-${{ inputs.image_sha }}
         run: |
+          set -euo pipefail
+
           SERVICE_STATE=$(aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE" \
@@ -191,9 +202,26 @@ jobs:
             exit 1
           fi
 
+          ACTUAL_IMAGE=$(aws ecs describe-task-definition \
+            --task-definition "$CURRENT_TASK_DEFINITION_ARN" \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition.containerDefinitions[?name==`backend`].image | [0]' \
+            --output text)
+
+          if [[ "$ACTUAL_IMAGE" != "$EXPECTED_IMAGE" ]]; then
+            echo "배포된 이미지가 요청한 이미지와 다릅니다."
+            echo "Expected: $EXPECTED_IMAGE"
+            echo "Current: $ACTUAL_IMAGE"
+            exit 1
+          fi
+
           if [[ "$RUNNING_COUNT" -lt "$DESIRED_COUNT" ]]; then
             echo "실행 중인 Task 수가 원하는 수보다 적습니다: $RUNNING_COUNT/$DESIRED_COUNT"
             exit 1
           fi
 
-          echo "Backend 배포가 완료되었습니다: $RUNNING_COUNT/$DESIRED_COUNT"
+          if [[ "$DESIRED_COUNT" -eq 0 ]]; then
+            echo "Backend 배포가 완료되었습니다: Task Definition 및 이미지 반영 확인 (서비스 정지 상태 0/0)"
+          else
+            echo "Backend 배포가 완료되었습니다: $RUNNING_COUNT/$DESIRED_COUNT"
+          fi
