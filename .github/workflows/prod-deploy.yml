@@ -12,15 +12,59 @@ permissions:
   contents: read
 
 jobs:
+  verify-production-candidate:
+    name: Verify Main Promotion Candidate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Main History
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify Image SHA Is Included in Main
+        env:
+          IMAGE_SHA: ${{ inputs.image_sha }}
+          WORKFLOW_REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "::error::Production CD는 main 브랜치에서만 실행할 수 있습니다: $WORKFLOW_REF"
+            exit 1
+          fi
+
+          if [[ ! "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::이미지 SHA는 40자리 Git SHA여야 합니다: $IMAGE_SHA"
+            exit 1
+          fi
+
+          git cat-file -e "${IMAGE_SHA}^{commit}" 2>/dev/null || {
+            echo "::error::입력한 SHA를 Git 이력에서 찾을 수 없습니다: $IMAGE_SHA"
+            exit 1
+          }
+
+          git merge-base --is-ancestor "$IMAGE_SHA" HEAD || {
+            echo "::error::입력한 SHA가 main 브랜치에 포함되어 있지 않습니다: $IMAGE_SHA"
+            exit 1
+          }
+
+          echo "검증된 Dev 이미지 SHA가 main 브랜치에 포함되어 있습니다: $IMAGE_SHA"
+
   deploy-production:
     name: Deploy V2 Production
+    needs: verify-production-candidate
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/deploy.yml
     with:
       environment: prod
-      github_environment: production
+      github_environment: prod
       image_sha: ${{ inputs.image_sha }}
       verify_dev_match: true
     secrets: inherit
