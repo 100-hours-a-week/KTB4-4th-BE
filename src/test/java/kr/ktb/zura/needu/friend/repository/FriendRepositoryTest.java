@@ -199,7 +199,7 @@ class FriendRepositoryTest {
     }
 
     @Test
-    void namePrefixPattern_findAllByOwner_returnsNamesStartingWithKeyword() {
+    void nameContainsPattern_findAllByOwner_returnsNamesContainingKeyword() {
         User kimChulsoo = saveUser("김철수", null);
         User kimSuji = saveUser("김수지", null);
         User parkKimji = saveUser("박김지", null);
@@ -212,14 +212,14 @@ class FriendRepositoryTest {
         ));
 
         List<FriendSummaryResponse> friends = friendRepository
-                .findAllByOwnerUserIdOrderByName(1L, false, "김%", Limit.of(10));
+                .findAllByOwnerUserIdOrderByName(1L, false, "%김%", Limit.of(10));
         List<FriendSummaryResponse> friendsAfterCursor = friendRepository
-                .findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", kimSuji.getId(), Limit.of(10));
+                .findAllByOwnerUserIdAfterNameCursor(1L, false, "%김%", "김수지", kimSuji.getId(), Limit.of(10));
 
         assertThat(friends).extracting(FriendSummaryResponse::userId)
-                .containsExactly(kimSuji.getId(), kimChulsoo.getId());
+                .containsExactly(kimSuji.getId(), kimChulsoo.getId(), parkKimji.getId());
         assertThat(friendsAfterCursor).extracting(FriendSummaryResponse::userId)
-                .containsExactly(kimChulsoo.getId());
+                .containsExactly(kimChulsoo.getId(), parkKimji.getId());
     }
 
     @Test

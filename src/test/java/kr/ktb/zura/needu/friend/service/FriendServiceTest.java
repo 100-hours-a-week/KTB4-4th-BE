@@ -196,9 +196,9 @@ class FriendServiceTest {
     }
 
     @Test
-    void keyword_findAllFriends_queriesStrippedNamePrefixPattern() {
+    void keyword_findAllFriends_queriesStrippedNameContainsPattern() {
         FriendSummaryResponse friend = friendSummary(2L, "김철수", null);
-        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "김%", Limit.of(3)))
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, false, "%김%", Limit.of(3)))
                 .thenReturn(List.of(friend));
 
         FriendListResponse response = friendService.findAllFriends(
@@ -210,25 +210,25 @@ class FriendServiceTest {
 
     @Test
     void keywordWithLikeWildcards_findAllFriends_escapesWildcards() {
-        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, true, "50!%!_!!%", Limit.of(3)))
+        when(friendRepository.findAllByOwnerUserIdOrderByName(1L, true, "%50!%!_!!%", Limit.of(3)))
                 .thenReturn(List.of());
 
         friendService.findAllFriends(1L, new FriendSearchCondition(true, "50%_!", null, 2));
 
-        verify(friendRepository).findAllByOwnerUserIdOrderByName(1L, true, "50!%!_!!%", Limit.of(3));
+        verify(friendRepository).findAllByOwnerUserIdOrderByName(1L, true, "%50!%!_!!%", Limit.of(3));
     }
 
     @Test
     void keywordWithCursor_findAllFriends_queriesPatternAfterNameCursor() {
         String cursor = new FriendNameCursor("김수지", 2L).encode();
-        when(friendRepository.findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", 2L, Limit.of(3)))
+        when(friendRepository.findAllByOwnerUserIdAfterNameCursor(1L, false, "%김%", "김수지", 2L, Limit.of(3)))
                 .thenReturn(List.of());
 
         FriendListResponse response = friendService.findAllFriends(
                 1L, new FriendSearchCondition(null, "김", cursor, 2));
 
         assertThat(response.items()).isEmpty();
-        verify(friendRepository).findAllByOwnerUserIdAfterNameCursor(1L, false, "김%", "김수지", 2L, Limit.of(3));
+        verify(friendRepository).findAllByOwnerUserIdAfterNameCursor(1L, false, "%김%", "김수지", 2L, Limit.of(3));
     }
 
     @Test
