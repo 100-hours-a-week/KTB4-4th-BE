@@ -122,7 +122,7 @@ public class FriendService {
                 .replace(LIKE_ESCAPE, LIKE_ESCAPE + LIKE_ESCAPE)
                 .replace("%", LIKE_ESCAPE + "%")
                 .replace("_", LIKE_ESCAPE + "_");
-        return escapedKeyword + LIKE_ANY;
+        return LIKE_ANY + escapedKeyword + LIKE_ANY;
     }
 
     private List<FriendSummaryResponse> findAllByName(

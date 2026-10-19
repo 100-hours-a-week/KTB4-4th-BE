@@ -120,7 +120,7 @@ class FriendListIntegrationTest {
     }
 
     @Test
-    void keyword_findAllFriends_returnsFriendsWhoseNameStartsWithKeyword() throws Exception {
+    void keyword_findAllFriends_returnsFriendsWhoseNameContainsKeyword() throws Exception {
         User owner = saveUser("사용자", LocalDate.of(2000, 1, 1));
         User kimChulsoo = saveUser("김철수", LocalDate.of(2000, 3, 1));
         User parkKimji = saveUser("박김지", LocalDate.of(2000, 3, 2));
@@ -129,10 +129,14 @@ class FriendListIntegrationTest {
                 new Friend(owner.getId(), parkKimji.getId())
         ));
 
-        mockMvc.perform(validRequest().param("keyword", "김").with(authenticatedUser(owner.getId())))
+        mockMvc.perform(get(URL)
+                        .param("size", "2")
+                        .param("keyword", "김")
+                        .with(authenticatedUser(owner.getId())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(2))
                 .andExpect(jsonPath("$.data.items[0].name").value("김철수"))
+                .andExpect(jsonPath("$.data.items[1].name").value("박김지"))
                 .andExpect(jsonPath("$.hasNext").value(false));
     }
 
