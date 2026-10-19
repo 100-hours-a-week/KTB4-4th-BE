@@ -55,7 +55,7 @@ needu:
       # 같은 사용자-상품-context의 클릭을 다시 기록하지 않는 기간
       duplicate-window: ${PRODUCT_LINK_CLICK_DUPLICATE_WINDOW:1h}
     purchase-check:
-      cron: ${PURCHASE_CHECK_CRON:0 * * * * *}
+      cron: ${PURCHASE_CHECK_CRON:0 */10 * * * *}
       zone: ${PURCHASE_CHECK_ZONE:Asia/Seoul}
       # 링크 클릭 후 구매 여부를 묻기까지의 기간
       delay: ${PURCHASE_CHECK_DELAY:1h}
