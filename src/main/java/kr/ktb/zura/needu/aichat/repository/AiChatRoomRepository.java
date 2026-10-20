@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,4 +14,6 @@ public interface AiChatRoomRepository extends JpaRepository<AiChatRoom, Long> {
     Optional<AiChatRoom> findByActiveUserId(Long activeUserId);
 
     Optional<AiChatRoom> findFirstByUserIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(Long userId);
+
+    long countByUserIdAndCreatedAtGreaterThanEqualAndDeletedAtIsNull(Long userId, LocalDateTime createdAt);
 }

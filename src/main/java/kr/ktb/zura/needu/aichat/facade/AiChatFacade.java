@@ -108,7 +108,7 @@ public class AiChatFacade {
         validateAiConversationConsent(userId);
         boolean hasShortCooldown = hasShortCompletionCooldown(userId);
         AiChatRoom room = hasShortCooldown
-                ? aiChatRoomService.findOrReserveRoom(userId, shortCompletionCooldown)
+                ? aiChatRoomService.findOrReserveRoomWithoutDailyLimit(userId, shortCompletionCooldown)
                 : aiChatRoomService.findOrReserveRoom(userId);
         if (room.isPending()) {
             return startConversation(userId, room.getId());
@@ -116,7 +116,7 @@ public class AiChatFacade {
         // AI 서버에 세션 조회 API가 없어 purgeAt으로 만료를 판단, 규칙보다 일찍 사라진 세션은 메시지 전송·분석 시 발견
         // ANALYZING도 AI 세션이 만료되면 분석을 이어갈 수 없음 => 다른 대화 API처럼 만료로 보고 새 대화를 시작한다
         if (!room.isCompleted() && room.isExpiredAt(LocalDateTime.now(ZoneOffset.UTC))) {
-            return restartConversation(userId, room.getId());
+            return restartConversation(userId, room.getId(), hasShortCooldown);
         }
         return AiConversationStartResult.resumed(
                 AiConversationResponse.from(
@@ -334,9 +334,12 @@ public class AiChatFacade {
         }
     }
 
-    private AiConversationStartResult restartConversation(Long userId, Long expiredRoomId) {
+    private AiConversationStartResult restartConversation(Long userId, Long expiredRoomId, boolean hasShortCooldown) {
         log.info("AI chat session expired. userId={}, conversationId={}", userId, expiredRoomId);
-        AiChatRoom newRoom = aiChatRoomService.expireAndReserveRoom(userId, expiredRoomId);
+        aiChatRoomService.expireRoom(expiredRoomId);
+        AiChatRoom newRoom = hasShortCooldown
+                ? aiChatRoomService.reserveRoomWithoutDailyLimit(userId)
+                : aiChatRoomService.reserveRoom(userId);
         return startConversation(userId, newRoom.getId());
     }
 

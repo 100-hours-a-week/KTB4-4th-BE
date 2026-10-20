@@ -12,6 +12,11 @@ ai:
     # 지정된 카카오 external ID에는 짧은 완료 쿨다운을 적용한다.
     short-cooldown-external-ids: ${AI_CHAT_SHORT_COOLDOWN_EXTERNAL_IDS:}
     short-completion-cooldown: ${AI_CHAT_SHORT_COMPLETION_COOLDOWN:5m}
+    # 하루에 새로 시작할 수 있는 AI 대화 수다(첫 대화 1 + 재대화 5). 새 대화마다 LLM을 호출하므로 재대화 반복 비용을 막는다.
+    # short-cooldown-external-ids 계정에는 적용하지 않는다.
+    daily-conversation-limit: ${AI_CHAT_DAILY_CONVERSATION_LIMIT:6}
+    # 하루 대화 한도가 초기화되는 기준 시간대다. 이 시간대의 자정에 초기화된다.
+    daily-conversation-limit-zone: ${AI_CHAT_DAILY_CONVERSATION_LIMIT_ZONE:Asia/Seoul}
     # 같은 대화방의 메시지가 처리 중일 때 클라이언트에 안내할 재시도 시간이다.
     message-retry-after: ${AI_CHAT_MESSAGE_RETRY_AFTER:10s}
     # AI 대화 SSE 연결 유지 시간이다. 지나면 FE EventSource가 자동으로 다시 연결한다.

@@ -196,7 +196,7 @@ class AiChatFacadeTest {
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
-        given(aiChatRoomService.findOrReserveRoom(USER_ID, SHORT_COMPLETION_COOLDOWN))
+        given(aiChatRoomService.findOrReserveRoomWithoutDailyLimit(USER_ID, SHORT_COMPLETION_COOLDOWN))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
         given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(ROOM_ID));
@@ -206,7 +206,7 @@ class AiChatFacadeTest {
         AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
 
         assertThat(result.isCreated()).isTrue();
-        verify(aiChatRoomService).findOrReserveRoom(USER_ID, SHORT_COMPLETION_COOLDOWN);
+        verify(aiChatRoomService).findOrReserveRoomWithoutDailyLimit(USER_ID, SHORT_COMPLETION_COOLDOWN);
     }
 
     @Test
@@ -229,7 +229,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
-        given(aiChatRoomService.expireAndReserveRoom(USER_ID, ROOM_ID))
+        given(aiChatRoomService.reserveRoom(USER_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
         given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(NEW_ROOM_ID));
@@ -242,6 +242,7 @@ class AiChatFacadeTest {
         assertThat(result.isCreated()).isTrue();
         assertThat(result.conversation().conversationId()).isEqualTo(NEW_ROOM_ID);
         assertThat(result.conversation().progress()).isZero();
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
     }
 
     @Test
@@ -249,7 +250,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ANALYZING,
                         LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
-        given(aiChatRoomService.expireAndReserveRoom(USER_ID, ROOM_ID))
+        given(aiChatRoomService.reserveRoom(USER_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
         given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(NEW_ROOM_ID));
@@ -261,7 +262,61 @@ class AiChatFacadeTest {
 
         assertThat(result.isCreated()).isTrue();
         assertThat(result.conversation().conversationId()).isEqualTo(NEW_ROOM_ID);
-        verify(aiChatRoomService).expireAndReserveRoom(USER_ID, ROOM_ID);
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+    }
+
+    @Test
+    void roomPastPurgeAtOverDailyLimit_startOrResumeConversation_expiresRoomWithoutStartingSession() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
+                        LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
+        given(aiChatRoomService.reserveRoom(USER_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+
+        assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+        verifyNoInteractions(aiChatClient);
+    }
+
+    @Test
+    void shortCooldownUserRoomPastPurgeAt_startOrResumeConversation_reservesRoomWithoutDailyLimit() {
+        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
+                aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
+                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, MESSAGE_RETRY_AFTER,
+                SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
+        given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
+                USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
+        given(aiChatRoomService.findOrReserveRoomWithoutDailyLimit(USER_ID, SHORT_COMPLETION_COOLDOWN))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
+                        LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
+        given(aiChatRoomService.reserveRoomWithoutDailyLimit(USER_ID))
+                .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST))
+                .willReturn(startSessionResponse(NEW_ROOM_ID));
+        given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
+                .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT));
+
+        AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
+
+        assertThat(result.conversation().conversationId()).isEqualTo(NEW_ROOM_ID);
+        verify(aiChatRoomService).expireRoom(ROOM_ID);
+        verify(aiChatRoomService, never()).reserveRoom(anyLong());
+    }
+
+    @Test
+    void dailyLimitExceeded_startOrResumeConversation_doesNotCallAiServer() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+
+        assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+        verifyNoInteractions(aiChatClient);
     }
 
     @Test
@@ -277,7 +332,7 @@ class AiChatFacadeTest {
         assertThat(result.conversation().status()).isEqualTo(AiChatRoomStatus.ANALYZING);
         assertThat(result.conversation().progress()).isEqualTo(100);
         verifyNoInteractions(aiChatClient);
-        verify(aiChatRoomService, never()).expireAndReserveRoom(anyLong(), anyLong());
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
     }
 
     @Test
@@ -298,7 +353,7 @@ class AiChatFacadeTest {
         assertThat(result.conversation().nextConversationAvailableAt())
                 .isEqualTo(nextConversationAvailableAt);
         verifyNoInteractions(aiChatClient);
-        verify(aiChatRoomService, never()).expireAndReserveRoom(anyLong(), anyLong());
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
     }
 
     @Test

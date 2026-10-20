@@ -4,6 +4,7 @@ import java.time.*;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
+import kr.ktb.zura.needu.aichat.dto.response.DailyConversationLimitResponse;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
@@ -24,28 +25,54 @@ public class AiChatRoomService {
     private final AiMessageRepository aiMessageRepository;
     private final Duration pendingTimeout;
     private final Duration completionCooldown;
+    private final int dailyConversationLimit;
+    private final ZoneId dailyConversationLimitZone;
+    private final Clock clock;
 
     public AiChatRoomService(AiChatRoomRepository aiChatRoomRepository,
                              AiMessageRepository aiMessageRepository,
                              @Value("${ai.chat.pending-timeout:1m}") Duration pendingTimeout,
-                             @Value("${ai.chat.completion-cooldown:24h}") Duration completionCooldown) {
+                             @Value("${ai.chat.completion-cooldown:24h}") Duration completionCooldown,
+                             @Value("${ai.chat.daily-conversation-limit:6}") int dailyConversationLimit,
+                             @Value("${ai.chat.daily-conversation-limit-zone:Asia/Seoul}")
+                             String dailyConversationLimitZone,
+                             Clock clock) {
         this.aiChatRoomRepository = aiChatRoomRepository;
         this.aiMessageRepository = aiMessageRepository;
         this.pendingTimeout = pendingTimeout;
         this.completionCooldown = completionCooldown;
+        this.dailyConversationLimit = dailyConversationLimit;
+        this.dailyConversationLimitZone = ZoneId.of(dailyConversationLimitZone);
+        this.clock = clock;
     }
 
     // 반환된 방이 PENDING => 이번 호출에서 새로 예약한 방
     @Transactional
     public AiChatRoom findOrReserveRoom(Long userId) {
-        return findOrReserveRoom(userId, completionCooldown);
+        return findOrReserveRoom(userId, completionCooldown, true);
     }
 
     @Transactional
-    public AiChatRoom findOrReserveRoom(Long userId, Duration cooldown) {
+    public AiChatRoom findOrReserveRoomWithoutDailyLimit(Long userId, Duration cooldown) {
+        return findOrReserveRoom(userId, cooldown, false);
+    }
+
+
+    @Transactional
+    public AiChatRoom reserveRoom(Long userId) {
+        return reserveRoom(userId, true);
+    }
+
+    @Transactional
+    public AiChatRoom reserveRoomWithoutDailyLimit(Long userId) {
+        return reserveRoom(userId, false);
+    }
+
+    private AiChatRoom findOrReserveRoom(Long userId, Duration cooldown, boolean isDailyLimitApplied) {
         AiChatRoom room = aiChatRoomRepository.findByActiveUserId(userId).orElse(null);
         if (room == null) {
-            return findRecentCompletedRoom(userId, cooldown).orElseGet(() -> reserveRoom(userId));
+            return findRecentCompletedRoom(userId, cooldown)
+                    .orElseGet(() -> reserveRoom(userId, isDailyLimitApplied));
         }
         if (!room.isPending()) {
             return room;
@@ -54,18 +81,29 @@ public class AiChatRoomService {
         if (room.isReservedBefore(LocalDateTime.now(ZoneOffset.UTC).minus(pendingTimeout))) {
             log.info("Stale AI chat room discarded. userId={}, conversationId={}", userId, room.getId());
             discardAndFlush(room);
-            return reserveRoom(userId);
+            return reserveRoom(userId, isDailyLimitApplied);
         }
         throw new BusinessException(AiChatErrorCode.AICHAT_CONVERSATION_STARTING);
     }
 
-    @Transactional
-    public AiChatRoom expireAndReserveRoom(Long userId, Long expiredRoomId) {
-        AiChatRoom expiredRoom = findRoom(expiredRoomId);
-        expiredRoom.expire();
-        // Hibernate -> INSERT를 UPDATE보다 먼저 실행, 유일 제약 충돌을 막기 위해 만료 처리 우선 반영
-        aiChatRoomRepository.flush();
-        return reserveRoom(userId);
+    private AiChatRoom reserveRoom(Long userId, boolean isDailyLimitApplied) {
+        if (isDailyLimitApplied) {
+            validateDailyConversationLimit(userId);
+        }
+        return saveReservedRoom(userId);
+    }
+
+    private void validateDailyConversationLimit(Long userId) {
+        ZonedDateTime startOfToday = LocalDate.now(clock.withZone(dailyConversationLimitZone))
+                .atStartOfDay(dailyConversationLimitZone);
+        long startedToday = aiChatRoomRepository.countByUserIdAndCreatedAtGreaterThanEqualAndDeletedAtIsNull(
+                userId, startOfToday.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        if (startedToday < dailyConversationLimit) {
+            return;
+        }
+        log.info("AI daily conversation limit exceeded. userId={}, startedToday={}", userId, startedToday);
+        throw new BusinessException(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED,
+                DailyConversationLimitResponse.from(startOfToday.plusDays(1)));
     }
 
     @Transactional
@@ -196,7 +234,7 @@ public class AiChatRoomService {
     }
 
     // 동시에 들어온 요청이 먼저 방을 예약했다면 유일 제약 위반이 발생 => 대화 시작 중으로 응답
-    private AiChatRoom reserveRoom(Long userId) {
+    private AiChatRoom saveReservedRoom(Long userId) {
         try {
             return aiChatRoomRepository.saveAndFlush(AiChatRoom.reserve(userId));
         } catch (DataIntegrityViolationException e) {

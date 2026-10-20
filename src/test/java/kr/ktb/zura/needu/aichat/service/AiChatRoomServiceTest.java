@@ -1,10 +1,14 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+import kr.ktb.zura.needu.aichat.dto.response.DailyConversationLimitResponse;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -12,6 +16,7 @@ import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
+import kr.ktb.zura.needu.common.config.ClockConfig;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import(AiChatRoomService.class)
+@Import({AiChatRoomService.class, ClockConfig.class})
 class AiChatRoomServiceTest {
 
     private static final Long USER_ID = 1L;
@@ -35,6 +40,10 @@ class AiChatRoomServiceTest {
     private static final Long UNKNOWN_ROOM_ID = 999L;
     private static final String GREETING = "안녕하세요";
     private static final LocalDateTime PURGE_AT = LocalDateTime.now(ZoneOffset.UTC).plusHours(1);
+    private static final int DAILY_CONVERSATION_LIMIT = 6;
+    private static final String DAILY_CONVERSATION_LIMIT_ZONE = "Asia/Seoul";
+    // KST 2026-10-20 00:00 = UTC 2026-10-19 15:00
+    private static final LocalDateTime KST_MIDNIGHT_IN_UTC = LocalDateTime.of(2026, 10, 19, 15, 0);
 
     @Autowired
     private AiChatRoomService aiChatRoomService;
@@ -115,16 +124,126 @@ class AiChatRoomServiceTest {
     }
 
     @Test
-    void activeRoom_expireAndReserveRoom_expiresOldRoomAndReservesNewRoom() {
-        AiChatRoom oldRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
-        aiChatRoomService.activateRoom(oldRoom.getId(), GREETING, PURGE_AT);
+    void expiredRoom_reserveRoom_reservesNewPendingRoom() {
+        AiChatRoom oldRoom = activateRoom(USER_ID);
+        aiChatRoomService.expireRoom(oldRoom.getId());
 
-        AiChatRoom newRoom = aiChatRoomService.expireAndReserveRoom(USER_ID, oldRoom.getId());
+        AiChatRoom newRoom = aiChatRoomService.reserveRoom(USER_ID);
 
+        assertThat(newRoom.getId()).isNotEqualTo(oldRoom.getId());
         assertThat(newRoom.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
-        AiChatRoom expiredRoom = aiChatRoomRepository.findById(oldRoom.getId()).orElseThrow();
-        assertThat(expiredRoom.getStatus()).isEqualTo(AiChatRoomStatus.EXPIRED);
-        assertThat(expiredRoom.getActiveUserId()).isNull();
+        assertThat(newRoom.getActiveUserId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    void roomsStartedTodayReachLimit_findOrReserveRoom_throwsDailyConversationLimitExceeded() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+
+        assertThatThrownBy(() -> aiChatRoomService.findOrReserveRoom(USER_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+        assertThat(aiChatRoomRepository.findAllByUserId(USER_ID)).hasSize(DAILY_CONVERSATION_LIMIT);
+    }
+
+    @Test
+    void roomsStartedTodayBelowLimit_findOrReserveRoom_reservesRoom() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT - 1);
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void roomsOfAnotherUserReachLimit_findOrReserveRoom_reservesRoom() {
+        for (int count = 0; count < DAILY_CONVERSATION_LIMIT; count++) {
+            AiChatRoom room = activateRoom(OTHER_USER_ID);
+            aiChatRoomService.expireRoom(room.getId());
+        }
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void discardedRoomsReachLimit_findOrReserveRoom_reservesRoom() {
+        for (int count = 0; count < DAILY_CONVERSATION_LIMIT; count++) {
+            AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(USER_ID);
+            aiChatRoomService.discardRoom(reservedRoom.getId());
+        }
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID);
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void roomsStartedBeforeKstMidnight_findOrReserveRoom_reservesRoom() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+        updateCreatedAt(USER_ID, KST_MIDNIGHT_IN_UTC.minusNanos(1_000));
+
+        AiChatRoom room = aiChatRoomServiceAt(Instant.parse("2026-10-20T03:00:00Z")).findOrReserveRoom(USER_ID);
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void roomsStartedAtKstMidnight_findOrReserveRoom_throwsWithNextKstMidnight() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+        updateCreatedAt(USER_ID, KST_MIDNIGHT_IN_UTC);
+        AiChatRoomService serviceBeforeNextMidnight = aiChatRoomServiceAt(Instant.parse("2026-10-20T14:59:59Z"));
+
+        assertThatThrownBy(() -> serviceBeforeNextMidnight.findOrReserveRoom(USER_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode())
+                            .isEqualTo(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED);
+                    assertThat(exception.getData()).isEqualTo(new DailyConversationLimitResponse(
+                            OffsetDateTime.parse("2026-10-20T15:00:00Z")));
+                });
+    }
+
+    @Test
+    void stalePendingRoomAndRoomsReachLimit_findOrReserveRoom_throwsDailyConversationLimitExceeded() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+        AiChatRoom staleRoom = aiChatRoomService.reserveRoomWithoutDailyLimit(USER_ID);
+        jdbcTemplate.update("update ai_chat_rooms set created_at = ? where id = ?",
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(5), staleRoom.getId());
+        entityManager.clear();
+
+        assertThatThrownBy(() -> aiChatRoomService.findOrReserveRoom(USER_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+    }
+
+    @Test
+    void roomsStartedTodayReachLimit_findOrReserveRoomWithoutDailyLimit_reservesRoom() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+
+        AiChatRoom room = aiChatRoomService.findOrReserveRoomWithoutDailyLimit(USER_ID, Duration.ofMinutes(5));
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void roomsStartedTodayReachLimit_reserveRoom_throwsDailyConversationLimitExceeded() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+
+        assertThatThrownBy(() -> aiChatRoomService.reserveRoom(USER_ID))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED));
+    }
+
+    @Test
+    void roomsStartedTodayReachLimit_reserveRoomWithoutDailyLimit_reservesRoom() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+
+        AiChatRoom room = aiChatRoomService.reserveRoomWithoutDailyLimit(USER_ID);
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
     }
 
     @Test
@@ -288,7 +407,7 @@ class AiChatRoomServiceTest {
         AiChatRoom completedRoom = activateRoom(USER_ID);
         aiChatRoomService.completeRoom(completedRoom.getId());
 
-        AiChatRoom room = aiChatRoomService.findOrReserveRoom(USER_ID, Duration.ofMinutes(5));
+        AiChatRoom room = aiChatRoomService.findOrReserveRoomWithoutDailyLimit(USER_ID, Duration.ofMinutes(5));
 
         assertThat(room.getId()).isEqualTo(completedRoom.getId());
         assertThat(aiChatRoomService.findNextConversationAvailableAt(room, Duration.ofMinutes(5)))
@@ -304,7 +423,7 @@ class AiChatRoomServiceTest {
                 LocalDateTime.now(ZoneOffset.UTC).minusMinutes(5).minusSeconds(1), completedRoom.getId());
         entityManager.clear();
 
-        AiChatRoom newRoom = aiChatRoomService.findOrReserveRoom(USER_ID, Duration.ofMinutes(5));
+        AiChatRoom newRoom = aiChatRoomService.findOrReserveRoomWithoutDailyLimit(USER_ID, Duration.ofMinutes(5));
 
         assertThat(newRoom.getId()).isNotEqualTo(completedRoom.getId());
         assertThat(newRoom.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
@@ -351,5 +470,25 @@ class AiChatRoomServiceTest {
     private AiChatRoom activateRoom(Long userId) {
         AiChatRoom reservedRoom = aiChatRoomService.findOrReserveRoom(userId);
         return aiChatRoomService.activateRoom(reservedRoom.getId(), GREETING, PURGE_AT);
+    }
+
+    private void startAndExpireRooms(int count) {
+        for (int started = 0; started < count; started++) {
+            AiChatRoom room = activateRoom(USER_ID);
+            aiChatRoomService.expireRoom(room.getId());
+        }
+        aiChatRoomRepository.flush();
+    }
+
+    // created_at은 @CreationTimestamp로 채워지므로 특정 시각에 시작한 방을 만들기 위해 DB 값을 직접 바꾼다
+    private void updateCreatedAt(Long userId, LocalDateTime createdAt) {
+        jdbcTemplate.update("update ai_chat_rooms set created_at = ? where user_id = ?", createdAt, userId);
+        entityManager.clear();
+    }
+
+    private AiChatRoomService aiChatRoomServiceAt(Instant now) {
+        return new AiChatRoomService(aiChatRoomRepository, aiMessageRepository, Duration.ofMinutes(1),
+                Duration.ofHours(24), DAILY_CONVERSATION_LIMIT, DAILY_CONVERSATION_LIMIT_ZONE,
+                Clock.fixed(now, ZoneOffset.UTC));
     }
 }
