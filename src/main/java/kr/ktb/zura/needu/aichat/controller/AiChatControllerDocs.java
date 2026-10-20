@@ -1,6 +1,9 @@
 package kr.ktb.zura.needu.aichat.controller;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import kr.ktb.zura.needu.aichat.dto.response.DailyConversationLimitResponse;
 import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.openapi.ControllerDocs;
@@ -34,6 +37,8 @@ public class AiChatControllerDocs implements ControllerDocs {
                         .successStatus(HttpStatus.CREATED, HttpStatus.OK)
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(AiChatErrorCode.AICHAT_CONSENT_REQUIRED)
+                        .error(AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED,
+                                new DailyConversationLimitResponse(OffsetDateTime.of(2026, 10, 20, 15, 0, 0, 0, ZoneOffset.UTC)))
                         .errors(AiChatErrorCode.AICHAT_CONVERSATION_STARTING)
                         .errors(AI_SERVER_ERRORS)
                         .build(),
