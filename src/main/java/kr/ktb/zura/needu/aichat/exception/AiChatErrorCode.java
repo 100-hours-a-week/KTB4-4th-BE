@@ -12,6 +12,9 @@ public enum AiChatErrorCode implements ErrorCode {
     AICHAT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 대화를 찾을 수 없습니다."),
     AICHAT_CONVERSATION_FORBIDDEN(HttpStatus.FORBIDDEN, "해당 AI 대화에 접근할 수 없습니다."),
     AICHAT_CONSENT_REQUIRED(HttpStatus.FORBIDDEN, "AI 대화를 이용하려면 정보 활용 동의가 필요합니다."),
+
+    // 429는 FE가 일시 오류로 보고 자동 재시도 => 정책상 막힌 상태로 보고 멈추는 403을 사용
+    AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED(HttpStatus.FORBIDDEN, "오늘은 새 AI 대화를 더 시작할 수 없습니다. 내일 다시 시도해 주세요."),
     AICHAT_INPUT_LOCKED(HttpStatus.CONFLICT, "AI 대화의 사용자 입력이 잠겨 있습니다."),
     AICHAT_ANALYSIS_NOT_READY(HttpStatus.CONFLICT, "취향 분석을 생성할 수 없는 상태입니다."),
 
