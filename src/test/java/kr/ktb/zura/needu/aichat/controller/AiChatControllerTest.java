@@ -14,6 +14,7 @@ import kr.ktb.zura.needu.aichat.dto.response.AiMessageSummaryResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordsResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.dto.response.AnalysisResultResponse;
+import kr.ktb.zura.needu.aichat.dto.response.DailyConversationLimitResponse;
 import kr.ktb.zura.needu.aichat.dto.response.ProductRecommendationStatusResponse;
 import kr.ktb.zura.needu.aichat.dto.response.RestartRequiredResponse;
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
@@ -121,6 +122,22 @@ class AiChatControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("AI 대화를 이용하려면 정보 활용 동의가 필요합니다."))
                 .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void dailyConversationLimitExceeded_startOrResumeConversation_returnsForbiddenWithNextAvailableAt()
+            throws Exception {
+        given(aiChatFacade.startOrResumeConversation(USER_ID)).willThrow(new BusinessException(
+                AiChatErrorCode.AICHAT_DAILY_CONVERSATION_LIMIT_EXCEEDED,
+                new DailyConversationLimitResponse(OffsetDateTime.of(2026, 10, 20, 15, 0, 0, 0, ZoneOffset.UTC))));
+
+        mockMvc.perform(postConversation())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("오늘은 새 AI 대화를 더 시작할 수 없습니다. 내일 다시 시도해 주세요."))
+                .andExpect(jsonPath("$.data.nextConversationAvailableAt").value("2026-10-20T15:00:00Z"))
+                .andExpect(jsonPath("$.data.retryAfterSeconds").doesNotExist())
+                .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").doesNotExist())
+                .andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER));
     }
 
     @Test
