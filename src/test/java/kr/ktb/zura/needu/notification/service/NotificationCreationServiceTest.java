@@ -9,13 +9,14 @@ import static org.mockito.Mockito.verify;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import kr.ktb.zura.needu.notification.entity.Notification;
 import kr.ktb.zura.needu.notification.entity.NotificationEvent;
 import kr.ktb.zura.needu.notification.entity.NotificationSetting;
+import kr.ktb.zura.needu.notification.repository.NotificationBulkRepository;
 import kr.ktb.zura.needu.notification.repository.NotificationEventRepository;
-import kr.ktb.zura.needu.notification.repository.NotificationRepository;
 import kr.ktb.zura.needu.notification.repository.NotificationSettingRepository;
+import kr.ktb.zura.needu.notification.service.NotificationsCreatedEvent.CreatedNotification;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
@@ -26,13 +27,13 @@ import org.springframework.context.ApplicationEventPublisher;
 class NotificationCreationServiceTest {
 
     private final NotificationEventRepository notificationEventRepository = mock(NotificationEventRepository.class);
-    private final NotificationRepository notificationRepository = mock(NotificationRepository.class);
+    private final NotificationBulkRepository notificationBulkRepository = mock(NotificationBulkRepository.class);
     private final NotificationSettingRepository notificationSettingRepository =
             mock(NotificationSettingRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final NotificationCreationService notificationCreationService = new NotificationCreationService(
             notificationEventRepository,
-            notificationRepository,
+            notificationBulkRepository,
             notificationSettingRepository,
             eventPublisher,
             new NotificationStageTimer(new SimpleMeterRegistry())
@@ -50,10 +51,12 @@ class NotificationCreationServiceTest {
                 .willReturn(List.of(enabled, disabled));
         given(notificationEventRepository.save(org.mockito.ArgumentMatchers.any(NotificationEvent.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        given(notificationRepository.saveAll(org.mockito.ArgumentMatchers.<List<Notification>>any()))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        given(notificationBulkRepository.insertAll(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .willReturn(Map.of(1L, 101L, 3L, 103L));
 
-        List<Notification> result = notificationCreationService.createNotifications(
+        List<CreatedNotification> result = notificationCreationService.createNotifications(
                 receiverUserIds,
                 NotificationType.FRIEND_BIRTHDAY,
                 null,
@@ -65,11 +68,12 @@ class NotificationCreationServiceTest {
                 LocalDateTime.of(2026, 11, 9, 0, 0)
         );
 
-        assertThat(result).extracting(Notification::getReceiverUserId).containsExactlyInAnyOrder(1L, 3L);
-        assertThat(result)
-                .extracting(Notification::getEvent)
-                .containsOnly(result.getFirst().getEvent());
-        verify(notificationRepository).saveAll(org.mockito.ArgumentMatchers.any());
+        assertThat(result).extracting(CreatedNotification::receiverUserId).containsExactlyInAnyOrder(1L, 3L);
+        assertThat(result).extracting(CreatedNotification::notificationId).containsExactlyInAnyOrder(101L, 103L);
+        assertThat(result).extracting(CreatedNotification::type).containsOnly(NotificationType.FRIEND_BIRTHDAY);
+        verify(notificationBulkRepository).insertAll(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         ArgumentCaptor<NotificationsCreatedEvent> eventCaptor =
                 ArgumentCaptor.forClass(NotificationsCreatedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -85,7 +89,7 @@ class NotificationCreationServiceTest {
         given(notificationSettingRepository.findAllByUserIdInAndType(
                 receiverUserIds, NotificationSettingType.CHAT)).willReturn(List.of(disabled));
 
-        List<Notification> result = notificationCreationService.createNotifications(
+        List<CreatedNotification> result = notificationCreationService.createNotifications(
                 receiverUserIds,
                 NotificationType.CHAT,
                 2L,
@@ -99,7 +103,9 @@ class NotificationCreationServiceTest {
 
         assertThat(result).isEmpty();
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
-        verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+        verify(notificationBulkRepository, never()).insertAll(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
@@ -107,7 +113,7 @@ class NotificationCreationServiceTest {
     void duplicateDedupKey_skipsCreationAndReturnsEmptyList() {
         given(notificationEventRepository.existsByDedupKey("friend-birthday:10:2026-10-09")).willReturn(true);
 
-        List<Notification> result = notificationCreationService.createNotifications(
+        List<CreatedNotification> result = notificationCreationService.createNotifications(
                 Set.of(1L),
                 NotificationType.FRIEND_BIRTHDAY,
                 null,
@@ -123,7 +129,9 @@ class NotificationCreationServiceTest {
         verify(notificationSettingRepository, never())
                 .findAllByUserIdInAndType(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
-        verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+        verify(notificationBulkRepository, never()).insertAll(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
@@ -134,10 +142,12 @@ class NotificationCreationServiceTest {
                 receiverUserIds, NotificationSettingType.POKE)).willReturn(List.of());
         given(notificationEventRepository.save(org.mockito.ArgumentMatchers.any(NotificationEvent.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        given(notificationRepository.saveAll(org.mockito.ArgumentMatchers.<List<Notification>>any()))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        given(notificationBulkRepository.insertAll(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .willReturn(Map.of(1L, 101L));
 
-        List<Notification> result = notificationCreationService.createNotifications(
+        List<CreatedNotification> result = notificationCreationService.createNotifications(
                 receiverUserIds,
                 NotificationType.POKE,
                 2L,
@@ -149,14 +159,14 @@ class NotificationCreationServiceTest {
                 LocalDateTime.of(2026, 11, 9, 0, 0)
         );
 
-        assertThat(result).extracting(Notification::getReceiverUserId).containsExactly(1L);
+        assertThat(result).extracting(CreatedNotification::receiverUserId).containsExactly(1L);
         verify(notificationEventRepository, never()).existsByDedupKey(org.mockito.ArgumentMatchers.any());
         verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(NotificationsCreatedEvent.class));
     }
 
     @Test
     void receiversMissing_createNotifications_doesNotAccessRepositories() {
-        List<Notification> result = notificationCreationService.createNotifications(
+        List<CreatedNotification> result = notificationCreationService.createNotifications(
                 Set.of(),
                 NotificationType.POKE,
                 2L,
@@ -172,7 +182,9 @@ class NotificationCreationServiceTest {
         verify(notificationSettingRepository, never())
                 .findAllByUserIdInAndType(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
-        verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+        verify(notificationBulkRepository, never()).insertAll(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 }

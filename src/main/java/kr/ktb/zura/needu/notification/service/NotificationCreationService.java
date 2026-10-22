@@ -5,11 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import kr.ktb.zura.needu.notification.entity.Notification;
 import kr.ktb.zura.needu.notification.entity.NotificationEvent;
+import kr.ktb.zura.needu.notification.entity.NotificationSetting;
+import kr.ktb.zura.needu.notification.repository.NotificationBulkRepository;
 import kr.ktb.zura.needu.notification.repository.NotificationEventRepository;
-import kr.ktb.zura.needu.notification.repository.NotificationRepository;
 import kr.ktb.zura.needu.notification.repository.NotificationSettingRepository;
+import kr.ktb.zura.needu.notification.service.NotificationsCreatedEvent.CreatedNotification;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationSettingType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
@@ -25,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationCreationService {
 
     private final NotificationEventRepository notificationEventRepository;
-    private final NotificationRepository notificationRepository;
+    private final NotificationBulkRepository notificationBulkRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationStageTimer stageTimer;
@@ -37,7 +38,7 @@ public class NotificationCreationService {
      * @param dedupKey 중복 생성을 막을 필요가 없는 이벤트면 {@code null}
      */
     @Transactional
-    public List<Notification> createNotifications(
+    public List<CreatedNotification> createNotifications(
             Set<Long> receiverUserIds,
             NotificationType type,
             Long actorUserId,
@@ -65,8 +66,8 @@ public class NotificationCreationService {
                         () -> notificationSettingRepository.findAllByUserIdInAndType(receiverUserIds, settingType))
                 .stream()
                 .collect(Collectors.toMap(
-                        setting -> setting.getUserId(),
-                        setting -> setting.isEnabled()
+                        NotificationSetting::getUserId,
+                        NotificationSetting::isEnabled
                 ));
         List<Long> enabledReceiverUserIds = receiverUserIds.stream()
                 .filter(userId -> enabledByUserId.getOrDefault(userId, settingType.isDefaultEnabled()))
@@ -86,14 +87,13 @@ public class NotificationCreationService {
                         resourceId,
                         dedupKey
                 )));
-        List<Notification> notifications = enabledReceiverUserIds.stream()
-                .map(userId -> Notification.create(event, userId, expiresAt))
+        LocalDateTime createdAt = LocalDateTime.now();
+        Map<Long, Long> notificationIdByUserId = stageTimer.time(type, NotificationStage.NOTIFICATION_INSERT,
+                () -> notificationBulkRepository.insertAll(event.getId(), enabledReceiverUserIds, createdAt, expiresAt));
+        List<CreatedNotification> createdNotifications = enabledReceiverUserIds.stream()
+                .map(userId -> CreatedNotification.of(event, notificationIdByUserId.get(userId), userId, createdAt))
                 .toList();
-
-        // IDENTITY 키라 saveAll 시점에 INSERT가 바로 나간다
-        List<Notification> savedNotifications = stageTimer.time(type, NotificationStage.NOTIFICATION_INSERT,
-                () -> notificationRepository.saveAll(notifications));
-        eventPublisher.publishEvent(NotificationsCreatedEvent.from(savedNotifications));
-        return savedNotifications;
+        eventPublisher.publishEvent(new NotificationsCreatedEvent(createdNotifications));
+        return createdNotifications;
     }
 }
