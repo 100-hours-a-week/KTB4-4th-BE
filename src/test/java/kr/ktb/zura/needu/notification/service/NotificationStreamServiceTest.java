@@ -30,9 +30,10 @@ class NotificationStreamServiceTest {
     private static final Long USER_ID = 1L;
 
     private final UserService userService = mock(UserService.class);
+    private final NotificationPresenceRegistry presenceRegistry = mock(NotificationPresenceRegistry.class);
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final NotificationStreamService notificationStreamService =
-            new NotificationStreamService(userService, Duration.ofMinutes(30));
+            new NotificationStreamService(userService, presenceRegistry, Duration.ofMinutes(30));
 
     @Test
     void activeUser_connect_returnsEmitter() {
@@ -41,6 +42,59 @@ class NotificationStreamServiceTest {
         assertThat(emitter).isNotNull();
         assertThat(emitter.getTimeout()).isEqualTo(Duration.ofMinutes(30).toMillis());
         verify(userService).validateActiveUser(USER_ID);
+    }
+
+    @Test
+    void activeUser_connect_registersPresence() {
+        notificationStreamService.connect(USER_ID);
+
+        verify(presenceRegistry).register(USER_ID);
+    }
+
+    @Test
+    void streamLimitExceeded_connect_doesNotRegisterPresenceAgain() {
+        for (int index = 0; index < 5; index++) {
+            notificationStreamService.connect(USER_ID);
+        }
+
+        assertThatThrownBy(() -> notificationStreamService.connect(USER_ID))
+                .isInstanceOf(BusinessException.class);
+        verify(presenceRegistry, times(5)).register(USER_ID);
+    }
+
+    @Test
+    void lastEmitterRemoved_sendNotification_unregistersPresence() throws Exception {
+        SseEmitter emitter = mockEmitter(USER_ID);
+        doThrow(new IOException("disconnected"))
+                .when(emitter).send(any(SseEmitter.SseEventBuilder.class));
+
+        notificationStreamService.sendNotification(notificationEvent());
+
+        verify(presenceRegistry).unregister(USER_ID);
+    }
+
+    @Test
+    void otherEmitterRemains_sendNotification_keepsPresence() throws Exception {
+        SseEmitter failedEmitter = mockEmitter(USER_ID);
+        doThrow(new IOException("disconnected"))
+                .when(failedEmitter).send(any(SseEmitter.SseEventBuilder.class));
+        SseEmitter liveEmitter = mock(SseEmitter.class);
+        emittersOf(USER_ID).add(liveEmitter);
+
+        notificationStreamService.sendNotification(notificationEvent());
+
+        verify(liveEmitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(presenceRegistry, never()).unregister(any());
+    }
+
+    @Test
+    void connectedUsers_sendHeartbeat_refreshesPresence() {
+        mockEmitter(USER_ID);
+        mockEmitter(2L);
+
+        notificationStreamService.sendHeartbeat();
+
+        verify(presenceRegistry).refresh(Set.of(USER_ID, 2L));
     }
 
     @Test
@@ -109,16 +163,28 @@ class NotificationStreamServiceTest {
         verify(secondEmitter).send(any(SseEmitter.SseEventBuilder.class));
     }
 
-    @SuppressWarnings("unchecked")
     private SseEmitter mockEmitter(Long userId) {
         notificationStreamService.connect(userId);
-        Map<Long, Set<SseEmitter>> emittersByUserId =
-                (Map<Long, Set<SseEmitter>>) ReflectionTestUtils.getField(
-                        notificationStreamService, "emittersByUserId");
-        Set<SseEmitter> emitters = emittersByUserId.get(userId);
+        Set<SseEmitter> emitters = emittersOf(userId);
         emitters.clear();
         SseEmitter emitter = mock(SseEmitter.class);
         emitters.add(emitter);
         return emitter;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<SseEmitter> emittersOf(Long userId) {
+        Map<Long, Set<SseEmitter>> emittersByUserId =
+                (Map<Long, Set<SseEmitter>>) ReflectionTestUtils.getField(
+                        notificationStreamService, "emittersByUserId");
+        return emittersByUserId.get(userId);
+    }
+
+    private NotificationRedisEvent notificationEvent() {
+        return new NotificationRedisEvent(
+                USER_ID,
+                jsonMapper.createObjectNode().put("notificationId", 10L),
+                1L
+        );
     }
 }

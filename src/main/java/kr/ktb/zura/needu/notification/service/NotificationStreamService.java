@@ -26,14 +26,17 @@ public class NotificationStreamService {
     private static final long RETRY_AFTER_SECONDS = 10L;
 
     private final UserService userService;
+    private final NotificationPresenceRegistry presenceRegistry;
     private final Duration streamTimeout;
     private final ConcurrentHashMap<Long, Set<SseEmitter>> emittersByUserId = new ConcurrentHashMap<>();
 
     public NotificationStreamService(
             UserService userService,
+            NotificationPresenceRegistry presenceRegistry,
             @Value("${needu.notification.stream-timeout}") Duration streamTimeout
     ) {
         this.userService = userService;
+        this.presenceRegistry = presenceRegistry;
         this.streamTimeout = streamTimeout;
     }
 
@@ -54,6 +57,7 @@ public class NotificationStreamService {
             emitters.add(emitter);
             return emitters;
         });
+        presenceRegistry.register(userId);
 
         Runnable removeEmitter = () -> removeEmitter(userId, emitter);
         emitter.onCompletion(removeEmitter);
@@ -72,10 +76,15 @@ public class NotificationStreamService {
     }
 
     private void removeEmitter(Long userId, SseEmitter emitter) {
+        boolean[] lastConnectionRemoved = {false};
         emittersByUserId.computeIfPresent(userId, (key, emitters) -> {
-            emitters.remove(emitter);
+            lastConnectionRemoved[0] = emitters.remove(emitter) && emitters.isEmpty();
             return emitters.isEmpty() ? null : emitters;
         });
+        // Redis 호출은 맵 잠금 밖에서 한다
+        if (lastConnectionRemoved[0]) {
+            presenceRegistry.unregister(userId);
+        }
     }
 
     public void sendNotification(NotificationRedisEvent event) {
@@ -95,6 +104,7 @@ public class NotificationStreamService {
         emittersByUserId.keySet().forEach(userId -> sendToUser(userId, () -> SseEmitter.event()
                 .name("heartbeat")
                 .data(heartbeat)));
+        presenceRegistry.refresh(Set.copyOf(emittersByUserId.keySet()));
     }
 
     private void sendToUser(Long userId, Supplier<SseEmitter.SseEventBuilder> eventSupplier) {
