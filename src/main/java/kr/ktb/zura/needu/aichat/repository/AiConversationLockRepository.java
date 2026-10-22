@@ -33,6 +33,10 @@ public class AiConversationLockRepository {
                 .setIfAbsent(generateKey(conversationId), ownerToken, properties.ttl()));
     }
 
+    public boolean exists(Long conversationId) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(generateKey(conversationId)));
+    }
+
     public void delete(Long conversationId, String ownerToken) {
         redisTemplate.execute(RELEASE_SCRIPT, List.of(generateKey(conversationId)), ownerToken);
     }

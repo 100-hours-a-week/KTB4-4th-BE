@@ -60,6 +60,20 @@ class AiConversationLockRepositoryTest {
     }
 
     @Test
+    void keyExists_exists_returnsTrue() {
+        given(redisTemplate.hasKey(KEY)).willReturn(true);
+
+        assertThat(repository.exists(101L)).isTrue();
+    }
+
+    @Test
+    void redisReturnsNull_exists_returnsFalse() {
+        given(redisTemplate.hasKey(KEY)).willReturn(null);
+
+        assertThat(repository.exists(101L)).isFalse();
+    }
+
+    @Test
     void lockOwnedByToken_delete_executesCompareAndDeleteScript() {
         repository.delete(101L, OWNER_TOKEN);
 
