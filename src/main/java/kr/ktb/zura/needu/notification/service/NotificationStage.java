@@ -7,6 +7,7 @@ public enum NotificationStage {
     SETTING_LOOKUP("setting_lookup"),
     EVENT_INSERT("event_insert"),
     NOTIFICATION_INSERT("notification_insert"),
+    PRESENCE_LOOKUP("presence_lookup"),
     UNREAD_LOOKUP("unread_lookup"),
     PREVIEW_LOOKUP("preview_lookup"),
     PUBLISH("publish");

@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.notification.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -14,6 +15,8 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -78,6 +81,33 @@ class NotificationPresenceRegistryTest {
                 .thenThrow(new RedisConnectionFailureException("down"));
 
         assertThatCode(() -> registry.register(1L)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void usersOnAliveInstances_findOnlineUserIds_returnsOnlyConnectedUsers() {
+        when(zSetOperations.rangeByScore(eq(INSTANCES_KEY), anyDouble(), anyDouble()))
+                .thenReturn(Set.of("a", "b"));
+        when(setOperations.isMember(INSTANCE_KEY_PREFIX + "a", "1", "2", "3"))
+                .thenReturn(Map.of("1", true, "2", false, "3", false));
+        when(setOperations.isMember(INSTANCE_KEY_PREFIX + "b", "1", "2", "3"))
+                .thenReturn(Map.of("1", false, "2", false, "3", true));
+
+        assertThat(registry.findOnlineUserIds(List.of(1L, 2L, 3L))).containsExactlyInAnyOrder(1L, 3L);
+    }
+
+    @Test
+    void noAliveInstance_findOnlineUserIds_returnsEmpty() {
+        when(zSetOperations.rangeByScore(eq(INSTANCES_KEY), anyDouble(), anyDouble())).thenReturn(Set.of());
+
+        assertThat(registry.findOnlineUserIds(List.of(1L))).isEmpty();
+    }
+
+    @Test
+    void redisFails_findOnlineUserIds_treatsEveryUserAsOnline() {
+        when(zSetOperations.rangeByScore(eq(INSTANCES_KEY), anyDouble(), anyDouble()))
+                .thenThrow(new RedisConnectionFailureException("down"));
+
+        assertThat(registry.findOnlineUserIds(List.of(1L, 2L))).containsExactlyInAnyOrder(1L, 2L);
     }
 
     @Test

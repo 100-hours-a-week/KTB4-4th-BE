@@ -3,6 +3,9 @@ package kr.ktb.zura.needu.notification.service;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +21,7 @@ public class NotificationPresenceRegistry {
     private static final int TTL_HEARTBEAT_MULTIPLIER = 3;
 
     private final StringRedisTemplate redisTemplate;
+    private final RedisKeyGenerator keyGenerator;
     private final String instanceId = UUID.randomUUID().toString();
     private final String instanceKey;
     private final String instancesKey;
@@ -30,6 +34,7 @@ public class NotificationPresenceRegistry {
             @Value("${needu.notification.heartbeat-interval}") Duration heartbeatInterval
     ) {
         this.redisTemplate = redisTemplate;
+        this.keyGenerator = keyGenerator;
         this.instanceKey = keyGenerator.generate("notification", "online", instanceId);
         this.instancesKey = keyGenerator.generate("notification", "online-instances");
         this.ttl = heartbeatInterval.multipliedBy(TTL_HEARTBEAT_MULTIPLIER);
@@ -63,6 +68,37 @@ public class NotificationPresenceRegistry {
         } catch (RuntimeException exception) {
             log.warn("Notification presence refresh failed. connectedUserCount={}",
                     connectedUserIds.size(), exception);
+        }
+    }
+
+    // Redis 조회에 실패하면 알림이 빠지지 않도록 전원을 접속 중으로 본다
+    public Set<Long> findOnlineUserIds(Collection<Long> userIds) {
+        if (userIds.isEmpty()) {
+            return Set.of();
+        }
+        try {
+            Set<String> aliveInstanceIds = redisTemplate.opsForZSet().rangeByScore(
+                    instancesKey, System.currentTimeMillis() - ttl.toMillis(), Double.POSITIVE_INFINITY);
+            if (aliveInstanceIds == null || aliveInstanceIds.isEmpty()) {
+                return Set.of();
+            }
+            Object[] members = userIds.stream().distinct().map(String::valueOf).toArray();
+            Set<Long> onlineUserIds = new HashSet<>();
+            for (String aliveInstanceId : aliveInstanceIds) {
+                Map<Object, Boolean> memberships = redisTemplate.opsForSet()
+                        .isMember(keyGenerator.generate("notification", "online", aliveInstanceId), members);
+                if (memberships != null) {
+                    memberships.forEach((member, online) -> {
+                        if (Boolean.TRUE.equals(online)) {
+                            onlineUserIds.add(Long.valueOf((String) member));
+                        }
+                    });
+                }
+            }
+            return onlineUserIds;
+        } catch (RuntimeException exception) {
+            log.warn("Notification presence lookup failed. userCount={}", userIds.size(), exception);
+            return new HashSet<>(userIds);
         }
     }
 
