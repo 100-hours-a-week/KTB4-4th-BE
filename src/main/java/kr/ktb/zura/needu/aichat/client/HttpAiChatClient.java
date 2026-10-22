@@ -197,6 +197,10 @@ public class HttpAiChatClient implements AiChatClient {
         if (endpoint == AiChatEndpoint.CREATE_ANALYSIS && status == HttpStatus.UNPROCESSABLE_CONTENT.value()) {
             return toUnprocessableAnalysisErrorCode(errorReader.get());
         }
+        if (endpoint == AiChatEndpoint.CREATE_ANALYSIS && status == HttpStatus.CONFLICT.value()
+                && isSessionClosed(errorReader.get())) {
+            return AiChatErrorCode.AICHAT_SESSION_CLOSED;
+        }
         if (!isMessageEndpoint(endpoint)) {
             return AiChatErrorCode.AICHAT_REQUEST_REJECTED;
         }
@@ -212,9 +216,13 @@ public class HttpAiChatClient implements AiChatClient {
     // 409에는 끝난 대화(SESSION_CLOSED)와 처리 중(TURN_IN_PROGRESS)이 섞여 있어 오류 코드로 구분한다.
     // 구분하지 못하면 대화방을 만료시키지 않는 쪽으로 본다. 살아있는 대화를 지우는 것이 더 큰 손해다.
     private AiChatErrorCode toConflictErrorCode(AiServerErrorResponse error) {
-        return error != null && SESSION_CLOSED_CODE.equals(error.code())
+        return isSessionClosed(error)
                 ? AiChatErrorCode.AICHAT_SESSION_CLOSED
                 : AiChatErrorCode.AICHAT_TURN_IN_PROGRESS;
+    }
+
+    private boolean isSessionClosed(AiServerErrorResponse error) {
+        return error != null && SESSION_CLOSED_CODE.equals(error.code());
     }
 
     private AiChatErrorCode toUnprocessableAnalysisErrorCode(AiServerErrorResponse error) {
