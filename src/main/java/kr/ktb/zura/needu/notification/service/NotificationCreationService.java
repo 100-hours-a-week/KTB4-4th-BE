@@ -28,6 +28,7 @@ public class NotificationCreationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationStageTimer stageTimer;
 
     /**
      * @param actorUserId 시스템이 발생시킨 알림이면 {@code null}
@@ -53,14 +54,15 @@ public class NotificationCreationService {
 
         // 동시 요청이 함께 통과하면 UNIQUE 제약 위반은 그대로 전파된다.
         // 제약 위반 시점에 트랜잭션이 rollback-only가 되어 catch로는 조용히 넘길 수 없다.
-        if (dedupKey != null && notificationEventRepository.existsByDedupKey(dedupKey)) {
+        if (dedupKey != null && stageTimer.time(type, NotificationStage.DEDUP_CHECK,
+                () -> notificationEventRepository.existsByDedupKey(dedupKey))) {
             log.info("Notification creation skipped by duplicate dedupKey. type={}, dedupKey={}", type, dedupKey);
             return List.of();
         }
 
         NotificationSettingType settingType = type.getSettingType();
-        Map<Long, Boolean> enabledByUserId = notificationSettingRepository
-                .findAllByUserIdInAndType(receiverUserIds, settingType)
+        Map<Long, Boolean> enabledByUserId = stageTimer.time(type, NotificationStage.SETTING_LOOKUP,
+                        () -> notificationSettingRepository.findAllByUserIdInAndType(receiverUserIds, settingType))
                 .stream()
                 .collect(Collectors.toMap(
                         setting -> setting.getUserId(),
@@ -74,20 +76,23 @@ public class NotificationCreationService {
             return List.of();
         }
 
-        NotificationEvent event = notificationEventRepository.save(NotificationEvent.create(
-                type,
-                actorUserId,
-                title,
-                body,
-                resourceType,
-                resourceId,
-                dedupKey
-        ));
+        NotificationEvent event = stageTimer.time(type, NotificationStage.EVENT_INSERT,
+                () -> notificationEventRepository.save(NotificationEvent.create(
+                        type,
+                        actorUserId,
+                        title,
+                        body,
+                        resourceType,
+                        resourceId,
+                        dedupKey
+                )));
         List<Notification> notifications = enabledReceiverUserIds.stream()
                 .map(userId -> Notification.create(event, userId, expiresAt))
                 .toList();
 
-        List<Notification> savedNotifications = notificationRepository.saveAll(notifications);
+        // IDENTITY 키라 saveAll 시점에 INSERT가 바로 나간다
+        List<Notification> savedNotifications = stageTimer.time(type, NotificationStage.NOTIFICATION_INSERT,
+                () -> notificationRepository.saveAll(notifications));
         eventPublisher.publishEvent(NotificationsCreatedEvent.from(savedNotifications));
         return savedNotifications;
     }

@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -170,7 +171,8 @@ class NotificationCreatedEventListenerTransactionTest {
                     notificationRepository,
                     notificationEventPublisher,
                     notificationPreviewService,
-                    jsonMapper
+                    jsonMapper,
+                    new NotificationStageTimer(new SimpleMeterRegistry())
             );
         }
 

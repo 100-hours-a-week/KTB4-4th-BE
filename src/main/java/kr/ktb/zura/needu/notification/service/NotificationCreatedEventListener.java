@@ -25,16 +25,23 @@ public class NotificationCreatedEventListener {
     private final NotificationEventPublisher notificationEventPublisher;
     private final NotificationPreviewService notificationPreviewService;
     private final JsonMapper jsonMapper;
+    private final NotificationStageTimer stageTimer;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publish(NotificationsCreatedEvent event) {
+        if (event.notifications().isEmpty()) {
+            return;
+        }
+
+        NotificationType type = event.notifications().getFirst().type();
         Map<Long, Long> unreadCountByUserId;
         try {
-            unreadCountByUserId = notificationRepository.findAllUnreadCountsByReceiverUserIdIn(
-                            event.notifications().stream()
-                                    .map(NotificationsCreatedEvent.CreatedNotification::receiverUserId)
-                                    .toList()
-                    ).stream()
+            unreadCountByUserId = stageTimer.time(type, NotificationStage.UNREAD_LOOKUP,
+                            () -> notificationRepository.findAllUnreadCountsByReceiverUserIdIn(
+                                    event.notifications().stream()
+                                            .map(NotificationsCreatedEvent.CreatedNotification::receiverUserId)
+                                            .toList()
+                            )).stream()
                     .collect(Collectors.toMap(
                             NotificationUnreadCount::getReceiverUserId,
                             NotificationUnreadCount::getUnreadCount
@@ -52,14 +59,16 @@ public class NotificationCreatedEventListener {
 
     private void publish(NotificationsCreatedEvent.CreatedNotification notification, long unreadCount) {
         try {
-            NotificationPreview preview = notificationPreviewService.findPreview(
-                    notification.receiverUserId(), notification.resourceType(), notification.resourceId());
+            NotificationPreview preview = stageTimer.time(notification.type(), NotificationStage.PREVIEW_LOOKUP,
+                    () -> notificationPreviewService.findPreview(
+                            notification.receiverUserId(), notification.resourceType(), notification.resourceId()));
             NotificationCreatedData data = NotificationCreatedData.from(notification, preview);
-            notificationEventPublisher.publish(new NotificationRedisEvent(
-                    notification.receiverUserId(),
-                    jsonMapper.valueToTree(data),
-                    unreadCount
-            ));
+            stageTimer.run(notification.type(), NotificationStage.PUBLISH,
+                    () -> notificationEventPublisher.publish(new NotificationRedisEvent(
+                            notification.receiverUserId(),
+                            jsonMapper.valueToTree(data),
+                            unreadCount
+                    )));
         } catch (RuntimeException exception) {
             log.warn(
                     "Notification Redis publish failed. notificationId={}, receiverUserId={}",
