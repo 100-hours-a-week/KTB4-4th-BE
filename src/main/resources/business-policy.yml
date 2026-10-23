@@ -43,6 +43,7 @@ needu:
       reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7}
       lock-at-most-for: ${FRIEND_BIRTHDAY_LOCK_AT_MOST_FOR:10m}
       lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
+      chunk-size: ${FRIEND_BIRTHDAY_NOTIFICATION_CHUNK_SIZE:30}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
     sync:

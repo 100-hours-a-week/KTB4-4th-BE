@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import kr.ktb.zura.needu.notification.entity.Notification;
 import kr.ktb.zura.needu.notification.entity.NotificationEvent;
+import kr.ktb.zura.needu.notification.repository.NotificationBulkRepository.NotificationInsertRow;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.junit.jupiter.api.Test;
@@ -71,6 +72,36 @@ class NotificationBulkRepositoryTest {
                 .filteredOn(notification -> notification.getEvent().getId().equals(event.getId()))
                 .extracting(Notification::getId)
                 .containsExactly(idByReceiver.get(1L));
+    }
+
+    @Test
+    void rowsOfSeveralEvents_insertAll_returnsIdsByEventAndReceiver() {
+        NotificationEvent first = saveEvent("bulk-first");
+        NotificationEvent second = saveEvent("bulk-second");
+        LocalDateTime createdAt = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
+        LocalDateTime firstExpiresAt = createdAt.plusDays(1);
+        LocalDateTime secondExpiresAt = createdAt.plusDays(2);
+
+        Map<Long, Map<Long, Long>> idsByEvent = notificationBulkRepository.insertAll(List.of(
+                new NotificationInsertRow(first.getId(), 1L, firstExpiresAt),
+                new NotificationInsertRow(first.getId(), 2L, firstExpiresAt),
+                new NotificationInsertRow(second.getId(), 1L, secondExpiresAt)
+        ), createdAt);
+        entityManager.clear();
+
+        assertThat(idsByEvent).containsOnlyKeys(first.getId(), second.getId());
+        assertThat(idsByEvent.get(first.getId())).containsOnlyKeys(1L, 2L);
+        assertThat(idsByEvent.get(second.getId())).containsOnlyKeys(1L);
+        assertThat(notificationRepository.findOneById(idsByEvent.get(second.getId()).get(1L))).get()
+                .satisfies(found -> {
+                    assertThat(found.getEvent().getId()).isEqualTo(second.getId());
+                    assertThat(found.getExpiresAt()).isEqualTo(secondExpiresAt);
+                });
+    }
+
+    @Test
+    void rowsMissing_insertAll_returnsEmptyMap() {
+        assertThat(notificationBulkRepository.insertAll(List.of(), LocalDateTime.now())).isEmpty();
     }
 
     private NotificationEvent saveEvent(String dedupKey) {

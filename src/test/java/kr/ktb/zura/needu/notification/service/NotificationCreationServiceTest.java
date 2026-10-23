@@ -10,9 +10,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import kr.ktb.zura.needu.notification.entity.NotificationEvent;
 import kr.ktb.zura.needu.notification.entity.NotificationSetting;
 import kr.ktb.zura.needu.notification.repository.NotificationBulkRepository;
+import kr.ktb.zura.needu.notification.repository.NotificationBulkRepository.NotificationInsertRow;
 import kr.ktb.zura.needu.notification.repository.NotificationEventRepository;
 import kr.ktb.zura.needu.notification.repository.NotificationSettingRepository;
 import kr.ktb.zura.needu.notification.service.NotificationsCreatedEvent.CreatedNotification;
@@ -22,6 +24,7 @@ import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class NotificationCreationServiceTest {
 
@@ -184,5 +187,123 @@ class NotificationCreationServiceTest {
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void requestsGiven_createNotificationsInBatch_savesEnabledUsersAndPublishesOnce() {
+        given(notificationEventRepository.findAllDedupKeysIn(org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of());
+        given(notificationSettingRepository.findAllByUserIdInAndType(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(NotificationSettingType.FRIEND_BIRTHDAY)))
+                .willReturn(List.of(NotificationSetting.create(2L, NotificationSettingType.FRIEND_BIRTHDAY, false)));
+        givenSavedEventsHaveIds();
+        given(notificationBulkRepository.insertAll(org.mockito.ArgumentMatchers.<List<NotificationInsertRow>>any(),
+                org.mockito.ArgumentMatchers.any()))
+                .willReturn(Map.of(1L, Map.of(1L, 101L), 2L, Map.of(3L, 203L)));
+
+        List<CreatedNotification> result = notificationCreationService.createNotificationsInBatch(
+                NotificationType.FRIEND_BIRTHDAY,
+                List.of(birthdayRequest(10L, Set.of(1L, 2L)), birthdayRequest(20L, Set.of(2L, 3L)))
+        );
+
+        assertThat(result)
+                .extracting(CreatedNotification::resourceId, CreatedNotification::receiverUserId,
+                        CreatedNotification::notificationId)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(10L, 1L, 101L),
+                        org.assertj.core.groups.Tuple.tuple(20L, 3L, 203L));
+        ArgumentCaptor<List<NotificationInsertRow>> rowsCaptor = ArgumentCaptor.captor();
+        verify(notificationBulkRepository).insertAll(rowsCaptor.capture(), org.mockito.ArgumentMatchers.any());
+        assertThat(rowsCaptor.getValue())
+                .extracting(NotificationInsertRow::notificationEventId, NotificationInsertRow::receiverUserId)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(1L, 1L),
+                        org.assertj.core.groups.Tuple.tuple(2L, 3L));
+        verify(notificationSettingRepository).findAllByUserIdInAndType(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(NotificationsCreatedEvent.class));
+    }
+
+    @Test
+    void existingAndRepeatedDedupKeys_createNotificationsInBatch_createsEachKeyOnce() {
+        given(notificationEventRepository.findAllDedupKeysIn(org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of("friend-birthday:10"));
+        given(notificationSettingRepository.findAllByUserIdInAndType(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of());
+        givenSavedEventsHaveIds();
+        given(notificationBulkRepository.insertAll(org.mockito.ArgumentMatchers.<List<NotificationInsertRow>>any(),
+                org.mockito.ArgumentMatchers.any()))
+                .willReturn(Map.of(1L, Map.of(1L, 101L)));
+
+        List<CreatedNotification> result = notificationCreationService.createNotificationsInBatch(
+                NotificationType.FRIEND_BIRTHDAY,
+                List.of(
+                        birthdayRequest(10L, Set.of(1L)),
+                        birthdayRequest(20L, Set.of(1L)),
+                        birthdayRequest(20L, Set.of(2L))
+                )
+        );
+
+        assertThat(result).extracting(CreatedNotification::resourceId).containsExactly(20L);
+        verify(notificationEventRepository, org.mockito.Mockito.times(1))
+                .save(org.mockito.ArgumentMatchers.any(NotificationEvent.class));
+    }
+
+    @Test
+    void allUsersDisabled_createNotificationsInBatch_doesNotSaveEventOrNotifications() {
+        given(notificationEventRepository.findAllDedupKeysIn(org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of());
+        given(notificationSettingRepository.findAllByUserIdInAndType(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of(NotificationSetting.create(1L, NotificationSettingType.FRIEND_BIRTHDAY, false)));
+
+        List<CreatedNotification> result = notificationCreationService.createNotificationsInBatch(
+                NotificationType.FRIEND_BIRTHDAY,
+                List.of(birthdayRequest(10L, Set.of(1L)))
+        );
+
+        assertThat(result).isEmpty();
+        verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(notificationBulkRepository, never()).insertAll(
+                org.mockito.ArgumentMatchers.<List<NotificationInsertRow>>any(), org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void receiversMissing_createNotificationsInBatch_doesNotAccessRepositories() {
+        List<CreatedNotification> result = notificationCreationService.createNotificationsInBatch(
+                NotificationType.FRIEND_BIRTHDAY,
+                List.of(birthdayRequest(10L, Set.of()))
+        );
+
+        assertThat(result).isEmpty();
+        verify(notificationEventRepository, never()).findAllDedupKeysIn(org.mockito.ArgumentMatchers.any());
+        verify(notificationSettingRepository, never())
+                .findAllByUserIdInAndType(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    private void givenSavedEventsHaveIds() {
+        AtomicLong nextId = new AtomicLong(1L);
+        given(notificationEventRepository.save(org.mockito.ArgumentMatchers.any(NotificationEvent.class)))
+                .willAnswer(invocation -> {
+                    NotificationEvent event = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(event, "id", nextId.getAndIncrement());
+                    return event;
+                });
+    }
+
+    private NotificationCreateRequest birthdayRequest(Long friendUserId, Set<Long> receiverUserIds) {
+        return new NotificationCreateRequest(
+                receiverUserIds,
+                null,
+                "친구의 생일이에요.",
+                "선물을 준비해 보세요.",
+                NotificationResourceType.USER,
+                friendUserId,
+                "friend-birthday:" + friendUserId,
+                LocalDateTime.of(2026, 11, 9, 0, 0)
+        );
     }
 }
