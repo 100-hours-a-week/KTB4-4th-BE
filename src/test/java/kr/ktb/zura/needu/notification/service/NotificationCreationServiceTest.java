@@ -6,7 +6,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -35,8 +34,7 @@ class NotificationCreationServiceTest {
             notificationEventRepository,
             notificationBulkRepository,
             notificationSettingRepository,
-            eventPublisher,
-            new NotificationStageTimer(new SimpleMeterRegistry())
+            eventPublisher
     );
 
     @Test

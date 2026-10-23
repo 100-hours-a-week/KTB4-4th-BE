@@ -10,9 +10,7 @@ import java.util.List;
 import java.util.Set;
 import kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import kr.ktb.zura.needu.notification.service.NotificationCreationService;
-import kr.ktb.zura.needu.notification.service.NotificationStageTimer;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.junit.jupiter.api.Test;
@@ -25,7 +23,6 @@ class FriendBirthdayNotificationServiceTest {
     private final FriendBirthdayNotificationService service = new FriendBirthdayNotificationService(
             friendRepository,
             notificationCreationService,
-            new NotificationStageTimer(new SimpleMeterRegistry()),
             7,
             "Asia/Seoul");
 
