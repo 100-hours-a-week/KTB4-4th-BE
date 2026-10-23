@@ -103,11 +103,11 @@ class NotificationPresenceRegistryTest {
     }
 
     @Test
-    void redisFails_findOnlineUserIds_treatsEveryUserAsOnline() {
+    void redisFails_findOnlineUserIds_treatsEveryUserAsOffline() {
         when(zSetOperations.rangeByScore(eq(INSTANCES_KEY), anyDouble(), anyDouble()))
                 .thenThrow(new RedisConnectionFailureException("down"));
 
-        assertThat(registry.findOnlineUserIds(List.of(1L, 2L))).containsExactlyInAnyOrder(1L, 2L);
+        assertThat(registry.findOnlineUserIds(List.of(1L, 2L))).isEmpty();
     }
 
     @Test
