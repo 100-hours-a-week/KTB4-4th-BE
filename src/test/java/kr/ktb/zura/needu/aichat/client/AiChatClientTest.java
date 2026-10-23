@@ -492,6 +492,30 @@ class AiChatClientTest {
         assertEquals(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE, exception.getErrorCode());
     }
 
+    @Test
+    void sessionClosed_createAnalysis_throwsSessionClosed() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/analysis"))
+                .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "SESSION_CLOSED", "message": "이미 종료된 대화 세션입니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.createAnalysis(101L));
+
+        assertEquals(AiChatErrorCode.AICHAT_SESSION_CLOSED, exception.getErrorCode());
+    }
+
+    @Test
+    void conflictWithoutSessionClosedCode_createAnalysis_throwsRequestRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/analysis"))
+                .andRespond(withStatus(HttpStatus.CONFLICT));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.createAnalysis(101L));
+
+        assertEquals(AiChatErrorCode.AICHAT_REQUEST_REJECTED, exception.getErrorCode());
+    }
+
     // FastAPI 요청 검증 실패처럼 원인을 모르는 422는 취향 부족으로 보지 않는다
     @Test
     void unprocessableWithoutErrorCode_createAnalysis_throwsRequestRejected() {

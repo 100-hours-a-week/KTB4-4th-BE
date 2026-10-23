@@ -155,7 +155,12 @@ public class AiChatRoomService {
 
     @Transactional(readOnly = true)
     public void validateAnalyzableRoom(Long userId, Long roomId) {
-        AiChatRoom room = findAccessibleRoom(userId, roomId);
+        AiChatRoom room = findOwnedRoom(userId, roomId);
+
+        if (room.isCompleted()) {
+            throw new BusinessException(AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED);
+        }
+        validateUsableRoom(room);
         if (!room.isAnalyzing() || !room.isInputLocked()) {
             throw new BusinessException(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY);
         }

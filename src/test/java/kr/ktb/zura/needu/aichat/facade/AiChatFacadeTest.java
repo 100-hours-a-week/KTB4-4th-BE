@@ -879,6 +879,29 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void confirmInProgress_createAnalysis_throwsAlreadyConfirmedWithoutCallingAiServer() {
+        given(aiConversationLock.isLocked(ROOM_ID)).willReturn(true);
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED);
+        verifyNoInteractions(aiChatClient);
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
+    }
+
+    // 확정이 세션을 닫고 결과를 저장하는 중이라 대화방을 만료시키면 완료된 대화방을 덮어쓴다
+    @Test
+    void aiSessionClosedByConfirm_createAnalysis_keepsRoomAndThrowsAlreadyConfirmed() {
+        given(aiChatClient.createAnalysis(ROOM_ID))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SESSION_CLOSED));
+
+        assertThatThrownBy(() -> aiChatFacade.createAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED);
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
+    }
+
+    @Test
     void profileTooSparse_createAnalysis_expiresRoomAndThrowsRestartRequired() {
         given(aiChatClient.createAnalysis(ROOM_ID))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE));

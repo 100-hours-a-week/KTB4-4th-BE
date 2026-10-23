@@ -50,6 +50,20 @@ class AiConversationLockTest {
     }
 
     @Test
+    void lockHeld_isLocked_returnsTrue() {
+        given(lockRepository.exists(CONVERSATION_ID)).willReturn(true);
+
+        assertThat(aiConversationLock.isLocked(CONVERSATION_ID)).isTrue();
+    }
+
+    @Test
+    void lockReleased_isLocked_returnsFalse() {
+        given(lockRepository.exists(CONVERSATION_ID)).willReturn(false);
+
+        assertThat(aiConversationLock.isLocked(CONVERSATION_ID)).isFalse();
+    }
+
+    @Test
     void eachTryLock_usesDifferentOwnerToken() {
         given(lockRepository.create(eq(CONVERSATION_ID), anyString())).willReturn(true);
 

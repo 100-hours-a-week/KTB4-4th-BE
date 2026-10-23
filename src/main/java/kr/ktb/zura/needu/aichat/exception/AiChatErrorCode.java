@@ -21,6 +21,9 @@ public enum AiChatErrorCode implements ErrorCode {
     // AI 서버가 모인 취향이 없어 분석을 거절함 => 이 대화로는 분석할 수 없어 새 대화를 시작하게 한다
     AICHAT_PROFILE_TOO_SPARSE(HttpStatus.CONFLICT, "대화에서 취향을 찾지 못했습니다. 새 대화를 시작해 주세요."),
 
+    // 확정 중이나 확정 후에 새로고침한 화면이 분석을 다시 요청함 => 결과는 확정 요청이 저장하므로 상품 목록으로 안내한다
+    AICHAT_ANALYSIS_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "취향 분석이 이미 확정되었습니다. 내 상품 목록에서 추천 상품을 확인해 주세요."),
+
     // AI 서버 세션이 만료 규칙보다 일찍 사라졌거나 이미 닫힌 경우 => FE에는 대화가 없는 것과 같게 보인다
     AICHAT_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 대화를 찾을 수 없습니다."),
     AICHAT_SESSION_CLOSED(HttpStatus.NOT_FOUND, "AI 대화를 찾을 수 없습니다."),
