@@ -79,17 +79,22 @@ public class FriendBirthdayNotificationService {
         int createdNotificationCount = 0;
         for (Map.Entry<BirthdayFriend, Set<Long>> entry : receiverUserIdsByFriend.entrySet()) {
             BirthdayFriend friend = entry.getKey();
-            createdNotificationCount += notificationCreationService.createNotifications(
-                    entry.getValue(),
-                    NotificationType.FRIEND_BIRTHDAY,
-                    null,
-                    friend.nickname() + " 님의 생일이 " + reminderDays + "일 남았어요.",
-                    BODY,
-                    NotificationResourceType.USER,
-                    friend.userId(),
-                    "friend-birthday:" + birthdayDate + ":" + friend.userId() + ":d-" + reminderDays,
-                    expiresAt
-            ).size();
+            try {
+                createdNotificationCount += notificationCreationService.createNotifications(
+                        entry.getValue(),
+                        NotificationType.FRIEND_BIRTHDAY,
+                        null,
+                        friend.nickname() + " 님의 생일이 " + reminderDays + "일 남았어요.",
+                        BODY,
+                        NotificationResourceType.USER,
+                        friend.userId(),
+                        "friend-birthday:" + birthdayDate + ":" + friend.userId() + ":d-" + reminderDays,
+                        expiresAt
+                ).size();
+            }catch (Exception e) {
+                log.error("Friend birthday notification creation failed. birthdayDate={}, friendUserId={}",
+                        birthdayDate, friend.userId(), e);
+            }
         }
         long finishedAt = System.nanoTime();
 

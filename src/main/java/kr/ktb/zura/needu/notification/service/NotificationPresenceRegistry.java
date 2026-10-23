@@ -71,7 +71,6 @@ public class NotificationPresenceRegistry {
         }
     }
 
-    // Redis 조회에 실패하면 알림이 빠지지 않도록 전원을 접속 중으로 본다
     public Set<Long> findOnlineUserIds(Collection<Long> userIds) {
         if (userIds.isEmpty()) {
             return Set.of();
@@ -98,7 +97,7 @@ public class NotificationPresenceRegistry {
             return onlineUserIds;
         } catch (RuntimeException exception) {
             log.warn("Notification presence lookup failed. userCount={}", userIds.size(), exception);
-            return new HashSet<>(userIds);
+            return Set.of();
         }
     }
 
