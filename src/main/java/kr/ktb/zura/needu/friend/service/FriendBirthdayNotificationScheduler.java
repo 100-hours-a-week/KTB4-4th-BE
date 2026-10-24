@@ -11,14 +11,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class FriendBirthdayNotificationScheduler {
 
-    private final FriendBirthdayNotificationService notificationService;
+    private final FriendBirthdayNotificationService friendBirthdayNotificationService;
     private final ZoneId notificationZone;
 
     public FriendBirthdayNotificationScheduler(
-            FriendBirthdayNotificationService notificationService,
+            FriendBirthdayNotificationService friendBirthdayNotificationService,
             @Value("${needu.notification.friend-birthday.zone}") String notificationZone
     ) {
-        this.notificationService = notificationService;
+        this.friendBirthdayNotificationService = friendBirthdayNotificationService;
         this.notificationZone = ZoneId.of(notificationZone);
     }
 
@@ -33,6 +33,6 @@ public class FriendBirthdayNotificationScheduler {
     )
     public void createNotifications() {
         LockAssert.assertLocked();
-        notificationService.createNotifications(LocalDate.now(notificationZone));
+        friendBirthdayNotificationService.createNotifications(LocalDate.now(notificationZone));
     }
 }

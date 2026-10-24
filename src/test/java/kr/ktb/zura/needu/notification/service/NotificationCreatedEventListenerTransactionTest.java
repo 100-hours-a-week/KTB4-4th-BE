@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.notification.service;
 
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -8,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Map;
 import javax.sql.DataSource;
 import kr.ktb.zura.needu.notification.repository.NotificationRepository;
@@ -110,6 +113,25 @@ class NotificationCreatedEventListenerTransactionTest {
         }
     }
 
+    @Test
+    void receiverOffline_notificationsCreated_skipsLookupAndPublish() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            NotificationRepository notificationRepository = context.getBean(NotificationRepository.class);
+            NotificationEventPublisher notificationEventPublisher =
+                    context.getBean(NotificationEventPublisher.class);
+            NotificationPresenceRegistry presenceRegistry = context.getBean(NotificationPresenceRegistry.class);
+            given(presenceRegistry.findOnlineUserIds(anyCollection())).willReturn(Set.of());
+            ApplicationEventPublisher eventPublisher = context;
+            TransactionTemplate transactionTemplate = context.getBean(TransactionTemplate.class);
+
+            transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(createdEvent()));
+
+            verify(notificationRepository, never()).findAllUnreadCountsByReceiverUserIdIn(anyCollection());
+            verify(notificationEventPublisher, never())
+                    .publish(org.mockito.ArgumentMatchers.any(NotificationRedisEvent.class));
+        }
+    }
+
     private NotificationsCreatedEvent createdEvent() {
         return new NotificationsCreatedEvent(List.of(new NotificationsCreatedEvent.CreatedNotification(
                 10L,
@@ -160,17 +182,27 @@ class NotificationCreatedEventListenerTransactionTest {
         }
 
         @Bean
+        NotificationPresenceRegistry notificationPresenceRegistry() {
+            NotificationPresenceRegistry presenceRegistry = mock(NotificationPresenceRegistry.class);
+            given(presenceRegistry.findOnlineUserIds(anyCollection()))
+                    .willAnswer(invocation -> new HashSet<Long>(invocation.getArgument(0)));
+            return presenceRegistry;
+        }
+
+        @Bean
         NotificationCreatedEventListener notificationCreatedEventListener(
                 NotificationRepository notificationRepository,
                 NotificationEventPublisher notificationEventPublisher,
                 NotificationPreviewService notificationPreviewService,
-                JsonMapper jsonMapper
+                JsonMapper jsonMapper,
+                NotificationPresenceRegistry presenceRegistry
         ) {
             return new NotificationCreatedEventListener(
                     notificationRepository,
                     notificationEventPublisher,
                     notificationPreviewService,
-                    jsonMapper
+                    jsonMapper,
+                    presenceRegistry
             );
         }
 

@@ -31,12 +31,12 @@ import javax.crypto.KeyAgreement;
 import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import kr.ktb.zura.needu.notification.entity.Notification;
 import kr.ktb.zura.needu.notification.entity.PushSubscription;
 import kr.ktb.zura.needu.notification.repository.NotificationEventRepository;
 import kr.ktb.zura.needu.notification.repository.NotificationRepository;
 import kr.ktb.zura.needu.notification.repository.PushSubscriptionRepository;
 import kr.ktb.zura.needu.notification.service.NotificationCreationService;
+import kr.ktb.zura.needu.notification.service.NotificationsCreatedEvent.CreatedNotification;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.junit.jupiter.api.AfterAll;
@@ -145,7 +145,7 @@ class WebPushDeliveryIntegrationTest {
         saveSubscription(receiverUserId, "receiver");
         saveSubscription(otherUserId, "other");
 
-        List<Notification> notifications = notificationCreationService.createNotifications(
+        List<CreatedNotification> notifications = notificationCreationService.createNotifications(
                 Set.of(receiverUserId),
                 NotificationType.POKE,
                 otherUserId,
@@ -171,7 +171,7 @@ class WebPushDeliveryIntegrationTest {
         assertThat(payload).containsOnlyKeys(
                 "notificationId", "category", "title", "body", "resourceType", "resourceId");
         assertThat(((Number) payload.get("notificationId")).longValue())
-                .isEqualTo(notifications.getFirst().getId());
+                .isEqualTo(notifications.getFirst().notificationId());
         assertThat(payload.get("category")).isEqualTo("POKE");
         assertThat(payload.get("title")).isEqualTo("친구가 콕 찔렀어요.");
         assertThat(payload.get("body")).isEqualTo("친구의 알림을 확인해 보세요.");
