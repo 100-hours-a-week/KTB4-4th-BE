@@ -380,9 +380,19 @@ public class AiChatFacade {
     public AnalysisResultResponse createAnalysis(Long userId, Long conversationId) {
         userService.validateActiveUser(userId);
         aiChatRoomService.validateAnalyzableRoom(userId, conversationId);
+
+        if (aiConversationLock.isLocked(conversationId)) {
+            log.info("AI analysis requested while confirming. userId={}, conversationId={}", userId, conversationId);
+            throw new BusinessException(AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED);
+        }
         try {
             return toAnalysisResult(aiChatClient.createAnalysis(conversationId));
         } catch (BusinessException e) {
+            if (e.getErrorCode() == AiChatErrorCode.AICHAT_SESSION_CLOSED) {
+                log.info("AI analysis requested after session closed. userId={}, conversationId={}",
+                        userId, conversationId);
+                throw new BusinessException(AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED, null, e);
+            }
             expireRoomIfSessionGone(userId, conversationId, e);
             if (e.getErrorCode() == AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE) {
                 throw expireSparseRoom(userId, conversationId, e);

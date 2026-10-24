@@ -375,6 +375,38 @@ class AiChatRoomServiceTest {
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY);
     }
 
+    // 확정 중에 새로고침한 화면은 확정이 끝난 뒤에도 분석을 요청하므로 404 대신 이미 확정됐다고 안내해야 한다
+    @Test
+    void completedRoom_validateAnalyzableRoom_throwsAlreadyConfirmed() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        aiChatRoomService.startAnalysis(activeRoom.getId());
+        aiChatRoomService.completeRoom(activeRoom.getId());
+
+        assertThatThrownBy(() -> aiChatRoomService.validateAnalyzableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED);
+    }
+
+    @Test
+    void completedRoomOwnedByAnotherUser_validateAnalyzableRoom_throwsConversationForbidden() {
+        AiChatRoom activeRoom = activateRoom(OTHER_USER_ID);
+        aiChatRoomService.completeRoom(activeRoom.getId());
+
+        assertThatThrownBy(() -> aiChatRoomService.validateAnalyzableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_FORBIDDEN);
+    }
+
+    @Test
+    void expiredRoom_validateAnalyzableRoom_throwsConversationNotFound() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        aiChatRoomService.expireRoom(activeRoom.getId());
+
+        assertThatThrownBy(() -> aiChatRoomService.validateAnalyzableRoom(USER_ID, activeRoom.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONVERSATION_NOT_FOUND);
+    }
+
     @Test
     void activeRoom_completeRoom_marksCompletedAndReleasesActiveUser() {
         AiChatRoom activeRoom = activateRoom(USER_ID);

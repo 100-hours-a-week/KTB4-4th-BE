@@ -62,7 +62,7 @@ public class AiChatControllerDocs implements ControllerDocs {
                 OperationDoc.of(AiChatController.class, "createAnalysis")
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(CONVERSATION_ACCESS_ERRORS)
-                        .errors(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY)
+                        .errors(AiChatErrorCode.AICHAT_ANALYSIS_NOT_READY, AiChatErrorCode.AICHAT_ANALYSIS_ALREADY_CONFIRMED)
                         .error(AiChatErrorCode.AICHAT_PROFILE_TOO_SPARSE, new RestartRequiredResponse(true))
                         .errors(AI_SERVER_ERRORS)
                         .build(),
