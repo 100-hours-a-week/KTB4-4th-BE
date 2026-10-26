@@ -52,7 +52,12 @@ public class CalendarController {
     }
 
     @DeleteMapping("/{eventId}")
-    public void deleteCalendarEvent() {
+    public ResponseEntity<Void> deleteCalendarEvent(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long eventId
+    ) {
+        calendarEventCommandService.deleteCalendarEvent(userId, eventId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{eventId}")
