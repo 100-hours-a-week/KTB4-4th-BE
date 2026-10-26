@@ -488,3 +488,25 @@ CREATE TABLE IF NOT EXISTS taste_analyses (
     updated_at       DATETIME(6)  NOT NULL,
     PRIMARY KEY (room_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- calendar
+-- ---------------------------------------------------------------------------
+
+-- NeedU 자체 캘린더. 카카오 톡캘린더와 연동하지 않는다
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id                   BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id              BIGINT      NOT NULL,
+    title                VARCHAR(50) NOT NULL,
+    description          TEXT        NULL,
+    start_at             DATETIME(6) NOT NULL,
+    end_at               DATETIME(6) NOT NULL,
+    all_day              TINYINT(1)  NOT NULL,
+    color                VARCHAR(20) NULL COMMENT 'RED, ORANGE, BLUE, PINK. NULL이면 FE 기본 색상',
+    notification_enabled TINYINT(1)  NOT NULL COMMENT 'true면 7일·3일·1일 전 알림',
+    created_at           DATETIME(6) NOT NULL,
+    updated_at           DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    -- 월·일 조회의 기간 겹침 조건(user_id = ? and start_at < ? and end_at > ?)
+    KEY idx_calendar_events_user_id_start_at (user_id, start_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
