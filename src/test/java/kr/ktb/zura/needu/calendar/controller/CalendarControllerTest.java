@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.calendar.controller;
 import java.util.List;
 
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
+import kr.ktb.zura.needu.calendar.exception.CalendarErrorCode;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
 import kr.ktb.zura.needu.calendar.service.CalendarEventQueryService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -42,6 +44,18 @@ class CalendarControllerTest {
               "endAt": "2026-10-30T20:00:00+09:00",
               "allDay": false,
               "description": "선물 구매"
+            }
+            """;
+    private static final Long EVENT_ID = 101L;
+    private static final String VALID_UPDATE_BODY = """
+            {
+              "title": "생일 선물 구매",
+              "description": "백화점에서 향수 구매",
+              "startAt": "2026-10-30T20:00:00+09:00",
+              "endAt": "2026-10-30T21:00:00+09:00",
+              "allDay": false,
+              "color": "RED",
+              "notificationEnabled": true
             }
             """;
 
@@ -135,6 +149,105 @@ class CalendarControllerTest {
         mockMvc.perform(postCalendarEvent(VALID_BODY))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("온보딩 진행이 필요합니다."));
+    }
+
+    @Test
+    void validRequest_updateCalendarEvent_returnsOkWithEventId() throws Exception {
+        given(calendarEventCommandService.updateCalendarEvent(eq(USER_ID), eq(EVENT_ID), any()))
+                .willReturn(new CalendarEventResponse(EVENT_ID));
+
+        mockMvc.perform(patchCalendarEvent(VALID_UPDATE_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("캘린더 일정을 수정했습니다."))
+                .andExpect(jsonPath("$.data.eventId").value(EVENT_ID));
+    }
+
+    @Test
+    void onlyColorSent_updateCalendarEvent_returnsOk() throws Exception {
+        given(calendarEventCommandService.updateCalendarEvent(eq(USER_ID), eq(EVENT_ID), any()))
+                .willReturn(new CalendarEventResponse(EVENT_ID));
+
+        mockMvc.perform(patchCalendarEvent("{\"color\": \"RED\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void onlyAllDayOrNotificationEnabledSent_updateCalendarEvent_returnsOk() throws Exception {
+        given(calendarEventCommandService.updateCalendarEvent(eq(USER_ID), eq(EVENT_ID), any()))
+                .willReturn(new CalendarEventResponse(EVENT_ID));
+
+        mockMvc.perform(patchCalendarEvent("{\"allDay\": true}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(patchCalendarEvent("{\"notificationEnabled\": false}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void allDayNotBoolean_updateCalendarEvent_returnsBadRequest() throws Exception {
+        mockMvc.perform(patchCalendarEvent("{\"allDay\": \"yes\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(calendarEventCommandService, never()).updateCalendarEvent(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void emptyBody_updateCalendarEvent_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchCalendarEvent("{}"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
+
+        verify(calendarEventCommandService, never()).updateCalendarEvent(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void onlyStartAtSent_updateCalendarEvent_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchCalendarEvent("{\"startAt\": \"2026-10-30T20:00:00+09:00\"}"))
+                .andExpect(status().isUnprocessableContent());
+        mockMvc.perform(patchCalendarEvent("{\"endAt\": \"2026-10-30T21:00:00+09:00\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(calendarEventCommandService, never()).updateCalendarEvent(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void blankOrTooLongTitle_updateCalendarEvent_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchCalendarEvent("{\"title\": \" \"}"))
+                .andExpect(status().isUnprocessableContent());
+        mockMvc.perform(patchCalendarEvent("{\"title\": \"" + "가".repeat(51) + "\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(calendarEventCommandService, never()).updateCalendarEvent(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void eventIdNotNumber_updateCalendarEvent_returnsBadRequest() throws Exception {
+        mockMvc.perform(patch(URL + "/kakao-event-id")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_UPDATE_BODY)
+                        .with(authenticatedUser())
+                        .with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        verify(calendarEventCommandService, never()).updateCalendarEvent(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void eventNotFound_updateCalendarEvent_returnsNotFound() throws Exception {
+        given(calendarEventCommandService.updateCalendarEvent(eq(USER_ID), eq(EVENT_ID), any()))
+                .willThrow(new BusinessException(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND));
+
+        mockMvc.perform(patchCalendarEvent(VALID_UPDATE_BODY))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("캘린더 일정을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    private static MockHttpServletRequestBuilder patchCalendarEvent(String body) {
+        return patch(URL + "/" + EVENT_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(authenticatedUser())
+                .with(csrf());
     }
 
     private static MockHttpServletRequestBuilder postCalendarEvent(String body) {
