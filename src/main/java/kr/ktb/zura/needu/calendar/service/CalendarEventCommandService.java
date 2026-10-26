@@ -58,6 +58,15 @@ public class CalendarEventCommandService {
         return CalendarEventResponse.from(calendarEvent);
     }
 
+    @Transactional
+    public void deleteCalendarEvent(Long userId, Long eventId) {
+        userService.validateActiveUser(userId);
+        CalendarEvent calendarEvent = findOwnedCalendarEvent(userId, eventId);
+        calendarEventRepository.delete(calendarEvent);
+
+        log.info("Calendar event deleted. userId={}, eventId={}", userId, eventId);
+    }
+
     private CalendarEvent findOwnedCalendarEvent(Long userId, Long eventId) {
         return calendarEventRepository.findByIdAndUserId(eventId, userId)
                 .orElseThrow(() -> new BusinessException(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND));

@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -207,6 +208,41 @@ class CalendarEventCommandServiceTest {
         UpdateCalendarEventRequest request = titleOnlyUpdateRequest();
 
         assertThatThrownBy(() -> calendarEventCommandService.updateCalendarEvent(USER_ID, EVENT_ID, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(UserErrorCode.USER_BLOCKED);
+
+        verifyNoInteractions(calendarEventRepository);
+    }
+
+    @Test
+    void ownEvent_deleteCalendarEvent_deletesEvent() {
+        CalendarEvent calendarEvent = givenOwnedEvent();
+
+        calendarEventCommandService.deleteCalendarEvent(USER_ID, EVENT_ID);
+
+        verify(userService).validateActiveUser(USER_ID);
+        verify(calendarEventRepository).delete(calendarEvent);
+    }
+
+    @Test
+    void eventNotOwnedOrMissing_deleteCalendarEvent_throwsNotFoundWithoutDeleting() {
+        given(calendarEventRepository.findByIdAndUserId(EVENT_ID, USER_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> calendarEventCommandService.deleteCalendarEvent(USER_ID, EVENT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND);
+
+        verify(calendarEventRepository, never()).delete(any(CalendarEvent.class));
+    }
+
+    @Test
+    void inactiveUser_deleteCalendarEvent_throwsWithoutQuerying() {
+        willThrow(new BusinessException(UserErrorCode.USER_BLOCKED))
+                .given(userService).validateActiveUser(USER_ID);
+
+        assertThatThrownBy(() -> calendarEventCommandService.deleteCalendarEvent(USER_ID, EVENT_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(UserErrorCode.USER_BLOCKED);
