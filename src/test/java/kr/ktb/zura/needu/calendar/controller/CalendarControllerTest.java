@@ -23,12 +23,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -240,6 +243,48 @@ class CalendarControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("캘린더 일정을 찾을 수 없습니다."))
                 .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void ownEvent_deleteCalendarEvent_returnsNoContent() throws Exception {
+        mockMvc.perform(deleteCalendarEvent())
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(calendarEventCommandService).deleteCalendarEvent(USER_ID, EVENT_ID);
+    }
+
+    @Test
+    void csrfMissing_deleteCalendarEvent_returnsForbidden() throws Exception {
+        mockMvc.perform(delete(URL + "/" + EVENT_ID).with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(calendarEventCommandService, never()).deleteCalendarEvent(anyLong(), anyLong());
+    }
+
+    @Test
+    void eventIdNotNumber_deleteCalendarEvent_returnsBadRequest() throws Exception {
+        mockMvc.perform(delete(URL + "/kakao-event-id").with(authenticatedUser()).with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        verify(calendarEventCommandService, never()).deleteCalendarEvent(anyLong(), anyLong());
+    }
+
+    @Test
+    void eventNotFound_deleteCalendarEvent_returnsNotFound() throws Exception {
+        willThrow(new BusinessException(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND))
+                .given(calendarEventCommandService).deleteCalendarEvent(USER_ID, EVENT_ID);
+
+        mockMvc.perform(deleteCalendarEvent())
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("캘린더 일정을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    private static MockHttpServletRequestBuilder deleteCalendarEvent() {
+        return delete(URL + "/" + EVENT_ID)
+                .with(authenticatedUser())
+                .with(csrf());
     }
 
     private static MockHttpServletRequestBuilder patchCalendarEvent(String body) {
