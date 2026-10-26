@@ -191,3 +191,18 @@ needu:
         path-pattern: /api/v1/purchase-checks/{purchaseCheckId}
         limit: 30
         window: 1m
+      calendar-event-create:
+        method: POST
+        path-pattern: /api/v1/calendar/events
+        limit: 30
+        window: 1m
+      calendar-event-update:
+        method: PATCH
+        path-pattern: /api/v1/calendar/events/{eventId}
+        limit: 30
+        window: 1m
+      calendar-event-delete:
+        method: DELETE
+        path-pattern: /api/v1/calendar/events/{eventId}
+        limit: 30
+        window: 1m

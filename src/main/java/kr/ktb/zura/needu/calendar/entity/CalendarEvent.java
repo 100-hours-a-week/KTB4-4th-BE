@@ -69,18 +69,36 @@ public class CalendarEvent {
     private LocalDateTime updatedAt;
 
     private CalendarEvent(Long userId, String title, String description, LocalDateTime startAt,
-                          LocalDateTime endAt, boolean allDay, boolean notificationEnabled) {
+                          LocalDateTime endAt, boolean allDay, CalendarEventColor color,
+                          boolean notificationEnabled) {
         this.userId = userId;
         this.title = title;
         this.description = description;
         this.startAt = startAt;
         this.endAt = endAt;
         this.allDay = allDay;
+        this.color = color;
         this.notificationEnabled = notificationEnabled;
     }
 
     public static CalendarEvent create(Long userId, String title, String description, LocalDateTime startAt,
-                                       LocalDateTime endAt, boolean allDay, boolean notificationEnabled) {
-        return new CalendarEvent(userId, title, description, startAt, endAt, allDay, notificationEnabled);
+                                       LocalDateTime endAt, boolean allDay, CalendarEventColor color,
+                                       boolean notificationEnabled) {
+        return new CalendarEvent(userId, title, description, startAt, endAt, allDay, color, notificationEnabled);
+    }
+
+    public void update(String title, String description, LocalDateTime startAt, LocalDateTime endAt,
+                       Boolean allDay, CalendarEventColor color, Boolean notificationEnabled) {
+        this.title = keepIfNull(title, this.title);
+        this.description = keepIfNull(description, this.description);
+        this.startAt = keepIfNull(startAt, this.startAt);
+        this.endAt = keepIfNull(endAt, this.endAt);
+        this.allDay = keepIfNull(allDay, this.allDay);
+        this.color = keepIfNull(color, this.color);
+        this.notificationEnabled = keepIfNull(notificationEnabled, this.notificationEnabled);
+    }
+
+    private static <T> T keepIfNull(T newValue, T currentValue) {
+        return newValue != null ? newValue : currentValue;
     }
 }

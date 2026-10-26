@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.calendar.repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.entity.CalendarEvent;
 import kr.ktb.zura.needu.calendar.type.CalendarEventColor;
@@ -15,8 +16,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 class CalendarEventRepositoryTest {
 
+    private static final Long USER_ID = 1L;
+    private static final Long OTHER_USER_ID = 2L;
+
     @Autowired
     private CalendarEventRepository calendarEventRepository;
+
+    @Test
+    void ownEvent_findByIdAndUserId_returnsEvent() {
+        CalendarEvent saved = calendarEventRepository.saveAndFlush(createCalendarEvent(USER_ID));
+
+        assertThat(calendarEventRepository.findByIdAndUserId(saved.getId(), USER_ID))
+                .hasValueSatisfying(event -> assertThat(event.getId()).isEqualTo(saved.getId()));
+    }
+
+    @Test
+    void otherUsersEvent_findByIdAndUserId_returnsEmpty() {
+        CalendarEvent saved = calendarEventRepository.saveAndFlush(createCalendarEvent(OTHER_USER_ID));
+
+        assertThat(calendarEventRepository.findByIdAndUserId(saved.getId(), USER_ID)).isEmpty();
+    }
 
     @Test
     void seoulMidnightBoundaries_applyToDetailDates() {
@@ -42,10 +61,21 @@ class CalendarEventRepositoryTest {
         assertThat(calendarEventRepository.findCalendarEventDetail(1L, Long.MAX_VALUE)).isEmpty();
     }
 
+    private CalendarEvent createCalendarEvent(Long userId) {
+        return CalendarEvent.create(
+                userId,
+                "생일 선물 준비",
+                null,
+                LocalDateTime.of(2026, 10, 30, 10, 0),
+                LocalDateTime.of(2026, 10, 30, 11, 0),
+                false,
+                null,
+                false
+        );
+    }
+
     private CalendarEvent saveEvent(Long userId, String start, String end) {
-        CalendarEvent event = CalendarEvent.create(userId, "일정", null,
-                LocalDateTime.parse(start), LocalDateTime.parse(end), false, false);
-        ReflectionTestUtils.setField(event, "color", CalendarEventColor.ORANGE);
-        return calendarEventRepository.saveAndFlush(event);
+        return calendarEventRepository.saveAndFlush(CalendarEvent.create(userId, "일정", null,
+                LocalDateTime.parse(start), LocalDateTime.parse(end), false, CalendarEventColor.ORANGE, false));
     }
 }

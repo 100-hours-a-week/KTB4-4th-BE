@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Long> {
 
+    Optional<CalendarEvent> findByIdAndUserId(Long id, Long userId);
+
     @Query("""
             select new kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse(
                 e.id, e.title, e.description, e.startAt, e.endAt, e.allDay, e.notificationEnabled, e.color
