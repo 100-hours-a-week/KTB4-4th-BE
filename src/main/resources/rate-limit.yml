@@ -1,6 +1,11 @@
 needu:
   rate-limit:
     policies:
+      calendar-monthly-summary:
+        method: GET
+        path-pattern: /api/v1/calendar/events
+        limit: 120
+        window: 1m
       calendar-daily-list:
         method: GET
         path-pattern: /api/v1/calendar/events/daily

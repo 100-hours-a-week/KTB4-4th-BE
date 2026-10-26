@@ -2,10 +2,12 @@ package kr.ktb.zura.needu.calendar.controller;
 
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import kr.ktb.zura.needu.calendar.dto.request.CreateCalendarEventRequest;
 import kr.ktb.zura.needu.calendar.dto.request.UpdateCalendarEventRequest;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
 import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
 import kr.ktb.zura.needu.calendar.service.CalendarEventQueryService;
@@ -70,7 +72,14 @@ public class CalendarController {
     }
 
     @GetMapping
-    public void findMonthlyCalendarEventSummary() {
+    public ResponseEntity<ApiResponse<ItemsResponse<MonthlyCalendarEventResponse>>> findMonthlyCalendarEventSummary(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth targetMonth
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                CalendarResponseMessages.CALENDAR_EVENT_SUMMARY_FOUND,
+                new ItemsResponse<>(calendarEventQueryService.findMonthlyCalendarEventSummary(userId, targetMonth))
+        ));
     }
 
     @GetMapping("/daily")
