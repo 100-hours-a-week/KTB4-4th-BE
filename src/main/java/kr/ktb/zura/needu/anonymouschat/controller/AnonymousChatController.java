@@ -8,34 +8,34 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api/v1/anonymous-chats")
 public class AnonymousChatController {
 
-    @GetMapping("/anonymous-chats")
+    @GetMapping
     public void findAllRooms() {
     }
 
-    @PostMapping("/friends/{userId}/anonymous-chat-rooms")
+    @PostMapping("/friends/{userId}")
     public void createRoom() {
     }
 
-    @GetMapping("/anonymous-chats/{roomId}")
+    @GetMapping("/{roomId}")
     public void findRoom() {
     }
 
-    @GetMapping("/anonymous-chats/{roomId}/messages")
+    @GetMapping("/{roomId}/messages")
     public void findAllMessages() {
     }
 
-    @PatchMapping("/anonymous-chats/{roomId}/read")
+    @PatchMapping("/{roomId}/read")
     public void readMessages() {
     }
 
-    @PostMapping("/anonymous-chats/{roomId}/reports")
+    @PostMapping("/{roomId}/reports")
     public void reportChat() {
     }
 
-    @PutMapping("/anonymous-chats/{roomId}/leave")
+    @PutMapping("/{roomId}/leave")
     public void leaveRoom() {
     }
 }
