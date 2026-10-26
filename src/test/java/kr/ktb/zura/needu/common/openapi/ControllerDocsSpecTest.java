@@ -45,6 +45,22 @@ class ControllerDocsSpecTest {
     }
 
     @Test
+    void calendarDailyEvents_documentsParametersResponsesAndRateLimits() throws Exception {
+        String operation = "$.paths['/api/v1/calendar/events/daily'].get";
+        requestSpec()
+                .andExpect(jsonPath(operation + ".operationId").exists())
+                .andExpect(jsonPath(operation + ".responses['200']").exists())
+                .andExpect(jsonPath(operation + ".responses['400']").exists())
+                .andExpect(jsonPath(operation + ".responses['401']").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_BLOCKED").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_ONBOARDING_REQUIRED").exists())
+                .andExpect(jsonPath(operation + ".responses['429'].content['application/json'].examples.COMMON_TOO_MANY_REQUESTS.value.data.retryAfterSeconds").value(60))
+                .andExpect(jsonPath(operation + ".responses['500']").exists())
+                .andExpect(jsonPath(operation + ".responses['503']").exists())
+                .andExpect(jsonPath(operation + ".parameters[?(@.name == 'date')].required").value(contains(true)));
+    }
+
+    @Test
     void successStatus_replacesDefault200() throws Exception {
         requestSpec()
                 .andExpect(jsonPath("$.paths['/api/v1/error-reports'].post.responses['201']").exists())

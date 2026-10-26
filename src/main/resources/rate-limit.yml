@@ -6,6 +6,11 @@ needu:
         path-pattern: /api/v1/calendar/events
         limit: 120
         window: 1m
+      calendar-daily-list:
+        method: GET
+        path-pattern: /api/v1/calendar/events/daily
+        limit: 120
+        window: 1m
       friend-list:
         method: GET
         path-pattern: /api/v1/friends

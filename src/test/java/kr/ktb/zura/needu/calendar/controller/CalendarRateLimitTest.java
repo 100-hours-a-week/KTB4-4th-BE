@@ -36,7 +36,8 @@ class CalendarRateLimitTest {
 
     @ParameterizedTest
     @CsvSource({
-            "calendar-monthly-summary,/api/v1/calendar/events"
+            "calendar-monthly-summary,/api/v1/calendar/events",
+            "calendar-daily-list,/api/v1/calendar/events/daily"
     })
     void configuredPolicy_allows120AndRejects121(String policyName, String path) throws Exception {
         var yaml = new YamlPropertiesFactoryBean();

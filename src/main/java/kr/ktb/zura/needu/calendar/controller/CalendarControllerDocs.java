@@ -30,6 +30,10 @@ public class CalendarControllerDocs implements ControllerDocs {
                 OperationDoc.of(CalendarController.class, "findMonthlyCalendarEventSummary")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
                                 UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_WITHDRAWN)
+                        .build(),
+                OperationDoc.of(CalendarController.class, "findAllDailyCalendarEvents")
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
+                                UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_WITHDRAWN)
                         .build()
         );
     }

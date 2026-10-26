@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
+import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.repository.CalendarEventRepository;
 import kr.ktb.zura.needu.calendar.support.CalendarEventTime;
@@ -44,5 +45,12 @@ public class CalendarEventQueryService {
                 .map(entry -> new MonthlyCalendarEventResponse(
                         entry.getKey(), entry.getValue().size(), entry.getValue()))
                 .toList();
+    }
+
+    public List<DailyCalendarEventResponse> findAllDailyCalendarEvents(Long userId, LocalDate date) {
+        userService.validateActiveUser(userId);
+
+        return calendarEventRepository.findAllDailyCalendarEvents(
+                userId, CalendarEventTime.startOfDayUtc(date), CalendarEventTime.startOfDayUtc(date.plusDays(1)));
     }
 }

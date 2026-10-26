@@ -6,6 +6,7 @@ import java.util.List;
 
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.exception.CalendarErrorCode;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
@@ -16,6 +17,7 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -288,6 +290,78 @@ class CalendarControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("캘린더 일정을 찾을 수 없습니다."))
                 .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void dailyEvents_returnsTitlesAndNullableColors() throws Exception {
+        given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2026, 10, 30)))
+                .willReturn(List.of(new DailyCalendarEventResponse(123L, "생일 선물 준비", CalendarEventColor.ORANGE),
+                        new DailyCalendarEventResponse(124L, "저녁 약속", null)));
+
+        mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].eventId").value(123))
+                .andExpect(jsonPath("$.data.items[0].title").value("생일 선물 준비"))
+                .andExpect(jsonPath("$.data.items[0].color").value("ORANGE"))
+                .andExpect(jsonPath("$.data.items[1].color").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserErrorCode.class, names = {"USER_BLOCKED", "USER_ONBOARDING_REQUIRED"})
+    void dailyEvents_invalidUser_returnsForbidden(UserErrorCode error) throws Exception {
+        given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2026, 10, 30)))
+                .willThrow(new BusinessException(error));
+
+        mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(error.getMessage()));
+    }
+
+    @Test
+    void dailyEvents_unauthenticated_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void validDailyDate_returnsCalendarEvents() throws Exception {
+        given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2028, 2, 29)))
+                .willReturn(List.of());
+
+        mockMvc.perform(get(URL + "/daily").param("date", "2028-02-29")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("캘린더 일정 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-10", "2026/10/26", "2026-1-1", "2026-02-29", "2026-02-30",
+            "2026-13-01", "2026-10-26T12:00:00", "2026-10-26+09:00", "invalid", "",
+            " 2026-10-26", "2026-10-26 "})
+    void invalidDailyDate_returnsCommonBadRequest(String date) throws Exception {
+        mockMvc.perform(get(URL + "/daily").param("date", date)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void missingDailyDate_returnsCommonBadRequest() throws Exception {
+        mockMvc.perform(get(URL + "/daily")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
     }
 
     private static MockHttpServletRequestBuilder deleteCalendarEvent() {
