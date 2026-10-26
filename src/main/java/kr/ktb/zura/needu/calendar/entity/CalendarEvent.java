@@ -69,18 +69,21 @@ public class CalendarEvent {
     private LocalDateTime updatedAt;
 
     private CalendarEvent(Long userId, String title, String description, LocalDateTime startAt,
-                          LocalDateTime endAt, boolean allDay, boolean notificationEnabled) {
+                          LocalDateTime endAt, boolean allDay, CalendarEventColor color,
+                          boolean notificationEnabled) {
         this.userId = userId;
         this.title = title;
         this.description = description;
         this.startAt = startAt;
         this.endAt = endAt;
         this.allDay = allDay;
+        this.color = color;
         this.notificationEnabled = notificationEnabled;
     }
 
     public static CalendarEvent create(Long userId, String title, String description, LocalDateTime startAt,
-                                       LocalDateTime endAt, boolean allDay, boolean notificationEnabled) {
-        return new CalendarEvent(userId, title, description, startAt, endAt, allDay, notificationEnabled);
+                                       LocalDateTime endAt, boolean allDay, CalendarEventColor color,
+                                       boolean notificationEnabled) {
+        return new CalendarEvent(userId, title, description, startAt, endAt, allDay, color, notificationEnabled);
     }
 }

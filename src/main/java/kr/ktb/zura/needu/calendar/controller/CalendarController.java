@@ -1,12 +1,20 @@
 package kr.ktb.zura.needu.calendar.controller;
 
+import jakarta.validation.Valid;
+import kr.ktb.zura.needu.calendar.dto.request.CreateCalendarEventRequest;
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
 import kr.ktb.zura.needu.calendar.service.CalendarEventQueryService;
+import kr.ktb.zura.needu.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,7 +27,14 @@ public class CalendarController {
     private final CalendarEventQueryService calendarEventQueryService;
 
     @PostMapping
-    public void createCalendarEvent() {
+    public ResponseEntity<ApiResponse<CalendarEventResponse>> createCalendarEvent(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody @Valid CreateCalendarEventRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(
+                CalendarResponseMessages.CALENDAR_EVENT_CREATED,
+                calendarEventCommandService.createCalendarEvent(userId, request)
+        ));
     }
 
     @PatchMapping("/{eventId}")
