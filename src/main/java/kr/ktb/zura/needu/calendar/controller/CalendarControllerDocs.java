@@ -22,6 +22,11 @@ public class CalendarControllerDocs implements ControllerDocs {
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .errors(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND)
                         .build(),
+                OperationDoc.of(CalendarController.class, "deleteCalendarEvent")
+                        .successStatus(HttpStatus.NO_CONTENT)
+                        .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .errors(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND)
+                        .build(),
                 OperationDoc.of(CalendarController.class, "findMonthlyCalendarEventSummary")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
                                 UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_WITHDRAWN)

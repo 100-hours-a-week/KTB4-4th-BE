@@ -201,3 +201,8 @@ needu:
         path-pattern: /api/v1/calendar/events/{eventId}
         limit: 30
         window: 1m
+      calendar-event-delete:
+        method: DELETE
+        path-pattern: /api/v1/calendar/events/{eventId}
+        limit: 30
+        window: 1m
