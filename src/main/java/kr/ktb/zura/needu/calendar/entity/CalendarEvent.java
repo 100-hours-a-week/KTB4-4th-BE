@@ -87,28 +87,18 @@ public class CalendarEvent {
         return new CalendarEvent(userId, title, description, startAt, endAt, allDay, color, notificationEnabled);
     }
 
-    public void changeTitle(String title) {
-        this.title = title;
+    public void update(String title, String description, LocalDateTime startAt, LocalDateTime endAt,
+                       Boolean allDay, CalendarEventColor color, Boolean notificationEnabled) {
+        this.title = keepIfNull(title, this.title);
+        this.description = keepIfNull(description, this.description);
+        this.startAt = keepIfNull(startAt, this.startAt);
+        this.endAt = keepIfNull(endAt, this.endAt);
+        this.allDay = keepIfNull(allDay, this.allDay);
+        this.color = keepIfNull(color, this.color);
+        this.notificationEnabled = keepIfNull(notificationEnabled, this.notificationEnabled);
     }
 
-    public void changeDescription(String description) {
-        this.description = description;
-    }
-
-    public void reschedule(LocalDateTime startAt, LocalDateTime endAt) {
-        this.startAt = startAt;
-        this.endAt = endAt;
-    }
-
-    public void changeAllDay(boolean allDay) {
-        this.allDay = allDay;
-    }
-
-    public void changeColor(CalendarEventColor color) {
-        this.color = color;
-    }
-
-    public void changeNotificationEnabled(boolean notificationEnabled) {
-        this.notificationEnabled = notificationEnabled;
+    private static <T> T keepIfNull(T newValue, T currentValue) {
+        return newValue != null ? newValue : currentValue;
     }
 }
