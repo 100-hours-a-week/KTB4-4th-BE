@@ -36,6 +36,8 @@ class CalendarRateLimitTest {
 
     @ParameterizedTest
     @CsvSource({
+            "calendar-monthly-summary,/api/v1/calendar/events",
+            "calendar-daily-list,/api/v1/calendar/events/daily",
             "calendar-detail,/api/v1/calendar/events/123"
     })
     void configuredPolicy_allows120AndRejects121(String policyName, String path) throws Exception {

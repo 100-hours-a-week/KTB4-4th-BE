@@ -1,10 +1,14 @@
 package kr.ktb.zura.needu.calendar.controller;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.exception.CalendarErrorCode;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
 import kr.ktb.zura.needu.calendar.service.CalendarEventQueryService;
@@ -14,6 +18,7 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -289,6 +294,78 @@ class CalendarControllerTest {
     }
 
     @Test
+    void dailyEvents_returnsTitlesAndNullableColors() throws Exception {
+        given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2026, 10, 30)))
+                .willReturn(List.of(new DailyCalendarEventResponse(123L, "생일 선물 준비", CalendarEventColor.ORANGE),
+                        new DailyCalendarEventResponse(124L, "저녁 약속", null)));
+
+        mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].eventId").value(123))
+                .andExpect(jsonPath("$.data.items[0].title").value("생일 선물 준비"))
+                .andExpect(jsonPath("$.data.items[0].color").value("ORANGE"))
+                .andExpect(jsonPath("$.data.items[1].color").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserErrorCode.class, names = {"USER_BLOCKED", "USER_ONBOARDING_REQUIRED"})
+    void dailyEvents_invalidUser_returnsForbidden(UserErrorCode error) throws Exception {
+        given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2026, 10, 30)))
+                .willThrow(new BusinessException(error));
+
+        mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(error.getMessage()));
+    }
+
+    @Test
+    void dailyEvents_unauthenticated_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void validDailyDate_returnsCalendarEvents() throws Exception {
+        given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2028, 2, 29)))
+                .willReturn(List.of());
+
+        mockMvc.perform(get(URL + "/daily").param("date", "2028-02-29")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("캘린더 일정 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-10", "2026/10/26", "2026-1-1", "2026-02-29", "2026-02-30",
+            "2026-13-01", "2026-10-26T12:00:00", "2026-10-26+09:00", "invalid", "",
+            " 2026-10-26", "2026-10-26 "})
+    void invalidDailyDate_returnsCommonBadRequest(String date) throws Exception {
+        mockMvc.perform(get(URL + "/daily").param("date", date)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void missingDailyDate_returnsCommonBadRequest() throws Exception {
+        mockMvc.perform(get(URL + "/daily")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
     void findCalendarEvent_returnsDetailInCommonResponse() throws Exception {
         given(calendarEventQueryService.findCalendarEvent(1L, 123L))
                 .willReturn(new CalendarEventDetailResponse(123L, "생일 선물 준비", "선물 구매",
@@ -371,6 +448,80 @@ class CalendarControllerTest {
                 .content(body)
                 .with(authenticatedUser())
                 .with(csrf());
+    }
+
+    @Test
+    void validMonth_returnsSummaryInCommonResponse() throws Exception {
+        LocalDate date = LocalDate.of(2026, 10, 30);
+        var indicator = new CalendarEventIndicatorResponse(123L, date, date.plusDays(1), CalendarEventColor.ORANGE);
+        given(calendarEventQueryService.findMonthlyCalendarEventSummary(1L, YearMonth.of(2026, 10)))
+                .willReturn(List.of(new MonthlyCalendarEventResponse(date, 1, List.of(indicator))));
+
+        mockMvc.perform(get(URL).param("targetMonth", "2026-10")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("캘린더 일정 요약을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].date").value("2026-10-30"))
+                .andExpect(jsonPath("$.data.items[0].eventCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].indicators[0].eventId").value(123))
+                .andExpect(jsonPath("$.data.items[0].indicators[0].startDate").value("2026-10-30"))
+                .andExpect(jsonPath("$.data.items[0].indicators[0].endDate").value("2026-10-31"))
+                .andExpect(jsonPath("$.data.items[0].indicators[0].color").value("ORANGE"));
+    }
+
+    @Test
+    void blockedUser_returnsForbidden() throws Exception {
+        given(calendarEventQueryService.findMonthlyCalendarEventSummary(1L, YearMonth.of(2026, 10)))
+                .willThrow(new BusinessException(UserErrorCode.USER_BLOCKED));
+
+        mockMvc.perform(get(URL).param("targetMonth", "2026-10")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("이용이 제한된 계정입니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void noEvents_returnsEmptyItems() throws Exception {
+        given(calendarEventQueryService.findMonthlyCalendarEventSummary(1L, YearMonth.of(2026, 10)))
+                .willReturn(List.of());
+
+        mockMvc.perform(get(URL).param("targetMonth", "2026-10")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-13", "2026-00", "2026-10-01", "invalid", "", "2026-1", "26-10",
+            "2026/10", "2026-10 ", " 2026-10", "2026-10\n"})
+    void invalidMonth_returnsBadRequest(String month) throws Exception {
+        mockMvc.perform(get(URL).param("targetMonth", month)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void missingMonth_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(URL)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void unauthenticatedRequest_isRejected() throws Exception {
+        mockMvc.perform(get(URL).param("targetMonth", "2026-10"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(calendarEventQueryService);
     }
 
     private static MockHttpServletRequestBuilder postCalendarEvent(String body) {

@@ -2,14 +2,20 @@ package kr.ktb.zura.needu.calendar.controller;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import kr.ktb.zura.needu.calendar.dto.request.CreateCalendarEventRequest;
 import kr.ktb.zura.needu.calendar.dto.request.UpdateCalendarEventRequest;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
+import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
 import kr.ktb.zura.needu.calendar.service.CalendarEventQueryService;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -74,10 +81,24 @@ public class CalendarController {
     }
 
     @GetMapping
-    public void findMonthlyCalendarEventSummary() {
+    public ResponseEntity<ApiResponse<ItemsResponse<MonthlyCalendarEventResponse>>> findMonthlyCalendarEventSummary(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth targetMonth
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                CalendarResponseMessages.CALENDAR_EVENT_SUMMARY_FOUND,
+                new ItemsResponse<>(calendarEventQueryService.findMonthlyCalendarEventSummary(userId, targetMonth))
+        ));
     }
 
     @GetMapping("/daily")
-    public void findAllDailyCalendarEvents() {
+    public ResponseEntity<ApiResponse<ItemsResponse<DailyCalendarEventResponse>>> findAllDailyCalendarEvents(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                CalendarResponseMessages.CALENDAR_EVENTS_FOUND,
+                new ItemsResponse<>(calendarEventQueryService.findAllDailyCalendarEvents(userId, date))
+        ));
     }
 }
