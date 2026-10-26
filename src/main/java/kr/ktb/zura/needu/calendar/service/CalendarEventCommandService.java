@@ -4,8 +4,10 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import kr.ktb.zura.needu.calendar.dto.request.CreateCalendarEventRequest;
+import kr.ktb.zura.needu.calendar.dto.request.UpdateCalendarEventRequest;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
 import kr.ktb.zura.needu.calendar.entity.CalendarEvent;
+import kr.ktb.zura.needu.calendar.exception.CalendarErrorCode;
 import kr.ktb.zura.needu.calendar.repository.CalendarEventRepository;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
@@ -34,6 +36,33 @@ public class CalendarEventCommandService {
         return CalendarEventResponse.from(calendarEvent);
     }
 
+    @Transactional
+    public CalendarEventResponse updateCalendarEvent(Long userId, Long eventId, UpdateCalendarEventRequest request) {
+        userService.validateActiveUser(userId);
+        if (request.hasPeriod()) {
+            validateEventPeriod(request.startAt(), request.endAt());
+        }
+
+        CalendarEvent calendarEvent = findOwnedCalendarEvent(userId, eventId);
+        calendarEvent.update(
+                request.title(),
+                request.description(),
+                toUtc(request.startAt()),
+                toUtc(request.endAt()),
+                request.allDay(),
+                request.color(),
+                request.notificationEnabled()
+        );
+
+        log.info("Calendar event updated. userId={}, eventId={}", userId, eventId);
+        return CalendarEventResponse.from(calendarEvent);
+    }
+
+    private CalendarEvent findOwnedCalendarEvent(Long userId, Long eventId) {
+        return calendarEventRepository.findByIdAndUserId(eventId, userId)
+                .orElseThrow(() -> new BusinessException(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND));
+    }
+
     private void validateEventPeriod(OffsetDateTime startAt, OffsetDateTime endAt) {
         if (endAt.isBefore(startAt)) {
             throw new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT);
@@ -54,6 +83,9 @@ public class CalendarEventCommandService {
     }
 
     private LocalDateTime toUtc(OffsetDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
         return dateTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
     }
 }
