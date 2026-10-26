@@ -3,12 +3,14 @@ package kr.ktb.zura.needu.common.exception;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
+import java.time.YearMonth;
 
 import io.sentry.Sentry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.springframework.http.MediaType;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -97,6 +99,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void invalidYearMonthParameter_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/test/year-month").param("targetMonth", "2026-10-26"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
     void outOfRangeParameter_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(get("/test/param").param("size", "101"))
                 .andExpect(status().isUnprocessableContent())
@@ -161,6 +172,10 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/test/param")
         void receiveParam(@RequestParam @Max(100) Integer size) {
+        }
+
+        @GetMapping("/test/year-month")
+        void receiveYearMonth(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth targetMonth) {
         }
 
         @GetMapping("/test/header")
