@@ -1,9 +1,7 @@
 package kr.ktb.zura.needu.aichat.service;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-
 import kr.ktb.zura.needu.aichat.entity.AiMessage;
+import kr.ktb.zura.needu.common.cursor.CursorCodec;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 
@@ -16,7 +14,7 @@ public record AiMessageCursor(Long messageId) {
 
     public static AiMessageCursor decode(String cursor) {
         try {
-            String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+            String decoded = CursorCodec.decode(cursor);
             long messageId = Long.parseLong(decoded);
             if (messageId <= 0) {
                 throw invalidCursor();
@@ -28,8 +26,7 @@ public record AiMessageCursor(Long messageId) {
     }
 
     public String encode() {
-        return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(String.valueOf(messageId).getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(String.valueOf(messageId));
     }
 
     private static BusinessException invalidCursor() {
