@@ -1,9 +1,11 @@
 package kr.ktb.zura.needu.calendar.controller;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
@@ -360,6 +362,78 @@ class CalendarControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."))
                 .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void findCalendarEvent_returnsDetailInCommonResponse() throws Exception {
+        given(calendarEventQueryService.findCalendarEvent(1L, 123L))
+                .willReturn(new CalendarEventDetailResponse(123L, "생일 선물 준비", "선물 구매",
+                        LocalDateTime.of(2026, 10, 30, 1, 0), LocalDateTime.of(2026, 10, 30, 2, 0), false, true,
+                        CalendarEventColor.ORANGE));
+
+        mockMvc.perform(get(URL + "/123")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("캘린더 일정을 조회했습니다."))
+                .andExpect(jsonPath("$.data.eventId").value(123))
+                .andExpect(jsonPath("$.data.title").value("생일 선물 준비"))
+                .andExpect(jsonPath("$.data.description").value("선물 구매"))
+                .andExpect(jsonPath("$.data.startAt").value("2026-10-30T01:00:00Z"))
+                .andExpect(jsonPath("$.data.endAt").value("2026-10-30T02:00:00Z"))
+                .andExpect(jsonPath("$.data.isAllDay").value(false))
+                .andExpect(jsonPath("$.data.isNotificationEnabled").value(true))
+                .andExpect(jsonPath("$.data.color").value("ORANGE"));
+    }
+
+    @Test
+    void findCalendarEvent_notFound_returnsNotFound() throws Exception {
+        given(calendarEventQueryService.findCalendarEvent(1L, 123L))
+                .willThrow(new BusinessException(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND));
+
+        mockMvc.perform(get(URL + "/123")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("캘린더 일정을 찾을 수 없습니다."));
+    }
+
+    @Test
+    void findCalendarEvent_blockedUser_returnsForbidden() throws Exception {
+        given(calendarEventQueryService.findCalendarEvent(1L, 123L))
+                .willThrow(new BusinessException(UserErrorCode.USER_BLOCKED));
+
+        mockMvc.perform(get(URL + "/123")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("이용이 제한된 계정입니다."));
+    }
+
+    @Test
+    void findCalendarEvent_invalidId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(URL + "/invalid")
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1L, Long.MIN_VALUE})
+    void findCalendarEvent_nonPositiveId_returnsUnprocessableContent(long eventId) throws Exception {
+        mockMvc.perform(get(URL + "/" + eventId)
+                        .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verifyNoInteractions(calendarEventQueryService);
+    }
+
+    @Test
+    void findCalendarEvent_unauthenticated_isRejected() throws Exception {
+        mockMvc.perform(get(URL + "/123"))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(calendarEventQueryService);
     }

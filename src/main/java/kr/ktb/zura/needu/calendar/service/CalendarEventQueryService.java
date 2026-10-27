@@ -6,11 +6,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
+import kr.ktb.zura.needu.calendar.exception.CalendarErrorCode;
 import kr.ktb.zura.needu.calendar.repository.CalendarEventRepository;
 import kr.ktb.zura.needu.calendar.support.CalendarEventTime;
+import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -52,5 +55,12 @@ public class CalendarEventQueryService {
 
         return calendarEventRepository.findAllDailyCalendarEvents(
                 userId, CalendarEventTime.startOfDayUtc(date), CalendarEventTime.startOfDayUtc(date.plusDays(1)));
+    }
+
+    public CalendarEventDetailResponse findCalendarEvent(Long userId, Long eventId) {
+        userService.validateActiveUser(userId);
+
+        return calendarEventRepository.findCalendarEventDetail(userId, eventId)
+                .orElseThrow(() -> new BusinessException(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND));
     }
 }

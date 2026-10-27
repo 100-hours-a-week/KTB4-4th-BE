@@ -4,9 +4,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Optional;
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
+import kr.ktb.zura.needu.calendar.exception.CalendarErrorCode;
 import kr.ktb.zura.needu.calendar.repository.CalendarEventRepository;
 import kr.ktb.zura.needu.calendar.type.CalendarEventColor;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -128,6 +131,38 @@ class CalendarEventQueryServiceTest {
 
         assertThat(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2028, 2, 29))).isEmpty();
         verify(userService).validateActiveUser(1L);
+    }
+
+    @Test
+    void findCalendarEvent_validatesUserAndReturnsDetailProjection() {
+        var detail = new CalendarEventDetailResponse(123L, "일정", null,
+                LocalDateTime.of(2026, 10, 30, 1, 0), LocalDateTime.of(2026, 10, 30, 2, 0), false, true,
+                CalendarEventColor.ORANGE);
+        given(calendarEventRepository.findCalendarEventDetail(1L, 123L)).willReturn(Optional.of(detail));
+
+        assertThat(calendarEventQueryService.findCalendarEvent(1L, 123L)).isSameAs(detail);
+        verify(userService).validateActiveUser(1L);
+    }
+
+    @Test
+    void findCalendarEvent_missingOrNotOwned_throwsNotFound() {
+        given(calendarEventRepository.findCalendarEventDetail(1L, 123L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> calendarEventQueryService.findCalendarEvent(1L, 123L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(CalendarErrorCode.CALENDAR_EVENT_NOT_FOUND));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserErrorCode.class, names = {"USER_BLOCKED", "USER_ONBOARDING_REQUIRED", "USER_WITHDRAWN", "USER_NOT_FOUND"})
+    void findCalendarEvent_invalidUser_rejectsBeforeQueryingEvents(UserErrorCode error) {
+        doThrow(new BusinessException(error)).when(userService).validateActiveUser(1L);
+
+        assertThatThrownBy(() -> calendarEventQueryService.findCalendarEvent(1L, 123L))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(error));
+
+        verifyNoInteractions(calendarEventRepository);
     }
 
     private void givenEvents(YearMonth month, List<CalendarEventIndicatorResponse> events) {

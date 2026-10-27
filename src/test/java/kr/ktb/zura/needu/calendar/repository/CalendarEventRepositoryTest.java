@@ -2,7 +2,9 @@ package kr.ktb.zura.needu.calendar.repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.entity.CalendarEvent;
@@ -10,6 +12,7 @@ import kr.ktb.zura.needu.calendar.type.CalendarEventColor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -100,6 +103,32 @@ class CalendarEventRepositoryTest {
                 new DailyCalendarEventResponse(crossingStart.getId(), "일정", CalendarEventColor.ORANGE),
                 new DailyCalendarEventResponse(later.getId(), "일정", CalendarEventColor.ORANGE),
                 new DailyCalendarEventResponse(sameStart.getId(), "일정", CalendarEventColor.ORANGE));
+    }
+
+    @Test
+    void seoulMidnightBoundaries_detailReturnsStoredUtcTimesWithOffset() {
+        var event = saveEvent(1L, "2026-09-30T15:00", "2026-10-01T14:59:59");
+
+        // 서울 10월 1일 하루 일정을 UTC 시각 그대로 오프셋만 붙여 내려준다
+        assertThat(calendarEventRepository.findCalendarEventDetail(1L, event.getId())).hasValueSatisfying(detail -> {
+            assertThat(detail.startAt()).isEqualTo(OffsetDateTime.parse("2026-09-30T15:00Z"));
+            assertThat(detail.endAt()).isEqualTo(OffsetDateTime.parse("2026-10-01T14:59:59Z"));
+        });
+    }
+
+    @Test
+    void findCalendarEventDetail_projectsOwnedEventAndHidesOtherUsersEvent() {
+        var event = saveEvent(1L, "2026-10-30T12:00", "2026-10-31T18:00");
+        ReflectionTestUtils.setField(event, "description", "선물 구매");
+        ReflectionTestUtils.setField(event, "allDay", true);
+        calendarEventRepository.flush();
+
+        assertThat(calendarEventRepository.findCalendarEventDetail(1L, event.getId()))
+                .contains(new CalendarEventDetailResponse(event.getId(), "일정", "선물 구매",
+                        OffsetDateTime.parse("2026-10-30T12:00Z"), OffsetDateTime.parse("2026-10-31T18:00Z"), true, false,
+                        CalendarEventColor.ORANGE));
+        assertThat(calendarEventRepository.findCalendarEventDetail(2L, event.getId())).isEmpty();
+        assertThat(calendarEventRepository.findCalendarEventDetail(1L, Long.MAX_VALUE)).isEmpty();
     }
 
     private CalendarEvent createCalendarEvent(Long userId) {
