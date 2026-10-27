@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -42,6 +44,8 @@ import static org.mockito.Mockito.when;
 
 class UserServiceTest {
 
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 27, 1, 0);
+
     private UserRepository userRepository;
     private UserTasteProfileRepository userTasteProfileRepository;
     private UserService userService;
@@ -50,7 +54,8 @@ class UserServiceTest {
     void setUp() {
         userRepository = mock(UserRepository.class);
         userTasteProfileRepository = mock(UserTasteProfileRepository.class);
-        userService = new UserService(userRepository, userTasteProfileRepository, JsonMapper.builder().build());
+        userService = new UserService(userRepository, userTasteProfileRepository, JsonMapper.builder().build(),
+                Clock.fixed(Instant.parse("2026-10-27T01:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test
@@ -506,6 +511,42 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("회원")));
 
         assertTrue(userService.findLastBlockedAt(1L).isEmpty());
+    }
+
+    @Test
+    void blockedUserBeforeBlockedUntil_findOrCreateKakaoUser_throwsBlocked() {
+        User user = createActiveUser("회원");
+        user.blockUntil(NOW.minusDays(1), NOW.plusDays(2));
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(user));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findOrCreateKakaoUser(42L, "회원", null));
+
+        assertEquals(UserErrorCode.USER_BLOCKED, exception.getErrorCode());
+        assertEquals(UserStatus.BLOCKED, user.getStatus());
+    }
+
+    @Test
+    void blockedUserAfterBlockedUntil_findOrCreateKakaoUser_releasesBlock() {
+        User user = createActiveUser("회원");
+        user.blockUntil(NOW.minusDays(3), NOW);
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(user));
+
+        userService.findOrCreateKakaoUser(42L, "회원", null);
+
+        assertEquals(UserStatus.ACTIVE, user.getStatus());
+        assertNull(user.getBlockedUntil());
+        assertEquals(NOW.minusDays(3), user.getBlockedAt());
+    }
+
+    @Test
+    void blockedUserWithoutBlockedUntil_findOrCreateKakaoUser_keepsBlock() {
+        User user = createActiveUser("회원");
+        user.block();
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(user));
+
+        assertThrows(BusinessException.class, () -> userService.findOrCreateKakaoUser(42L, "회원", null));
+        assertEquals(UserStatus.BLOCKED, user.getStatus());
     }
 
     private User createOnboardingUser() {
