@@ -28,6 +28,8 @@ import static lombok.AccessLevel.PROTECTED;
 @NoArgsConstructor(access = PROTECTED)
 public class AnonymousRoom {
 
+    public static final int QUESTIONER_ALIAS_MAX_LENGTH = 20;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -41,6 +43,9 @@ public class AnonymousRoom {
     @Column(nullable = false)
     private Long recipientUserId;
 
+    @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
+    private String questionerAlias;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -50,9 +55,18 @@ public class AnonymousRoom {
 
     private LocalDateTime expiresAt;
 
-    public AnonymousRoom(Long productId, Long questionerUserId, Long recipientUserId) {
+    public AnonymousRoom(Long productId, Long questionerUserId, Long recipientUserId, String questionerAlias) {
         this.productId = productId;
         this.questionerUserId = questionerUserId;
         this.recipientUserId = recipientUserId;
+        this.questionerAlias = questionerAlias;
+    }
+
+    public boolean isQuestioner(Long userId) {
+        return questionerUserId.equals(userId);
+    }
+
+    public boolean isParticipant(Long userId) {
+        return isQuestioner(userId) || recipientUserId.equals(userId);
     }
 }

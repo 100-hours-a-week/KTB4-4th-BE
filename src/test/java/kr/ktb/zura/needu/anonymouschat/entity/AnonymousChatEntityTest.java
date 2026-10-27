@@ -18,7 +18,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void persistsRoomAndIndividualUnreadMessages() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
         UUID clientMessageId = UUID.randomUUID();
         AnonymousMessage question = entityManager.persistAndFlush(
                 new AnonymousMessage(room, 1L, clientMessageId, "이 선물 어때?"));
@@ -33,6 +33,7 @@ class AnonymousChatEntityTest {
         assertThat(savedRoom.getProductId()).isEqualTo(10L);
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(1L);
         assertThat(savedRoom.getRecipientUserId()).isEqualTo(2L);
+        assertThat(savedRoom.getQuestionerAlias()).isEqualTo("익명의 수달");
         assertThat(savedRoom.getCreatedAt()).isNotNull();
         assertThat(savedRoom.getOpenedAt()).isNull();
         assertThat(savedRoom.getExpiresAt()).isNull();
@@ -48,7 +49,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void rejectsDuplicateClientMessageForSameRoomAndSender() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
         UUID clientMessageId = UUID.randomUUID();
         entityManager.persistAndFlush(new AnonymousMessage(room, 1L, clientMessageId, "이 선물 어때?"));
 
@@ -59,7 +60,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void rejectsRoomWithSameQuestionerAndRecipient() {
-        assertThatThrownBy(() -> entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 1L)))
+        assertThatThrownBy(() -> entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 1L, "익명의 수달")))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 }

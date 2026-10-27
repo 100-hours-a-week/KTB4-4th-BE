@@ -359,6 +359,7 @@ CREATE TABLE IF NOT EXISTS anonymous_rooms (
     product_id         BIGINT      NOT NULL,
     questioner_user_id BIGINT      NOT NULL,
     recipient_user_id  BIGINT      NOT NULL,
+    questioner_alias   VARCHAR(20) NOT NULL COMMENT '질문받은 사용자에게 보여주는 질문자 익명 별칭',
     created_at         DATETIME(6) NOT NULL,
     opened_at          DATETIME(6) NULL COMMENT '질문받은 사용자의 최초 방 확인 시각',
     expires_at         DATETIME(6) NULL,
