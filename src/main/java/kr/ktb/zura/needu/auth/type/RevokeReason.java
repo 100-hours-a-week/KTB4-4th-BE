@@ -4,5 +4,6 @@ public enum RevokeReason {
     LOGOUT,
     WITHDRAWN,
     SECURITY,
-    EXPIRED
+    EXPIRED,
+    BLOCKED
 }

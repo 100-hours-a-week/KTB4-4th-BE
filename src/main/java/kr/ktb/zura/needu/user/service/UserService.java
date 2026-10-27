@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.user.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +131,20 @@ public class UserService {
     @Transactional
     public void completeKakaoFriendSync(Long userId) {
         findUser(userId).completeKakaoFriendSync();
+    }
+
+    public Optional<LocalDateTime> findLastBlockedAt(Long userId) {
+        return Optional.ofNullable(findUser(userId).getBlockedAt());
+    }
+
+    @Transactional
+    public boolean blockUntil(Long userId, LocalDateTime blockedAt, LocalDateTime blockedUntil) {
+        User user = findUser(userId);
+        if (user.getStatus() == UserStatus.WITHDRAWN || user.isBlockedAt(blockedAt)) {
+            return false;
+        }
+        user.blockUntil(blockedAt, blockedUntil);
+        return true;
     }
 
     @Transactional

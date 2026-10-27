@@ -445,6 +445,69 @@ class UserServiceTest {
         assertNull(user.getKakaoFriendSyncedAt());
     }
 
+    @Test
+    void activeUser_blockUntil_blocksUntilGivenTime() {
+        User user = createActiveUser("회원");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime now = LocalDateTime.of(2026, 10, 27, 1, 0);
+
+        boolean blocked = userService.blockUntil(1L, now, now.plusDays(3));
+
+        assertTrue(blocked);
+        assertEquals(UserStatus.BLOCKED, user.getStatus());
+        assertEquals(now, user.getBlockedAt());
+        assertEquals(now.plusDays(3), user.getBlockedUntil());
+    }
+
+    @Test
+    void blockedUser_blockUntil_keepsExistingBlock() {
+        User user = createActiveUser("회원");
+        LocalDateTime firstBlockedAt = LocalDateTime.of(2026, 10, 27, 1, 0);
+        user.blockUntil(firstBlockedAt, firstBlockedAt.plusDays(3));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        boolean blocked = userService.blockUntil(1L, firstBlockedAt.plusDays(1), firstBlockedAt.plusDays(4));
+
+        assertFalse(blocked);
+        assertEquals(firstBlockedAt, user.getBlockedAt());
+        assertEquals(firstBlockedAt.plusDays(3), user.getBlockedUntil());
+    }
+
+    @Test
+    void expiredBlockUser_blockUntil_blocksAgain() {
+        User user = createActiveUser("회원");
+        LocalDateTime firstBlockedAt = LocalDateTime.of(2026, 10, 20, 1, 0);
+        user.blockUntil(firstBlockedAt, firstBlockedAt.plusDays(3));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime now = LocalDateTime.of(2026, 10, 27, 1, 0);
+
+        boolean blocked = userService.blockUntil(1L, now, now.plusDays(3));
+
+        assertTrue(blocked);
+        assertEquals(now, user.getBlockedAt());
+        assertEquals(now.plusDays(3), user.getBlockedUntil());
+    }
+
+    @Test
+    void withdrawnUser_blockUntil_returnsFalse() {
+        User user = createActiveUser("회원");
+        user.withdraw();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime now = LocalDateTime.of(2026, 10, 27, 1, 0);
+
+        boolean blocked = userService.blockUntil(1L, now, now.plusDays(3));
+
+        assertFalse(blocked);
+        assertEquals(UserStatus.WITHDRAWN, user.getStatus());
+    }
+
+    @Test
+    void neverBlockedUser_findLastBlockedAt_returnsEmpty() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("회원")));
+
+        assertTrue(userService.findLastBlockedAt(1L).isEmpty());
+    }
+
     private User createOnboardingUser() {
         return new User(42L, "온보딩회원", null, Gender.NONE, null);
     }
