@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget;
 import kr.ktb.zura.needu.friend.dto.response.FriendJoinedNotificationTarget;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendBirthdayTarget;
 import kr.ktb.zura.needu.user.entity.User;
 import kr.ktb.zura.needu.user.repository.UserRepository;
 import kr.ktb.zura.needu.user.type.Gender;
@@ -80,6 +81,37 @@ class FriendRepositoryTest {
         assertThat(friendRepository.findAllBirthdayNotificationTargets(3, 1, false))
                 .extracting(FriendBirthdayNotificationTarget::friendUserId)
                 .containsExactly(marchFirst.getId());
+    }
+
+    @Test
+    void activeFriendsWithBirthdays_findAllActiveFriendBirthdays_returnsProjectedFields() {
+        User birthdayFriend = new User(
+                externalIdSequence.incrementAndGet(),
+                "민지",
+                "https://example.com/profile.png",
+                Gender.NONE,
+                LocalDate.of(2000, 10, 30)
+        );
+        birthdayFriend.completeOnboarding(Gender.NONE, LocalDate.of(2000, 10, 30));
+        birthdayFriend = userRepository.save(birthdayFriend);
+        User noBirthday = saveUser("생일없음", null);
+        User outOfRange = saveUser("범위밖", LocalDate.of(2000, 10, 31));
+        User inactiveFriend = saveUser("탈퇴친구", LocalDate.of(2000, 10, 31));
+        inactiveFriend.withdraw();
+        friendRepository.saveAll(List.of(
+                new Friend(1L, birthdayFriend.getId()),
+                new Friend(1L, noBirthday.getId()),
+                new Friend(1L, outOfRange.getId()),
+                new Friend(1L, inactiveFriend.getId()),
+                new Friend(2L, birthdayFriend.getId())
+        ));
+
+        List<UpcomingFriendBirthdayTarget> targets =
+                friendRepository.findAllActiveFriendBirthdays(1L, List.of(1030));
+
+        assertThat(targets).containsExactly(new UpcomingFriendBirthdayTarget(
+                birthdayFriend.getId(), "민지", "https://example.com/profile.png", LocalDate.of(2000, 10, 30)
+        ));
     }
 
     @Test
