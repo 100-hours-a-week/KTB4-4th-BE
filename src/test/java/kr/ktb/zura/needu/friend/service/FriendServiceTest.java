@@ -1,18 +1,24 @@
 package kr.ktb.zura.needu.friend.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
+import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendBirthdayTarget;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendEventResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
@@ -52,7 +58,43 @@ class FriendServiceTest {
         friendRepository = mock(FriendRepository.class);
         friendSyncRequestRepository = mock(FriendSyncRequestRepository.class);
         userService = mock(UserService.class);
-        friendService = new FriendService(friendRepository, friendSyncRequestRepository, userService);
+        friendService = createService("2026-12-27T00:00:00Z");
+    }
+
+    @Test
+    void birthdaysAroundYearEnd_findAllUpcomingEvents_queriesNextSevenDaysAndOrdersResults() {
+        when(friendRepository.findAllActiveFriendBirthdays(
+                1L, Set.of(1227, 1228, 1229, 1230, 1231, 101, 102, 103))).thenReturn(List.of(
+                upcomingBirthday(3L, "새해", LocalDate.of(2000, 1, 1)),
+                upcomingBirthday(2L, "둘째", LocalDate.of(2000, 12, 29)),
+                upcomingBirthday(1L, "첫째", LocalDate.of(2000, 12, 29))
+        ));
+
+        ItemsResponse<UpcomingFriendEventResponse> response = friendService.findAllUpcomingEvents(1L);
+
+        assertThat(response.items())
+                .extracting(event -> event.friend().userId(), UpcomingFriendEventResponse::eventDate,
+                        UpcomingFriendEventResponse::daysRemaining)
+                .containsExactly(
+                        tuple(1L, LocalDate.of(2026, 12, 29), 2),
+                        tuple(2L, LocalDate.of(2026, 12, 29), 2),
+                        tuple(3L, LocalDate.of(2027, 1, 1), 5)
+                );
+        verify(userService).validateActiveUser(1L);
+    }
+
+    @Test
+    void leapDayBirthdayInCommonYear_findAllUpcomingEvents_usesMarchFirst() {
+        FriendService service = createService("2027-02-25T00:00:00Z");
+        when(friendRepository.findAllActiveFriendBirthdays(
+                1L, Set.of(225, 226, 227, 228, 229, 301, 302, 303, 304))).thenReturn(List.of(
+                upcomingBirthday(2L, "윤일생", LocalDate.of(2000, 2, 29))
+        ));
+
+        UpcomingFriendEventResponse event = service.findAllUpcomingEvents(1L).items().getFirst();
+
+        assertThat(event.eventDate()).isEqualTo(LocalDate.of(2027, 3, 1));
+        assertThat(event.daysRemaining()).isEqualTo(4);
     }
 
     @Test
@@ -358,6 +400,21 @@ class FriendServiceTest {
 
         assertThat(nicknames).isEmpty();
         verify(friendRepository, never()).findAllByOwnerUserIdAndFriendUserIdIn(any(), any());
+    }
+
+    private FriendService createService(String instant) {
+        return new FriendService(
+                friendRepository,
+                friendSyncRequestRepository,
+                userService,
+                Clock.fixed(Instant.parse(instant), ZoneOffset.UTC),
+                7,
+                "Asia/Seoul"
+        );
+    }
+
+    private UpcomingFriendBirthdayTarget upcomingBirthday(Long userId, String nickname, LocalDate birthDate) {
+        return new UpcomingFriendBirthdayTarget(userId, nickname, null, birthDate);
     }
 
     private FriendSummaryResponse friendSummary(Long userId, LocalDate birthDate) {

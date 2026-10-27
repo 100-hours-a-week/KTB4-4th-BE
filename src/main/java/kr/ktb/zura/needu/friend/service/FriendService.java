@@ -1,33 +1,42 @@
 package kr.ktb.zura.needu.friend.service;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Month;
+import java.time.Year;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendBirthdayTarget;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendEventResponse;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.repository.FriendRepository;
 import kr.ktb.zura.needu.friend.repository.FriendSyncRequestRepository;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.service.UserService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class FriendService {
 
@@ -38,6 +47,25 @@ public class FriendService {
     private final FriendRepository friendRepository;
     private final FriendSyncRequestRepository friendSyncRequestRepository;
     private final UserService userService;
+    private final Clock clock;
+    private final int upcomingEventDays;
+    private final ZoneId eventZone;
+
+    public FriendService(
+            FriendRepository friendRepository,
+            FriendSyncRequestRepository friendSyncRequestRepository,
+            UserService userService,
+            Clock clock,
+            @Value("${needu.notification.friend-birthday.reminder-days}") int upcomingEventDays,
+            @Value("${needu.notification.friend-birthday.zone}") String eventZone
+    ) {
+        this.friendRepository = friendRepository;
+        this.friendSyncRequestRepository = friendSyncRequestRepository;
+        this.userService = userService;
+        this.clock = clock;
+        this.upcomingEventDays = upcomingEventDays;
+        this.eventZone = ZoneId.of(eventZone);
+    }
 
     public FriendDetailResponse findFriend(Long ownerUserId, Long friendUserId) {
         userService.validateActiveUser(ownerUserId);
@@ -102,6 +130,45 @@ public class FriendService {
                 isKakaoFriendSynced,
                 totalCount,
                 favoriteTotalCount);
+    }
+
+    public ItemsResponse<UpcomingFriendEventResponse> findAllUpcomingEvents(Long userId) {
+        userService.validateActiveUser(userId);
+        LocalDate today = LocalDate.now(clock.withZone(eventZone));
+        return new ItemsResponse<>(friendRepository.findAllActiveFriendBirthdays(
+                        userId, findUpcomingMonthDays(today)).stream()
+                .map(target -> UpcomingFriendEventResponse.from(target, findNextBirthday(target, today), today))
+                .sorted(Comparator.comparing(UpcomingFriendEventResponse::eventDate)
+                        .thenComparing(event -> event.friend().userId()))
+                .toList());
+    }
+
+    private Set<Integer> findUpcomingMonthDays(LocalDate today) {
+        Set<Integer> monthDays = new HashSet<>();
+        for (int daysRemaining = 0; daysRemaining <= upcomingEventDays; daysRemaining++) {
+            LocalDate date = today.plusDays(daysRemaining);
+            monthDays.add(toMonthDay(date));
+            if (!date.isLeapYear() && date.getMonth() == Month.MARCH && date.getDayOfMonth() == 1) {
+                monthDays.add(229);
+            }
+        }
+        return monthDays;
+    }
+
+    private int toMonthDay(LocalDate date) {
+        return date.getMonthValue() * 100 + date.getDayOfMonth();
+    }
+
+    private LocalDate findNextBirthday(UpcomingFriendBirthdayTarget target, LocalDate today) {
+        LocalDate birthday = birthdayInYear(target.birthDate(), today.getYear());
+        return birthday.isBefore(today) ? birthdayInYear(target.birthDate(), today.getYear() + 1) : birthday;
+    }
+
+    private LocalDate birthdayInYear(LocalDate birthDate, int year) {
+        if (birthDate.getMonth() == Month.FEBRUARY && birthDate.getDayOfMonth() == 29 && !Year.isLeap(year)) {
+            return LocalDate.of(year, Month.MARCH, 1);
+        }
+        return LocalDate.of(year, birthDate.getMonth(), birthDate.getDayOfMonth());
     }
 
     private Friend findFriendRelation(Long ownerUserId, Long friendUserId) {

@@ -123,6 +123,22 @@ class ControllerDocsSpecTest {
     }
 
     @Test
+    void upcomingFriendEvents_documentsResponseAndRateLimit() throws Exception {
+        String operation = "$.paths['/api/v1/friends/upcoming-events'].get";
+        requestSpec()
+                .andExpect(jsonPath(operation + ".responses['200']").exists())
+                .andExpect(jsonPath(operation + ".responses['401']").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json']"
+                        + ".examples.USER_BLOCKED").exists())
+                .andExpect(jsonPath(operation + ".responses['429'].content['application/json']"
+                        + ".examples.COMMON_TOO_MANY_REQUESTS.value.data.retryAfterSeconds").value(60))
+                .andExpect(jsonPath("$.components.schemas.UpcomingFriendEventResponse"
+                        + ".properties.eventType.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.UpcomingFriendEventResponse"
+                        + ".properties.eventDate.format").value("date"));
+    }
+
+    @Test
     void requestObjectWithoutAnnotation_expandsToQueryParametersExceptPrincipal() throws Exception {
         requestSpec()
                 .andExpect(jsonPath("$.paths['/api/v1/users/me/personal-recommendations'].get.parameters[*].name")

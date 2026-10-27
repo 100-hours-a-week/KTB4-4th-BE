@@ -21,6 +21,11 @@ needu:
         path-pattern: /api/v1/friends
         limit: 120
         window: 1m
+      friend-upcoming-events:
+        method: GET
+        path-pattern: /api/v1/friends/upcoming-events
+        limit: 120
+        window: 1m
       friend-detail:
         method: GET
         path-pattern: /api/v1/friends/{userId}

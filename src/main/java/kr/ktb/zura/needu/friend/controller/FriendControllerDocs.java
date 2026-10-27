@@ -21,6 +21,10 @@ public class FriendControllerDocs implements ControllerDocs {
                         .errors(UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_WITHDRAWN,
                                 UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
                         .build(),
+                OperationDoc.of(FriendController.class, "findAllUpcomingEvents")
+                        .errors(UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_WITHDRAWN,
+                                UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
+                        .build(),
                 OperationDoc.of(FriendController.class, "findFriend")
                         .errors(UserErrorCode.USER_NOT_FOUND, UserErrorCode.USER_WITHDRAWN,
                                 UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED)
