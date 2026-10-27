@@ -57,6 +57,10 @@ public class User {
     @Column
     private LocalDateTime blockedAt;
 
+    // 정지 해제 시각. BLOCKED인데 null이면 무기한 정지, 정지가 아니면 항상 null
+    @Column
+    private LocalDateTime blockedUntil;
+
     @Column
     private LocalDateTime lastLoginAt;
 
@@ -103,7 +107,17 @@ public class User {
 
     public void block() {
         this.status = UserStatus.BLOCKED;
-        this.blockedAt = LocalDateTime.now();
+        this.blockedAt = LocalDateTime.now(ZoneOffset.UTC);
+    }
+
+    public void blockUntil(LocalDateTime blockedAt, LocalDateTime blockedUntil) {
+        this.status = UserStatus.BLOCKED;
+        this.blockedAt = blockedAt;
+        this.blockedUntil = blockedUntil;
+    }
+
+    public boolean isBlockedAt(LocalDateTime now) {
+        return status == UserStatus.BLOCKED && (blockedUntil == null || now.isBefore(blockedUntil));
     }
 
     public void withdraw() {
