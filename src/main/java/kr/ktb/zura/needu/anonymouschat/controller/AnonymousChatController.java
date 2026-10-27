@@ -1,8 +1,12 @@
 package kr.ktb.zura.needu.anonymouschat.controller;
 
+import jakarta.validation.Valid;
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
 import kr.ktb.zura.needu.common.response.ApiResponse;
+import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,7 +26,14 @@ public class AnonymousChatController {
     private final AnonymousChatService anonymousChatService;
 
     @GetMapping
-    public void findAllRooms() {
+    public ResponseEntity<CursorApiResponse<AnonymousChatRoomSummaryResponse>> findAllRooms(
+            @AuthenticationPrincipal Long userId,
+            @Valid AnonymousRoomSearchCondition condition
+    ) {
+        return ResponseEntity.ok(CursorApiResponse.of(
+                AnonymousChatResponseMessages.ROOMS_FOUND,
+                anonymousChatService.findAllRooms(userId, condition)
+        ));
     }
 
     @PostMapping("/friends/{userId}")

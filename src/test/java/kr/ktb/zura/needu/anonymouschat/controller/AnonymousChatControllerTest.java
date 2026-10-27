@@ -1,11 +1,19 @@
 package kr.ktb.zura.needu.anonymouschat.controller;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.type.ProductCategory;
 import org.junit.jupiter.api.Test;
@@ -20,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -31,12 +40,61 @@ class AnonymousChatControllerTest {
     private static final Long USER_ID = 100L;
     private static final Long ROOM_ID = 1L;
     private static final String ROOM_URL = "/api/v1/anonymous-chats/{roomId}";
+    private static final String ROOMS_URL = "/api/v1/anonymous-chats";
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private AnonymousChatService anonymousChatService;
+
+    @Test
+    void validCondition_findAllRooms_returnsCursorResponse() throws Exception {
+        AnonymousRoomSearchCondition condition = new AnonymousRoomSearchCondition(
+                AnonymousChatRole.RESPONDER, null, 20);
+        given(anonymousChatService.findAllRooms(USER_ID, condition)).willReturn(new CursorPageResponse<>(
+                List.of(new AnonymousChatRoomSummaryResponse(
+                        3L,
+                        "익명의 수달",
+                        true,
+                        3L,
+                        LocalDateTime.parse("2026-10-24T15:30:00"),
+                        new AnonymousChatLastMessageResponse(
+                                305L, "이 상품 선물로 괜찮을까요?", "OTHER",
+                                OffsetDateTime.parse("2026-10-24T06:30:00Z")),
+                        new AnonymousChatProductResponse(30L, "무선 헤드폰")
+                )),
+                "next-cursor",
+                true
+        ));
+
+        mockMvc.perform(get(ROOMS_URL)
+                        .param("role", "RESPONDER")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("익명대화방 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].roomId").value(3))
+                .andExpect(jsonPath("$.data.items[0].counterpartAlias").value("익명의 수달"))
+                .andExpect(jsonPath("$.data.items[0].unreadMessageCount").value(3))
+                .andExpect(jsonPath("$.data.items[0].lastActiveAt").value("2026-10-24T15:30:00"))
+                .andExpect(jsonPath("$.data.items[0].lastMessage.sender").value("OTHER"))
+                .andExpect(jsonPath("$.data.items[0].product.name").value("무선 헤드폰"))
+                .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
+                .andExpect(jsonPath("$.hasNext").value(true));
+    }
+
+    @Test
+    void invalidRole_findAllRooms_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(ROOMS_URL)
+                        .param("role", "UNKNOWN")
+                        .param("size", "20")
+                        .with(authenticatedUser()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+
+        verifyNoInteractions(anonymousChatService);
+    }
 
     @Test
     void participant_findRoom_returnsRoomDetail() throws Exception {
