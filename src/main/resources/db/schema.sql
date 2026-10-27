@@ -385,6 +385,20 @@ CREATE TABLE IF NOT EXISTS anonymous_messages (
     CONSTRAINT fk_anonymous_messages_room FOREIGN KEY (room_id) REFERENCES anonymous_rooms (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS anonymous_reports (
+    id               BIGINT       NOT NULL AUTO_INCREMENT,
+    reporter_user_id BIGINT       NOT NULL,
+    reported_user_id BIGINT       NOT NULL COMMENT '신고당한 사용자. 대화방의 상대 참여자',
+    room_id          BIGINT       NOT NULL,
+    reason           VARCHAR(20)  NOT NULL COMMENT 'ABUSE, SEXUAL, SPAM, PERSONAL_INFO, OTHER',
+    description      VARCHAR(500) NULL,
+    created_at       DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_anonymous_reports_reporter_room (reporter_user_id, room_id),
+    KEY idx_anonymous_reports_reported_user_id (reported_user_id),
+    CONSTRAINT fk_anonymous_reports_room FOREIGN KEY (room_id) REFERENCES anonymous_rooms (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- product
 -- ---------------------------------------------------------------------------
