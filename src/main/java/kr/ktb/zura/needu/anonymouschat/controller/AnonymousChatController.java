@@ -1,15 +1,11 @@
 package kr.ktb.zura.needu.anonymouschat.controller;
 
 import jakarta.validation.Valid;
-<<<<<<< HEAD
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.request.ReadAnonymousMessagesRequest;
-import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
-=======
-import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
-import kr.ktb.zura.needu.anonymouschat.dto.request.ReadAnonymousMessagesRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
->>>>>>> origin/dev
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
