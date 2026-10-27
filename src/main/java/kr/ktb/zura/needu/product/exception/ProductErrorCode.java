@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ProductErrorCode implements ErrorCode {
 
+    PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
     PRODUCT_GIFT_RECOMMENDATION_FORBIDDEN(HttpStatus.FORBIDDEN, "해당 친구의 추천 상품을 조회할 수 없습니다."),
     PRODUCT_RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "추천 상품을 찾을 수 없습니다."),
     PRODUCT_FEEDBACK_ALREADY_DISLIKED(HttpStatus.CONFLICT, "별로예요를 선택한 상품은 평가를 바꿀 수 없습니다."),

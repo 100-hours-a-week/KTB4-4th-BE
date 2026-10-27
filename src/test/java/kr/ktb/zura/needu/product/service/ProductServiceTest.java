@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.product.service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -81,11 +82,33 @@ class ProductServiceTest {
     }
 
     @Test
-    void missingProduct_findProductSummary_throwsIllegalState() {
+    void missingProduct_findProductSummary_throwsNotFound() {
         given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.findProductSummary(PRODUCT_ID))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void productIds_findAllProductSummaries_returnsSummariesById() {
+        given(productRepository.findAllById(List.of(PRODUCT_ID))).willReturn(List.of(product()));
+
+        Map<Long, ProductSummaryResponse> response = productService.findAllProductSummaries(List.of(PRODUCT_ID));
+
+        assertThat(response).containsOnlyKeys(PRODUCT_ID);
+        assertThat(response.get(PRODUCT_ID).name()).isEqualTo("섬유유연제");
+    }
+
+    @Test
+    void missingProduct_findAllProductSummaries_throwsNotFound() {
+        given(productRepository.findAllById(List.of(PRODUCT_ID))).willReturn(List.of());
+
+        assertThatThrownBy(() -> productService.findAllProductSummaries(List.of(PRODUCT_ID)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND);
     }
 
     @Test

@@ -1,13 +1,26 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
+import kr.ktb.zura.needu.anonymouschat.repository.AnonymousMessageRepository;
+import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomLastMessage;
+import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
+import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.product.type.ProductCategory;
@@ -19,11 +32,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -46,6 +61,9 @@ class AnonymousChatServiceTest {
     private AnonymousRoomRepository anonymousRoomRepository;
 
     @Mock
+    private AnonymousMessageRepository anonymousMessageRepository;
+
+    @Mock
     private UserService userService;
 
     @Mock
@@ -53,6 +71,76 @@ class AnonymousChatServiceTest {
 
     @InjectMocks
     private AnonymousChatService anonymousChatService;
+
+    @Test
+    void asker_findAllRooms_combinesPageDataAndReturnsNextCursor() {
+        LocalDateTime latestAt = LocalDateTime.of(2026, 10, 24, 15, 30);
+        AnonymousRoomListRow first = roomRow(3L, 30L, 300L, "익명의 수달", latestAt);
+        AnonymousRoomListRow second = roomRow(2L, 20L, 200L, "익명의 여우", latestAt.minusHours(1));
+        AnonymousRoomListRow extra = roomRow(1L, 10L, 400L, "익명의 토끼", latestAt.minusHours(2));
+        given(anonymousRoomRepository.findAllAskedByUserId(
+                QUESTIONER_ID, null, null, Limit.of(3))).willReturn(List.of(first, second, extra));
+        given(anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(3L, 2L)))
+                .willReturn(List.of(new AnonymousRoomLastMessage(
+                        3L, 305L, "이 상품 선물로 괜찮을까요?", 300L, latestAt)));
+        given(anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(3L, 2L), QUESTIONER_ID))
+                .willReturn(List.of(new AnonymousRoomUnreadCount(3L, 3L)));
+        given(productService.findAllProductSummaries(Set.of(30L, 20L))).willReturn(Map.of(
+                30L, product(30L, "무선 헤드폰"),
+                20L, product(20L, "니트 가디건")));
+        given(userService.findAllActiveUsersByIds(Set.of(300L, 200L))).willReturn(List.of(
+                user(300L, "수달"), user(200L, "여우")));
+
+        CursorPageResponse<AnonymousChatRoomSummaryResponse> response = anonymousChatService.findAllRooms(
+                QUESTIONER_ID, new AnonymousRoomSearchCondition(AnonymousChatRole.ASKER, null, 2));
+
+        assertThat(response.hasNext()).isTrue();
+        assertThat(AnonymousRoomCursor.decode(response.nextCursor()))
+                .isEqualTo(AnonymousRoomCursor.from(second));
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().getFirst().counterpartAlias()).isEqualTo("수달");
+        assertThat(response.items().getFirst().hasUnreadMessage()).isTrue();
+        assertThat(response.items().getFirst().unreadMessageCount()).isEqualTo(3L);
+        assertThat(response.items().getFirst().lastActiveAt()).isEqualTo(latestAt);
+        assertThat(response.items().getFirst().lastMessage().sender()).isEqualTo("OTHER");
+        assertThat(response.items().getFirst().lastMessage().sentAt())
+                .isEqualTo(latestAt.atOffset(ZoneOffset.UTC));
+        assertThat(response.items().getFirst().product().name()).isEqualTo("무선 헤드폰");
+        assertThat(response.items().get(1).lastMessage()).isNull();
+    }
+
+    @Test
+    void responder_findAllRooms_usesQuestionerAliasWithoutLoadingUsers() {
+        LocalDateTime activityAt = LocalDateTime.of(2026, 10, 24, 15, 30);
+        AnonymousRoomListRow room = roomRow(1L, PRODUCT_ID, RECIPIENT_ID, QUESTIONER_ALIAS, activityAt);
+        given(anonymousRoomRepository.findAllReceivedByUserId(
+                RECIPIENT_ID, null, null, Limit.of(21))).willReturn(List.of(room));
+        given(anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(ROOM_ID))).willReturn(List.of());
+        given(anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(ROOM_ID), RECIPIENT_ID))
+                .willReturn(List.of());
+        given(productService.findAllProductSummaries(Set.of(PRODUCT_ID))).willReturn(Map.of(PRODUCT_ID, PRODUCT));
+
+        CursorPageResponse<AnonymousChatRoomSummaryResponse> response = anonymousChatService.findAllRooms(
+                RECIPIENT_ID, new AnonymousRoomSearchCondition(AnonymousChatRole.RESPONDER, null, 20));
+
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.nextCursor()).isNull();
+        assertThat(response.items().getFirst().counterpartAlias()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(response.items().getFirst().hasUnreadMessage()).isFalse();
+        verify(userService, never()).findAllActiveUsersByIds(anyCollection());
+    }
+
+    @Test
+    void noRooms_findAllRooms_returnsEmptyPageWithoutLoadingRelatedData() {
+        given(anonymousRoomRepository.findAllAskedByUserId(
+                QUESTIONER_ID, null, null, Limit.of(21))).willReturn(List.of());
+
+        CursorPageResponse<AnonymousChatRoomSummaryResponse> response = anonymousChatService.findAllRooms(
+                QUESTIONER_ID, new AnonymousRoomSearchCondition(AnonymousChatRole.ASKER, null, 20));
+
+        assertThat(response).isEqualTo(new CursorPageResponse<>(List.of(), null, false));
+        verifyNoInteractions(anonymousMessageRepository, productService);
+    }
 
     @Test
     void questioner_findRoom_returnsRecipientNicknameAndProduct() {
@@ -138,5 +226,18 @@ class AnonymousChatServiceTest {
     private UserDetailResponse recipient() {
         return new UserDetailResponse(RECIPIENT_ID, "지호", "https://image.test/profile.png", true,
                 LocalDate.of(2000, 1, 1));
+    }
+
+    private AnonymousRoomListRow roomRow(
+            Long roomId, Long productId, Long recipientUserId, String alias, LocalDateTime lastActivityAt) {
+        return new AnonymousRoomListRow(roomId, productId, recipientUserId, alias, lastActivityAt);
+    }
+
+    private ProductSummaryResponse product(Long productId, String name) {
+        return new ProductSummaryResponse(productId, name, null, ProductCategory.DIGITAL, null);
+    }
+
+    private UserDetailResponse user(Long userId, String nickname) {
+        return new UserDetailResponse(userId, nickname, null, true, LocalDate.of(2000, 1, 1));
     }
 }
