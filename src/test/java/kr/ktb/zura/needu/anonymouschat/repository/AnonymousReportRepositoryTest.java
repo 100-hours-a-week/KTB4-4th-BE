@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.anonymouschat.repository;
 
+import java.time.LocalDateTime;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousReport;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousReportReason;
@@ -71,6 +72,28 @@ class AnonymousReportRepositoryTest {
         assertThatThrownBy(() -> anonymousReportRepository.saveAndFlush(
                 new AnonymousReport(REPORTER_ID, room, AnonymousReportReason.ABUSE, null)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void reportsBeforeAndAfterBlock_countByReportedUserIdAndCreatedAtAfter_countsOnlyLaterReports() {
+        LocalDateTime lastBlockedAt = LocalDateTime.of(2026, 10, 20, 0, 0);
+        persistReportAt(lastBlockedAt.minusDays(1));
+        persistReportAt(lastBlockedAt.plusDays(1));
+        persistReportAt(lastBlockedAt.plusDays(2));
+
+        assertThat(anonymousReportRepository.countByReportedUserId(1L)).isEqualTo(3);
+        assertThat(anonymousReportRepository.countByReportedUserIdAndCreatedAtAfter(1L, lastBlockedAt))
+                .isEqualTo(2);
+    }
+
+    private void persistReportAt(LocalDateTime createdAt) {
+        AnonymousReport report = anonymousReportRepository.saveAndFlush(
+                new AnonymousReport(REPORTER_ID, persistRoom(), AnonymousReportReason.SPAM, null));
+        entityManager.getEntityManager()
+                .createQuery("update AnonymousReport report set report.createdAt = :createdAt where report.id = :id")
+                .setParameter("createdAt", createdAt)
+                .setParameter("id", report.getId())
+                .executeUpdate();
     }
 
     private AnonymousRoom persistRoom() {
