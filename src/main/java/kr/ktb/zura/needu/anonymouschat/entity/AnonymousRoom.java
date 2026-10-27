@@ -19,8 +19,10 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(name = "anonymous_rooms",
         indexes = {
-                @Index(name = "idx_anonymous_rooms_questioner_user_id", columnList = "questioner_user_id"),
-                @Index(name = "idx_anonymous_rooms_recipient_user_id", columnList = "recipient_user_id")
+                @Index(name = "idx_anonymous_rooms_questioner_activity",
+                        columnList = "questioner_user_id, last_activity_at DESC, id DESC"),
+                @Index(name = "idx_anonymous_rooms_recipient_activity",
+                        columnList = "recipient_user_id, last_activity_at DESC, id DESC")
         },
         check = @CheckConstraint(name = "ck_anonymous_rooms_distinct_users",
                 constraint = "questioner_user_id <> recipient_user_id")
@@ -45,6 +47,10 @@ public class AnonymousRoom {
 
     @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
     private String questionerAlias;
+
+    @CreationTimestamp
+    @Column(nullable = false)
+    private LocalDateTime lastActivityAt;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

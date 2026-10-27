@@ -1,7 +1,59 @@
 package kr.ktb.zura.needu.anonymouschat.repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Long> {
+
+    @Query("""
+            select new kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow(
+                room.id, room.productId, room.recipientUserId, room.questionerAlias, room.lastActivityAt)
+            from AnonymousRoom room
+            where room.questionerUserId = :userId
+              and (:cursorActivityAt is null
+                or room.lastActivityAt < :cursorActivityAt
+                or (room.lastActivityAt = :cursorActivityAt and room.id < :cursorRoomId))
+            order by room.lastActivityAt desc, room.id desc
+            """)
+    List<AnonymousRoomListRow> findAllAskedByUserId(
+            @Param("userId") Long userId,
+            @Param("cursorActivityAt") LocalDateTime cursorActivityAt,
+            @Param("cursorRoomId") Long cursorRoomId,
+            Limit limit
+    );
+
+    @Query("""
+            select new kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow(
+                room.id, room.productId, room.recipientUserId, room.questionerAlias, room.lastActivityAt)
+            from AnonymousRoom room
+            where room.recipientUserId = :userId
+              and (:cursorActivityAt is null
+                or room.lastActivityAt < :cursorActivityAt
+                or (room.lastActivityAt = :cursorActivityAt and room.id < :cursorRoomId))
+            order by room.lastActivityAt desc, room.id desc
+            """)
+    List<AnonymousRoomListRow> findAllReceivedByUserId(
+            @Param("userId") Long userId,
+            @Param("cursorActivityAt") LocalDateTime cursorActivityAt,
+            @Param("cursorRoomId") Long cursorRoomId,
+            Limit limit
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update AnonymousRoom room
+            set room.lastActivityAt = :activityAt
+            where room.id = :roomId
+              and room.lastActivityAt < :activityAt
+            """)
+    int updateLastActivityAt(
+            @Param("roomId") Long roomId,
+            @Param("activityAt") LocalDateTime activityAt
+    );
 }
