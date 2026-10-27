@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductDetailResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductRecommendationResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.ProductFeedback;
@@ -14,6 +15,7 @@ import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.ProductFeedbackRepository;
+import kr.ktb.zura.needu.product.repository.ProductRepository;
 import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.product.type.ProductFeedbackType;
@@ -32,6 +34,13 @@ public class ProductService {
     private final PersonalProductRepository personalProductRepository;
     private final GiftProductRepository giftProductRepository;
     private final ProductFeedbackRepository productFeedbackRepository;
+    private final ProductRepository productRepository;
+
+    public ProductSummaryResponse findProductSummary(Long productId) {
+        return productRepository.findById(productId)
+                .map(ProductSummaryResponse::from)
+                .orElseThrow(() -> new IllegalStateException("Product not found. productId=" + productId));
+    }
 
     public List<ProductCategoryResponse> findAllCategories() {
         return Arrays.stream(ProductCategory.values())

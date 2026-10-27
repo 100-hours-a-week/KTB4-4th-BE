@@ -10,6 +10,7 @@ import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductDetailResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductRecommendationResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
@@ -18,6 +19,7 @@ import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.ProductFeedbackRepository;
+import kr.ktb.zura.needu.product.repository.ProductRepository;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductContext;
@@ -59,8 +61,32 @@ class ProductServiceTest {
     @Mock
     private ProductFeedbackRepository productFeedbackRepository;
 
+    @Mock
+    private ProductRepository productRepository;
+
     @InjectMocks
     private ProductService productService;
+
+    @Test
+    void existingProduct_findProductSummary_returnsSummaryWithLongPrice() {
+        given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product()));
+
+        ProductSummaryResponse response = productService.findProductSummary(PRODUCT_ID);
+
+        assertThat(response.productId()).isEqualTo(PRODUCT_ID);
+        assertThat(response.name()).isEqualTo("섬유유연제");
+        assertThat(response.price()).isEqualTo(16500L);
+        assertThat(response.category()).isEqualTo(ProductCategory.LIVING);
+        assertThat(response.imageUrl()).isEqualTo("https://image.test/product.png");
+    }
+
+    @Test
+    void missingProduct_findProductSummary_throwsIllegalState() {
+        given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.findProductSummary(PRODUCT_ID))
+                .isInstanceOf(IllegalStateException.class);
+    }
 
     @Test
     void categoriesDefined_findAllCategories_returnsAllInTabOrder() {
