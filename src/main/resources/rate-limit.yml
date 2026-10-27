@@ -231,3 +231,8 @@ needu:
         path-pattern: /api/v1/anonymous-chats/{roomId}/reports
         limit: 30
         window: 1m
+      anonymous-chat-websocket-connect:
+        method: GET
+        path-pattern: /ws/v1/anonymous-chats
+        limit: 20
+        window: 1m
