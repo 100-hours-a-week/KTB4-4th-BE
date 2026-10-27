@@ -101,9 +101,12 @@ class CalendarEventQueryServiceTest {
         LocalDate date = LocalDate.of(2026, 12, 31);
         LocalDateTime dayStart = LocalDateTime.of(2026, 12, 30, 15, 0);
         LocalDateTime nextDayStart = LocalDateTime.of(2026, 12, 31, 15, 0);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 12, 1, 9, 0);
         var events = List.of(
-                new DailyCalendarEventResponse(123L, "생일 선물 준비", CalendarEventColor.ORANGE),
-                new DailyCalendarEventResponse(124L, "저녁 약속", CalendarEventColor.BLUE));
+                new DailyCalendarEventResponse(123L, "생일 선물 준비", dayStart, dayStart.plusHours(1), createdAt,
+                        CalendarEventColor.ORANGE),
+                new DailyCalendarEventResponse(124L, "저녁 약속", dayStart.plusHours(10), dayStart.plusHours(12),
+                        createdAt, CalendarEventColor.BLUE));
         given(calendarEventRepository.findAllDailyCalendarEvents(1L, dayStart, nextDayStart)).willReturn(events);
 
         assertThat(calendarEventQueryService.findAllDailyCalendarEvents(1L, date)).isSameAs(events);
