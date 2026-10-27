@@ -216,3 +216,8 @@ needu:
         path-pattern: /api/v1/calendar/events/{eventId}
         limit: 30
         window: 1m
+      anonymous-chat-room:
+        method: GET
+        path-pattern: /api/v1/anonymous-chats/{roomId}
+        limit: 120
+        window: 1m
