@@ -32,13 +32,13 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 
     @Query("""
             select new kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse(
-                e.id, e.title, e.color
+                e.id, e.title, e.startAt, e.endAt, e.createdAt, e.color
             )
             from CalendarEvent e
             where e.userId = :userId
               and e.startAt < :nextDayStart
               and e.endAt >= :dayStart
-            order by e.startAt, e.id
+            order by e.createdAt DESC, e.id DESC
             """)
     List<DailyCalendarEventResponse> findAllDailyCalendarEvents(
             @Param("userId") Long userId,
