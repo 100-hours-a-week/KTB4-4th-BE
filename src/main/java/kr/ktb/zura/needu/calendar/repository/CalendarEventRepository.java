@@ -17,13 +17,13 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 
     @Query("""
             select new kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse(
-                e.id, e.startAt, e.endAt, e.color
+                e.id, e.createdAt ,e.startAt, e.endAt, e.color
             )
             from CalendarEvent e
             where e.userId = :userId
               and e.startAt < :nextMonthStart
               and e.endAt >= :monthStart
-            order by e.startAt, e.id
+            order by e.createdAt desc, e.id desc
             """)
     List<CalendarEventIndicatorResponse> findMonthlyEventIndicators(
             @Param("userId") Long userId,

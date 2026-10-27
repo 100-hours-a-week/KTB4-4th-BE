@@ -34,6 +34,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @ExtendWith(MockitoExtension.class)
 class CalendarEventQueryServiceTest {
 
+    private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 10, 1, 9, 0);
+
     @Mock
     private CalendarEventRepository calendarEventRepository;
 
@@ -46,7 +48,7 @@ class CalendarEventQueryServiceTest {
     @Test
     void overlappingEvents_groupsByDateIncludingEndDate() {
         var orange = indicator(123L, "2026-10-30", "2026-10-31");
-        var blue = new CalendarEventIndicatorResponse(124L, LocalDate.parse("2026-10-31"),
+        var blue = new CalendarEventIndicatorResponse(124L, CREATED_AT, LocalDate.parse("2026-10-31"),
                 LocalDate.parse("2026-10-31"), CalendarEventColor.BLUE);
         givenEvents(YearMonth.of(2026, 10), List.of(orange, blue));
 
@@ -171,7 +173,7 @@ class CalendarEventQueryServiceTest {
     }
 
     private CalendarEventIndicatorResponse indicator(Long id, String start, String end) {
-        return new CalendarEventIndicatorResponse(id, LocalDate.parse(start), LocalDate.parse(end),
+        return new CalendarEventIndicatorResponse(id, CREATED_AT, LocalDate.parse(start), LocalDate.parse(end),
                 CalendarEventColor.ORANGE);
     }
 }
