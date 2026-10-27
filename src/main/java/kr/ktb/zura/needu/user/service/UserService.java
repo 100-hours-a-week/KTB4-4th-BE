@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -43,12 +44,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserTasteProfileRepository userTasteProfileRepository;
     private final JsonMapper jsonMapper;
+    private final Clock clock;
 
     @Transactional
     public UserResponse findOrCreateKakaoUser(Long kakaoId, String nickname, String profileImageUrl) {
         User user = userRepository.findByExternalId(kakaoId)
                 .orElseGet(() -> userRepository.save(new User(
                         kakaoId, normalizeNickname(nickname), profileImageUrl, Gender.NONE, null)));
+        user.releaseExpiredBlock(LocalDateTime.now(clock));
         validateLoginAvailableUser(user);
         user.recordLogin();
 

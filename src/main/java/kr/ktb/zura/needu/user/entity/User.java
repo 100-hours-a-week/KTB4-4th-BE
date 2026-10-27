@@ -120,6 +120,14 @@ public class User {
         return status == UserStatus.BLOCKED && (blockedUntil == null || now.isBefore(blockedUntil));
     }
 
+    public void releaseExpiredBlock(LocalDateTime now) {
+        if (status != UserStatus.BLOCKED || isBlockedAt(now)) {
+            return;
+        }
+        this.status = onboardingCompleted ? UserStatus.ACTIVE : UserStatus.ONBOARDING;
+        this.blockedUntil = null;
+    }
+
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
         this.deletedAt = LocalDateTime.now(ZoneOffset.UTC);
