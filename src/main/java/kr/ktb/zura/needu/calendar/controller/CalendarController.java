@@ -1,10 +1,14 @@
 package kr.ktb.zura.needu.calendar.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import kr.ktb.zura.needu.calendar.dto.request.CreateCalendarEventRequest;
 import kr.ktb.zura.needu.calendar.dto.request.UpdateCalendarEventRequest;
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventResponse;
+import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.dto.response.MonthlyCalendarEventResponse;
 import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.calendar.service.CalendarEventCommandService;
@@ -66,7 +70,14 @@ public class CalendarController {
     }
 
     @GetMapping("/{eventId}")
-    public void findCalendarEvent() {
+    public ResponseEntity<ApiResponse<CalendarEventDetailResponse>> findCalendarEvent(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable @Positive Long eventId
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                CalendarResponseMessages.CALENDAR_EVENT_FOUND,
+                calendarEventQueryService.findCalendarEvent(userId, eventId)
+        ));
     }
 
     @GetMapping
@@ -81,6 +92,13 @@ public class CalendarController {
     }
 
     @GetMapping("/daily")
-    public void findAllDailyCalendarEvents() {
+    public ResponseEntity<ApiResponse<ItemsResponse<DailyCalendarEventResponse>>> findAllDailyCalendarEvents(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                CalendarResponseMessages.CALENDAR_EVENTS_FOUND,
+                new ItemsResponse<>(calendarEventQueryService.findAllDailyCalendarEvents(userId, date))
+        ));
     }
 }
