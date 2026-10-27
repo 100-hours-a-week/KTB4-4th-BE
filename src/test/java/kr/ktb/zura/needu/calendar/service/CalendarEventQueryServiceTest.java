@@ -136,7 +136,8 @@ class CalendarEventQueryServiceTest {
     @Test
     void findCalendarEvent_validatesUserAndReturnsDetailProjection() {
         var detail = new CalendarEventDetailResponse(123L, "일정", null,
-                LocalDate.of(2026, 10, 30), LocalDate.of(2026, 10, 31), false, true, CalendarEventColor.ORANGE);
+                LocalDateTime.of(2026, 10, 30, 1, 0), LocalDateTime.of(2026, 10, 30, 2, 0), false, true,
+                CalendarEventColor.ORANGE);
         given(calendarEventRepository.findCalendarEventDetail(1L, 123L)).willReturn(Optional.of(detail));
 
         assertThat(calendarEventQueryService.findCalendarEvent(1L, 123L)).isSameAs(detail);

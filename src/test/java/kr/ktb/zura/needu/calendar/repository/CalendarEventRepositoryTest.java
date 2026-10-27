@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.calendar.repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
@@ -105,12 +106,13 @@ class CalendarEventRepositoryTest {
     }
 
     @Test
-    void seoulMidnightBoundaries_applyToDetailDates() {
+    void seoulMidnightBoundaries_detailReturnsStoredUtcTimesWithOffset() {
         var event = saveEvent(1L, "2026-09-30T15:00", "2026-10-01T14:59:59");
 
+        // 서울 10월 1일 하루 일정을 UTC 시각 그대로 오프셋만 붙여 내려준다
         assertThat(calendarEventRepository.findCalendarEventDetail(1L, event.getId())).hasValueSatisfying(detail -> {
-            assertThat(detail.startDate()).isEqualTo(LocalDate.of(2026, 10, 1));
-            assertThat(detail.endDate()).isEqualTo(LocalDate.of(2026, 10, 1));
+            assertThat(detail.startAt()).isEqualTo(OffsetDateTime.parse("2026-09-30T15:00Z"));
+            assertThat(detail.endAt()).isEqualTo(OffsetDateTime.parse("2026-10-01T14:59:59Z"));
         });
     }
 
@@ -123,7 +125,8 @@ class CalendarEventRepositoryTest {
 
         assertThat(calendarEventRepository.findCalendarEventDetail(1L, event.getId()))
                 .contains(new CalendarEventDetailResponse(event.getId(), "일정", "선물 구매",
-                        LocalDate.of(2026, 10, 30), LocalDate.of(2026, 11, 1), true, false, CalendarEventColor.ORANGE));
+                        OffsetDateTime.parse("2026-10-30T12:00Z"), OffsetDateTime.parse("2026-10-31T18:00Z"), true, false,
+                        CalendarEventColor.ORANGE));
         assertThat(calendarEventRepository.findCalendarEventDetail(2L, event.getId())).isEmpty();
         assertThat(calendarEventRepository.findCalendarEventDetail(1L, Long.MAX_VALUE)).isEmpty();
     }

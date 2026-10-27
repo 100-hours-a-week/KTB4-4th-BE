@@ -78,7 +78,7 @@ class ControllerDocsSpecTest {
                 .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.eventId.type").value("integer"))
                 .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.isAllDay.type").value("boolean"))
                 .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.isNotificationEnabled.type").value("boolean"))
-                .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.startDate.format").value("date"));
+                .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.startAt.format").value("date-time"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.calendar.controller;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -369,7 +370,8 @@ class CalendarControllerTest {
     void findCalendarEvent_returnsDetailInCommonResponse() throws Exception {
         given(calendarEventQueryService.findCalendarEvent(1L, 123L))
                 .willReturn(new CalendarEventDetailResponse(123L, "생일 선물 준비", "선물 구매",
-                        LocalDate.of(2026, 10, 30), LocalDate.of(2026, 10, 31), false, true, CalendarEventColor.ORANGE));
+                        LocalDateTime.of(2026, 10, 30, 1, 0), LocalDateTime.of(2026, 10, 30, 2, 0), false, true,
+                        CalendarEventColor.ORANGE));
 
         mockMvc.perform(get(URL + "/123")
                         .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
@@ -378,8 +380,8 @@ class CalendarControllerTest {
                 .andExpect(jsonPath("$.data.eventId").value(123))
                 .andExpect(jsonPath("$.data.title").value("생일 선물 준비"))
                 .andExpect(jsonPath("$.data.description").value("선물 구매"))
-                .andExpect(jsonPath("$.data.startDate").value("2026-10-30"))
-                .andExpect(jsonPath("$.data.endDate").value("2026-10-31"))
+                .andExpect(jsonPath("$.data.startAt").value("2026-10-30T01:00:00Z"))
+                .andExpect(jsonPath("$.data.endAt").value("2026-10-30T02:00:00Z"))
                 .andExpect(jsonPath("$.data.isAllDay").value(false))
                 .andExpect(jsonPath("$.data.isNotificationEnabled").value(true))
                 .andExpect(jsonPath("$.data.color").value("ORANGE"));
