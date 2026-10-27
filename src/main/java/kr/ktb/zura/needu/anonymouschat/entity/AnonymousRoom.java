@@ -46,6 +46,10 @@ public class AnonymousRoom {
     @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
     private String questionerAlias;
 
+    private Long questionerLastReadMessageId;
+
+    private Long recipientLastReadMessageId;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
