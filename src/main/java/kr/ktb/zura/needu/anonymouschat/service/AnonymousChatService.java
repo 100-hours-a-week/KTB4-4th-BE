@@ -46,7 +46,7 @@ public class AnonymousChatService {
     public void leaveRoom() {
     }
 
-    private AnonymousRoom findParticipatingRoom(Long userId, Long roomId) {
+    public AnonymousRoom findParticipatingRoom(Long userId, Long roomId) {
         AnonymousRoom room = anonymousRoomRepository.findById(roomId)
                 .orElseThrow(() -> new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND));
         if (!room.isParticipant(userId)) {
