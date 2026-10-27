@@ -2,14 +2,18 @@ package kr.ktb.zura.needu.anonymouschat.controller;
 
 import jakarta.validation.Valid;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.request.ReadAnonymousMessagesRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
+import kr.ktb.zura.needu.anonymouschat.service.AnonymousReportService;
 import kr.ktb.zura.needu.common.response.ApiResponse;
 import kr.ktb.zura.needu.common.response.CursorApiResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +32,7 @@ public class AnonymousChatController {
 
     private final AnonymousChatService anonymousChatService;
     private final AnonymousMessageService anonymousMessageService;
+    private final AnonymousReportService anonymousReportService;
 
     @GetMapping
     public ResponseEntity<CursorApiResponse<AnonymousChatRoomSummaryResponse>> findAllRooms(
@@ -70,7 +75,15 @@ public class AnonymousChatController {
     }
 
     @PostMapping("/{roomId}/reports")
-    public void reportChat() {
+    public ResponseEntity<ApiResponse<AnonymousReportResponse>> reportChat(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long roomId,
+            @RequestBody @Valid CreateAnonymousReportRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(
+                AnonymousChatResponseMessages.REPORT_CREATED,
+                anonymousReportService.reportRoom(userId, roomId, request)
+        ));
     }
 
     @PutMapping("/{roomId}/leave")

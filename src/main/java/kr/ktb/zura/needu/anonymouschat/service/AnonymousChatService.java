@@ -97,9 +97,6 @@ public class AnonymousChatService {
         );
     }
 
-    public void reportChat() {
-    }
-
     public void leaveRoom() {
     }
 

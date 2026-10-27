@@ -56,6 +56,7 @@ public class AnonymousChatControllerDocs implements ControllerDocs {
                         .build(),
                 OperationDoc.of(AnonymousChatController.class, "reportChat")
                         .successStatus(HttpStatus.CREATED)
+                        .errors(ACTIVE_USER_ERRORS)
                         .errors(ROOM_ERRORS)
                         .errors(AnonymousChatErrorCode.ANONYMOUS_CHAT_REPORT_DUPLICATED,
                                 CommonErrorCode.COMMON_INVALID_REQUEST, CommonErrorCode.COMMON_INVALID_INPUT)

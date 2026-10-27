@@ -2,17 +2,22 @@ package kr.ktb.zura.needu.anonymouschat.controller;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
+import kr.ktb.zura.needu.anonymouschat.service.AnonymousReportService;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousReportReason;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
@@ -28,6 +33,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -38,6 +44,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +58,12 @@ class AnonymousChatControllerTest {
     private static final String ROOM_URL = "/api/v1/anonymous-chats/{roomId}";
     private static final String ROOMS_URL = "/api/v1/anonymous-chats";
     private static final String READ_URL = "/api/v1/anonymous-chats/{roomId}/read";
+    private static final String REPORT_URL = "/api/v1/anonymous-chats/{roomId}/reports";
+    private static final String REPORT_BODY = """
+            {"reason": "ABUSE", "description": "욕설을 보냈습니다."}
+            """;
+    private static final CreateAnonymousReportRequest REPORT_REQUEST =
+            new CreateAnonymousReportRequest(AnonymousReportReason.ABUSE, "욕설을 보냈습니다.");
 
     @Autowired
     private MockMvc mockMvc;
@@ -60,6 +73,9 @@ class AnonymousChatControllerTest {
 
     @MockitoBean
     private AnonymousMessageService anonymousMessageService;
+
+    @MockitoBean
+    private AnonymousReportService anonymousReportService;
 
     @Test
     void validCondition_findAllRooms_returnsCursorResponse() throws Exception {
@@ -219,8 +235,96 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.message").value("해당 익명대화에 접근할 수 없습니다."));
     }
 
+    @Test
+    void validRequest_reportChat_returnsCreated() throws Exception {
+        given(anonymousReportService.reportRoom(USER_ID, ROOM_ID, REPORT_REQUEST)).willReturn(
+                new AnonymousReportResponse(31L, OffsetDateTime.of(2026, 10, 27, 1, 5, 0, 0, ZoneOffset.UTC)));
+
+        mockMvc.perform(postReport(REPORT_BODY))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("익명대화를 신고했습니다."))
+                .andExpect(jsonPath("$.data.reportId").value(31))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-27T01:05:00Z"));
+    }
+
+    @Test
+    void descriptionMissing_reportChat_returnsCreated() throws Exception {
+        mockMvc.perform(postReport("{\"reason\": \"SPAM\"}"))
+                .andExpect(status().isCreated());
+
+        verify(anonymousReportService).reportRoom(USER_ID, ROOM_ID,
+                new CreateAnonymousReportRequest(AnonymousReportReason.SPAM, null));
+    }
+
+    @Test
+    void reasonMissing_reportChat_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(postReport("{\"description\": \"욕설을 보냈습니다.\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(anonymousReportService, never()).reportRoom(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void descriptionTooLong_reportChat_returnsUnprocessableContent() throws Exception {
+        String description = "가".repeat(501);
+
+        mockMvc.perform(postReport("{\"reason\": \"ABUSE\", \"description\": \""
+                        + description + "\"}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(anonymousReportService, never()).reportRoom(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void unsupportedReason_reportChat_returnsBadRequest() throws Exception {
+        mockMvc.perform(postReport("{\"reason\": \"UNKNOWN\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
+
+        verify(anonymousReportService, never()).reportRoom(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void csrfMissing_reportChat_returnsForbidden() throws Exception {
+        mockMvc.perform(post(REPORT_URL, ROOM_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REPORT_BODY)
+                        .with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(anonymousReportService, never()).reportRoom(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void nonParticipant_reportChat_returnsForbidden() throws Exception {
+        given(anonymousReportService.reportRoom(USER_ID, ROOM_ID, REPORT_REQUEST))
+                .willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN));
+
+        mockMvc.perform(postReport(REPORT_BODY))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 익명대화에 접근할 수 없습니다."));
+    }
+
+    @Test
+    void alreadyReported_reportChat_returnsConflict() throws Exception {
+        given(anonymousReportService.reportRoom(USER_ID, ROOM_ID, REPORT_REQUEST))
+                .willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_REPORT_DUPLICATED));
+
+        mockMvc.perform(postReport(REPORT_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("이미 신고한 익명대화입니다."));
+    }
+
     private static MockHttpServletRequestBuilder patchRead(String body) {
         return patch(READ_URL, ROOM_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(authenticatedUser())
+                .with(csrf());
+    }
+
+    private static MockHttpServletRequestBuilder postReport(String body) {
+        return post(REPORT_URL, ROOM_ID)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .with(authenticatedUser())
