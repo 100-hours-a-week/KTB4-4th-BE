@@ -360,14 +360,15 @@ CREATE TABLE IF NOT EXISTS anonymous_rooms (
     questioner_user_id BIGINT      NOT NULL,
     recipient_user_id  BIGINT      NOT NULL,
     questioner_alias   VARCHAR(20) NOT NULL COMMENT '질문받은 사용자에게 보여주는 질문자 익명 별칭',
+    last_activity_at   DATETIME(6) NOT NULL,
     questioner_last_read_message_id BIGINT NULL COMMENT '질문자가 마지막으로 읽은 메시지 ID',
     recipient_last_read_message_id  BIGINT NULL COMMENT '응답자가 마지막으로 읽은 메시지 ID',
     created_at         DATETIME(6) NOT NULL,
     opened_at          DATETIME(6) NULL COMMENT '질문받은 사용자의 최초 방 확인 시각',
     expires_at         DATETIME(6) NULL,
     PRIMARY KEY (id),
-    KEY idx_anonymous_rooms_questioner_user_id (questioner_user_id),
-    KEY idx_anonymous_rooms_recipient_user_id (recipient_user_id),
+    KEY idx_anonymous_rooms_questioner_activity (questioner_user_id, last_activity_at DESC, id DESC),
+    KEY idx_anonymous_rooms_recipient_activity (recipient_user_id, last_activity_at DESC, id DESC),
     CONSTRAINT ck_anonymous_rooms_distinct_users CHECK (questioner_user_id <> recipient_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
@@ -384,6 +385,60 @@ CREATE TABLE IF NOT EXISTS anonymous_messages (
     KEY idx_anonymous_messages_room_id_id (room_id, id),
     CONSTRAINT fk_anonymous_messages_room FOREIGN KEY (room_id) REFERENCES anonymous_rooms (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_anonymous_room_last_activity_at = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN last_activity_at DATETIME(6) NULL AFTER questioner_alias',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'last_activity_at'
+);
+PREPARE add_anonymous_room_last_activity_at_statement FROM @add_anonymous_room_last_activity_at;
+EXECUTE add_anonymous_room_last_activity_at_statement;
+DEALLOCATE PREPARE add_anonymous_room_last_activity_at_statement;
+
+UPDATE anonymous_rooms room
+LEFT JOIN (
+    SELECT room_id, MAX(created_at) AS last_message_at
+    FROM anonymous_messages
+    WHERE deleted_at IS NULL
+    GROUP BY room_id
+) message ON message.room_id = room.id
+SET room.last_activity_at = COALESCE(message.last_message_at, room.created_at)
+WHERE room.last_activity_at IS NULL;
+
+ALTER TABLE anonymous_rooms
+    MODIFY COLUMN last_activity_at DATETIME(6) NOT NULL;
+
+SET @add_anonymous_room_questioner_activity_index = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD INDEX idx_anonymous_rooms_questioner_activity (questioner_user_id, last_activity_at DESC, id DESC)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND index_name = 'idx_anonymous_rooms_questioner_activity'
+);
+PREPARE add_anonymous_room_questioner_activity_index_statement
+    FROM @add_anonymous_room_questioner_activity_index;
+EXECUTE add_anonymous_room_questioner_activity_index_statement;
+DEALLOCATE PREPARE add_anonymous_room_questioner_activity_index_statement;
+
+SET @add_anonymous_room_recipient_activity_index = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD INDEX idx_anonymous_rooms_recipient_activity (recipient_user_id, last_activity_at DESC, id DESC)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND index_name = 'idx_anonymous_rooms_recipient_activity'
+);
+PREPARE add_anonymous_room_recipient_activity_index_statement
+    FROM @add_anonymous_room_recipient_activity_index;
+EXECUTE add_anonymous_room_recipient_activity_index_statement;
+DEALLOCATE PREPARE add_anonymous_room_recipient_activity_index_statement;
 
 -- ---------------------------------------------------------------------------
 -- product

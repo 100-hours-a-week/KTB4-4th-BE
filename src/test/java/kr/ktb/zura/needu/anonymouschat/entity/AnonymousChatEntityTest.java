@@ -34,6 +34,7 @@ class AnonymousChatEntityTest {
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(1L);
         assertThat(savedRoom.getRecipientUserId()).isEqualTo(2L);
         assertThat(savedRoom.getQuestionerAlias()).isEqualTo("익명의 수달");
+        assertThat(savedRoom.getLastActivityAt()).isNotNull();
         assertThat(savedRoom.getCreatedAt()).isNotNull();
         assertThat(savedRoom.getOpenedAt()).isNull();
         assertThat(savedRoom.getExpiresAt()).isNull();

@@ -1,7 +1,10 @@
 package kr.ktb.zura.needu.product.service;
 
+import java.util.Collection;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
@@ -39,7 +42,20 @@ public class ProductService {
     public ProductSummaryResponse findProductSummary(Long productId) {
         return productRepository.findById(productId)
                 .map(ProductSummaryResponse::from)
-                .orElseThrow(() -> new IllegalStateException("Product not found. productId=" + productId));
+                .orElseThrow(() -> new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    public Map<Long, ProductSummaryResponse> findAllProductSummaries(Collection<Long> productIds) {
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ProductSummaryResponse> products = productRepository.findAllById(productIds).stream()
+                .map(ProductSummaryResponse::from)
+                .collect(Collectors.toMap(ProductSummaryResponse::productId, product -> product));
+        if (products.size() != productIds.stream().distinct().count()) {
+            throw new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return products;
     }
 
     public List<ProductCategoryResponse> findAllCategories() {

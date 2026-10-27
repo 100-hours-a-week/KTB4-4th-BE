@@ -1,9 +1,8 @@
 package kr.ktb.zura.needu.notification.service;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import kr.ktb.zura.needu.common.cursor.CursorCodec;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.notification.entity.Notification;
@@ -18,7 +17,7 @@ public record NotificationCursor(Long id) {
 
     public static NotificationCursor decode(String cursor) {
         try {
-            String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+            String decoded = CursorCodec.decode(cursor);
             Matcher matcher = CURSOR_PATTERN.matcher(decoded);
             if (!matcher.matches()) {
                 throw invalidCursor();
@@ -31,7 +30,7 @@ public record NotificationCursor(Long id) {
 
     public String encode() {
         String raw = "{\"id\":" + id + "}";
-        return Base64.getUrlEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+        return CursorCodec.encode(raw);
     }
 
     private static BusinessException invalidCursor() {
