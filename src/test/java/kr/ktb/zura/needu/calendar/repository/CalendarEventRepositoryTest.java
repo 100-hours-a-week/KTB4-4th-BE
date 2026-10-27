@@ -2,6 +2,9 @@ package kr.ktb.zura.needu.calendar.repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
@@ -12,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 @DataJpaTest
 class CalendarEventRepositoryTest {
@@ -95,11 +99,19 @@ class CalendarEventRepositoryTest {
         var result = calendarEventRepository.findAllDailyCalendarEvents(1L,
                 LocalDateTime.parse("2026-10-30T00:00"), LocalDateTime.parse("2026-10-31T00:00"));
 
-        assertThat(result).containsExactly(
-                new DailyCalendarEventResponse(spanning.getId(), "일정", CalendarEventColor.ORANGE),
-                new DailyCalendarEventResponse(crossingStart.getId(), "일정", CalendarEventColor.ORANGE),
-                new DailyCalendarEventResponse(later.getId(), "일정", CalendarEventColor.ORANGE),
-                new DailyCalendarEventResponse(sameStart.getId(), "일정", CalendarEventColor.ORANGE));
+        // 최근에 등록한 일정부터 내려준다
+        assertThat(result).extracting(DailyCalendarEventResponse::eventId)
+                .containsExactly(sameStart.getId(), spanning.getId(), crossingStart.getId(), later.getId());
+        // DB에 저장된 시각은 UTC이므로 오프셋만 붙여서 내려준다
+        var crossing = result.get(2);
+        assertThat(crossing.title()).isEqualTo("일정");
+        assertThat(crossing.color()).isEqualTo(CalendarEventColor.ORANGE);
+        assertThat(crossing.startAt()).isEqualTo(OffsetDateTime.parse("2026-10-29T12:00Z"));
+        assertThat(crossing.endAt()).isEqualTo(OffsetDateTime.parse("2026-10-30T00:00Z"));
+        // DB에 저장된 createdAt은 마이크로초까지만 남으므로 오차를 둔다
+        assertThat(crossing.createdAt().getOffset()).isEqualTo(ZoneOffset.UTC);
+        assertThat(crossing.createdAt().toLocalDateTime())
+                .isCloseTo(crossingStart.getCreatedAt(), within(1, ChronoUnit.MILLIS));
     }
 
     private CalendarEvent createCalendarEvent(Long userId) {

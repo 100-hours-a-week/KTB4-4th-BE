@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.calendar.controller;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -295,8 +296,13 @@ class CalendarControllerTest {
     @Test
     void dailyEvents_returnsTitlesAndNullableColors() throws Exception {
         given(calendarEventQueryService.findAllDailyCalendarEvents(1L, LocalDate.of(2026, 10, 30)))
-                .willReturn(List.of(new DailyCalendarEventResponse(123L, "생일 선물 준비", CalendarEventColor.ORANGE),
-                        new DailyCalendarEventResponse(124L, "저녁 약속", null)));
+                .willReturn(List.of(
+                        new DailyCalendarEventResponse(123L, "생일 선물 준비", LocalDateTime.of(2026, 10, 30, 1, 0),
+                                LocalDateTime.of(2026, 10, 30, 2, 0), LocalDateTime.of(2026, 10, 1, 0, 0, 30),
+                                CalendarEventColor.ORANGE),
+                        new DailyCalendarEventResponse(124L, "저녁 약속", LocalDateTime.of(2026, 10, 30, 10, 0),
+                                LocalDateTime.of(2026, 10, 30, 11, 0), LocalDateTime.of(2026, 10, 1, 0, 0, 30),
+                                null)));
 
         mockMvc.perform(get(URL + "/daily").param("date", "2026-10-30")
                         .with(authentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
@@ -304,6 +310,9 @@ class CalendarControllerTest {
                 .andExpect(jsonPath("$.data.items.length()").value(2))
                 .andExpect(jsonPath("$.data.items[0].eventId").value(123))
                 .andExpect(jsonPath("$.data.items[0].title").value("생일 선물 준비"))
+                .andExpect(jsonPath("$.data.items[0].startAt").value("2026-10-30T01:00:00Z"))
+                .andExpect(jsonPath("$.data.items[0].endAt").value("2026-10-30T02:00:00Z"))
+                .andExpect(jsonPath("$.data.items[0].createdAt").value("2026-10-01T00:00:30Z"))
                 .andExpect(jsonPath("$.data.items[0].color").value("ORANGE"))
                 .andExpect(jsonPath("$.data.items[1].color").value(org.hamcrest.Matchers.nullValue()));
     }
