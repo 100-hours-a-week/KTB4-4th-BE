@@ -6,6 +6,7 @@ import java.util.List;
 import kr.ktb.zura.needu.auth.client.KakaoOAuthClient;
 import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
+import kr.ktb.zura.needu.auth.type.RevokeReason;
 import kr.ktb.zura.needu.auth.config.KakaoOAuth2ClientConfig;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
@@ -86,6 +87,10 @@ public class AuthService {
 
     public void unlinkKakaoAccount(Long externalId) {
         kakaoOAuthClient.unlink(externalId);
+    }
+
+    public void revokeSessionsOfBlockedUser(Long userId) {
+        authSessionService.revokeAllByUserId(userId, RevokeReason.BLOCKED);
     }
 
     @Transactional
