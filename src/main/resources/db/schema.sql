@@ -350,6 +350,40 @@ EXECUTE add_input_locked_statement;
 DEALLOCATE PREPARE add_input_locked_statement;
 
 -- ---------------------------------------------------------------------------
+-- anonymouschat
+-- ---------------------------------------------------------------------------
+
+-- 익명대화. 상품과 사용자는 다른 도메인이므로 ID만 저장한다.
+CREATE TABLE IF NOT EXISTS anonymous_rooms (
+    id                 BIGINT      NOT NULL AUTO_INCREMENT,
+    product_id         BIGINT      NOT NULL,
+    questioner_user_id BIGINT      NOT NULL,
+    recipient_user_id  BIGINT      NOT NULL,
+    created_at         DATETIME(6) NOT NULL,
+    opened_at          DATETIME(6) NULL COMMENT '질문받은 사용자의 최초 방 확인 시각',
+    expires_at         DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    KEY idx_anonymous_rooms_questioner_user_id (questioner_user_id),
+    KEY idx_anonymous_rooms_recipient_user_id (recipient_user_id),
+    CONSTRAINT ck_anonymous_rooms_distinct_users CHECK (questioner_user_id <> recipient_user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS anonymous_messages (
+    id                BIGINT        NOT NULL AUTO_INCREMENT,
+    room_id           BIGINT        NOT NULL,
+    sender_user_id    BIGINT        NOT NULL,
+    client_message_id VARCHAR(36)   NOT NULL,
+    content           VARCHAR(1000) NOT NULL,
+    read_at           DATETIME(6)   NULL COMMENT '수신자의 개별 메시지 읽음 시각',
+    created_at        DATETIME(6)   NOT NULL,
+    deleted_at        DATETIME(6)   NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_anonymous_messages_room_sender_client_message (room_id, sender_user_id, client_message_id),
+    KEY idx_anonymous_messages_room_id_id (room_id, id),
+    CONSTRAINT fk_anonymous_messages_room FOREIGN KEY (room_id) REFERENCES anonymous_rooms (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
 -- product
 -- ---------------------------------------------------------------------------
 

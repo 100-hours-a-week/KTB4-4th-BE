@@ -1,0 +1,58 @@
+package kr.ktb.zura.needu.anonymouschat.entity;
+
+import jakarta.persistence.CheckConstraint;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+
+import static lombok.AccessLevel.PROTECTED;
+
+@Getter
+@Entity
+@Table(name = "anonymous_rooms",
+        indexes = {
+                @Index(name = "idx_anonymous_rooms_questioner_user_id", columnList = "questioner_user_id"),
+                @Index(name = "idx_anonymous_rooms_recipient_user_id", columnList = "recipient_user_id")
+        },
+        check = @CheckConstraint(name = "ck_anonymous_rooms_distinct_users",
+                constraint = "questioner_user_id <> recipient_user_id")
+)
+@NoArgsConstructor(access = PROTECTED)
+public class AnonymousRoom {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Long productId;
+
+    @Column(nullable = false)
+    private Long questionerUserId;
+
+    @Column(nullable = false)
+    private Long recipientUserId;
+
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    // 질문받은 사용자가 방을 최초로 확인한 시각
+    private LocalDateTime openedAt;
+
+    private LocalDateTime expiresAt;
+
+    public AnonymousRoom(Long productId, Long questionerUserId, Long recipientUserId) {
+        this.productId = productId;
+        this.questionerUserId = questionerUserId;
+        this.recipientUserId = recipientUserId;
+    }
+}

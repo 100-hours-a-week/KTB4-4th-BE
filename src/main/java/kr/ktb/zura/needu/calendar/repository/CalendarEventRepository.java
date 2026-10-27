@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.calendar.repository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse;
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.dto.response.DailyCalendarEventResponse;
 import kr.ktb.zura.needu.calendar.entity.CalendarEvent;
@@ -16,13 +17,13 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 
     @Query("""
             select new kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse(
-                e.id, e.startAt, e.endAt, e.color
+                e.id, e.createdAt ,e.startAt, e.endAt, e.color
             )
             from CalendarEvent e
             where e.userId = :userId
               and e.startAt < :nextMonthStart
               and e.endAt >= :monthStart
-            order by e.startAt, e.id
+            order by e.createdAt desc, e.id desc
             """)
     List<CalendarEventIndicatorResponse> findMonthlyEventIndicators(
             @Param("userId") Long userId,
@@ -44,5 +45,17 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
             @Param("userId") Long userId,
             @Param("dayStart") LocalDateTime dayStart,
             @Param("nextDayStart") LocalDateTime nextDayStart
+    );
+
+    @Query("""
+            select new kr.ktb.zura.needu.calendar.dto.response.CalendarEventDetailResponse(
+                e.id, e.title, e.description, e.startAt, e.endAt, e.allDay, e.notificationEnabled, e.color
+            )
+            from CalendarEvent e
+            where e.id = :eventId and e.userId = :userId
+            """)
+    Optional<CalendarEventDetailResponse> findCalendarEventDetail(
+            @Param("userId") Long userId,
+            @Param("eventId") Long eventId
     );
 }
