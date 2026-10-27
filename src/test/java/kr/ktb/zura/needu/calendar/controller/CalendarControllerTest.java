@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.calendar.controller;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -307,7 +308,8 @@ class CalendarControllerTest {
     @Test
     void validMonth_returnsSummaryInCommonResponse() throws Exception {
         LocalDate date = LocalDate.of(2026, 10, 30);
-        var indicator = new CalendarEventIndicatorResponse(123L, date, date.plusDays(1), CalendarEventColor.ORANGE);
+        var indicator = new CalendarEventIndicatorResponse(123L, LocalDateTime.of(2026, 10, 1, 9, 0, 30), date,
+                date.plusDays(1), CalendarEventColor.ORANGE);
         given(calendarEventQueryService.findMonthlyCalendarEventSummary(1L, YearMonth.of(2026, 10)))
                 .willReturn(List.of(new MonthlyCalendarEventResponse(date, 1, List.of(indicator))));
 
@@ -318,6 +320,7 @@ class CalendarControllerTest {
                 .andExpect(jsonPath("$.data.items[0].date").value("2026-10-30"))
                 .andExpect(jsonPath("$.data.items[0].eventCount").value(1))
                 .andExpect(jsonPath("$.data.items[0].indicators[0].eventId").value(123))
+                .andExpect(jsonPath("$.data.items[0].indicators[0].createdAt").value("2026-10-01T09:00:30"))
                 .andExpect(jsonPath("$.data.items[0].indicators[0].startDate").value("2026-10-30"))
                 .andExpect(jsonPath("$.data.items[0].indicators[0].endDate").value("2026-10-31"))
                 .andExpect(jsonPath("$.data.items[0].indicators[0].color").value("ORANGE"));

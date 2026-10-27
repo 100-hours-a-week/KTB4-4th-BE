@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.calendar.repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import kr.ktb.zura.needu.calendar.dto.response.CalendarEventIndicatorResponse;
 import kr.ktb.zura.needu.calendar.entity.CalendarEvent;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 @DataJpaTest
 class CalendarEventRepositoryTest {
@@ -46,9 +48,9 @@ class CalendarEventRepositoryTest {
         var monthly = calendarEventRepository.findMonthlyEventIndicators(1L,
                 LocalDateTime.parse("2026-09-30T15:00"), LocalDateTime.parse("2026-10-31T15:00"));
         assertThat(monthly).extracting(CalendarEventIndicatorResponse::eventId)
-                .containsExactly(event.getId(), nextDay.getId());
-        assertThat(monthly.getFirst().startDate()).isEqualTo(LocalDate.of(2026, 10, 1));
-        assertThat(monthly.getFirst().endDate()).isEqualTo(LocalDate.of(2026, 10, 1));
+                .containsExactly(nextDay.getId(), event.getId());
+        assertThat(monthly.getLast().startDate()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(monthly.getLast().endDate()).isEqualTo(LocalDate.of(2026, 10, 1));
     }
 
     @Test
@@ -64,10 +66,14 @@ class CalendarEventRepositoryTest {
         var result = calendarEventRepository.findMonthlyEventIndicators(1L,
                 LocalDateTime.parse("2026-10-01T00:00"), LocalDateTime.parse("2026-11-01T00:00"));
 
+        // 최근에 등록한 일정부터 내려준다
         assertThat(result).extracting(CalendarEventIndicatorResponse::eventId)
-                .containsExactly(spanning.getId(), crossingStart.getId(), later.getId(), sameStart.getId());
-        assertThat(result.get(1)).isEqualTo(new CalendarEventIndicatorResponse(crossingStart.getId(),
-                LocalDate.parse("2026-09-30"), LocalDate.parse("2026-10-01"), CalendarEventColor.ORANGE));
+                .containsExactly(sameStart.getId(), spanning.getId(), crossingStart.getId(), later.getId());
+        // DB에 저장된 createdAt은 마이크로초까지만 남으므로 따로 오차를 두고 비교한다
+        assertThat(result.get(2)).usingRecursiveComparison().ignoringFields("createdAt")
+                .isEqualTo(new CalendarEventIndicatorResponse(crossingStart.getId(), null,
+                        LocalDate.parse("2026-09-30"), LocalDate.parse("2026-10-01"), CalendarEventColor.ORANGE));
+        assertThat(result.get(2).createdAt()).isCloseTo(crossingStart.getCreatedAt(), within(1, ChronoUnit.MILLIS));
     }
 
     private CalendarEvent createCalendarEvent(Long userId) {
