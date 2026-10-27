@@ -52,16 +52,22 @@ class AnonymousChatRepositoryTest {
     }
 
     @Test
-    void messagesInRooms_findSummaries_returnsLastMessageAndUnreadCount() {
+    void messagesInRooms_findSummaries_returnsLastMessageAndRoleBasedUnreadCount() {
         AnonymousRoom room = persistRoom(10L, 1L, 2L, "익명의 수달");
         persistMessage(room, 1L, "내가 보낸 메시지");
-        persistMessage(room, 2L, "첫 번째 받은 메시지");
+        AnonymousMessage firstReceivedMessage = persistMessage(room, 2L, "첫 번째 받은 메시지");
         AnonymousMessage lastMessage = persistMessage(room, 2L, "마지막 받은 메시지");
 
         List<AnonymousRoomLastMessage> lastMessages =
                 anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(room.getId()));
         List<AnonymousRoomUnreadCount> unreadCounts =
                 anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(room.getId()), 1L);
+        anonymousRoomRepository.updateQuestionerLastReadMessageId(room.getId(), firstReceivedMessage.getId());
+        List<AnonymousRoomUnreadCount> unreadCountsAfterRead =
+                anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(room.getId()), 1L);
+        anonymousRoomRepository.updateRecipientLastReadMessageId(room.getId(), firstReceivedMessage.getId());
+        List<AnonymousRoomUnreadCount> recipientUnreadCounts =
+                anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(room.getId()), 2L);
 
         assertThat(lastMessages).singleElement().satisfies(message -> {
             assertThat(message.roomId()).isEqualTo(room.getId());
@@ -71,6 +77,8 @@ class AnonymousChatRepositoryTest {
             assertThat(message.sentAt()).isNotNull();
         });
         assertThat(unreadCounts).containsExactly(new AnonymousRoomUnreadCount(room.getId(), 2L));
+        assertThat(unreadCountsAfterRead).containsExactly(new AnonymousRoomUnreadCount(room.getId(), 1L));
+        assertThat(recipientUnreadCounts).isEmpty();
     }
 
     @Test

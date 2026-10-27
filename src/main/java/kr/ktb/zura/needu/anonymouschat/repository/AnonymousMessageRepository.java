@@ -32,7 +32,11 @@ public interface AnonymousMessageRepository extends JpaRepository<AnonymousMessa
             from AnonymousMessage message
             where message.room.id in :roomIds
               and message.senderUserId <> :userId
-              and message.readAt is null
+              and message.id > coalesce(
+                case when message.room.questionerUserId = :userId
+                  then message.room.questionerLastReadMessageId
+                  else message.room.recipientLastReadMessageId
+                end, 0)
               and message.deletedAt is null
             group by message.room.id
             """)
@@ -40,4 +44,6 @@ public interface AnonymousMessageRepository extends JpaRepository<AnonymousMessa
             @Param("roomIds") Collection<Long> roomIds,
             @Param("userId") Long userId
     );
+
+    boolean existsByIdAndRoomId(Long id, Long roomId);
 }

@@ -53,9 +53,6 @@ public class AnonymousMessage {
     @Column(nullable = false, length = 1000)
     private String content;
 
-    // 수신자가 이 메시지를 읽은 시각. NULL이면 미읽음
-    private LocalDateTime readAt;
-
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

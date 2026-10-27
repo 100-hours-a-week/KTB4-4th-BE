@@ -56,4 +56,22 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
             @Param("roomId") Long roomId,
             @Param("activityAt") LocalDateTime activityAt
     );
+
+    @Modifying
+    @Query("""
+            update AnonymousRoom room
+            set room.questionerLastReadMessageId = :messageId
+            where room.id = :roomId
+              and (room.questionerLastReadMessageId is null or room.questionerLastReadMessageId < :messageId)
+            """)
+    int updateQuestionerLastReadMessageId(@Param("roomId") Long roomId, @Param("messageId") Long messageId);
+
+    @Modifying
+    @Query("""
+            update AnonymousRoom room
+            set room.recipientLastReadMessageId = :messageId
+            where room.id = :roomId
+              and (room.recipientLastReadMessageId is null or room.recipientLastReadMessageId < :messageId)
+            """)
+    int updateRecipientLastReadMessageId(@Param("roomId") Long roomId, @Param("messageId") Long messageId);
 }

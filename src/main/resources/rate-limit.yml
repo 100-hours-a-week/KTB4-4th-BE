@@ -221,3 +221,8 @@ needu:
         path-pattern: /api/v1/anonymous-chats/{roomId}
         limit: 120
         window: 1m
+      anonymous-chat-read:
+        method: PATCH
+        path-pattern: /api/v1/anonymous-chats/{roomId}/read
+        limit: 120
+        window: 1m

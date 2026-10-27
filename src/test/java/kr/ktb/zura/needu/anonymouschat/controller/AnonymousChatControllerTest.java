@@ -11,26 +11,34 @@ import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResp
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
+import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.type.ProductCategory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -39,14 +47,19 @@ class AnonymousChatControllerTest {
 
     private static final Long USER_ID = 100L;
     private static final Long ROOM_ID = 1L;
+    private static final Long MESSAGE_ID = 501L;
     private static final String ROOM_URL = "/api/v1/anonymous-chats/{roomId}";
     private static final String ROOMS_URL = "/api/v1/anonymous-chats";
+    private static final String READ_URL = "/api/v1/anonymous-chats/{roomId}/read";
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private AnonymousChatService anonymousChatService;
+
+    @MockitoBean
+    private AnonymousMessageService anonymousMessageService;
 
     @Test
     void validCondition_findAllRooms_returnsCursorResponse() throws Exception {
@@ -148,6 +161,70 @@ class AnonymousChatControllerTest {
         mockMvc.perform(get(ROOM_URL, ROOM_ID).with(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("익명대화방을 찾을 수 없습니다."));
+    }
+
+    @Test
+    void validRequest_readMessages_returnsNoContent() throws Exception {
+        mockMvc.perform(patchRead("{\"lastReadMessageId\": 501}"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(anonymousMessageService).readMessages(USER_ID, ROOM_ID, MESSAGE_ID);
+    }
+
+    @Test
+    void lastReadMessageIdMissing_readMessages_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(patchRead("{}"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message").value("입력 값이 유효하지 않습니다. 입력한 내용을 확인해 주세요."));
+
+        verify(anonymousMessageService, never()).readMessages(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void lastReadMessageIdNotNumber_readMessages_returnsBadRequest() throws Exception {
+        mockMvc.perform(patchRead("{\"lastReadMessageId\": \"abc\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(anonymousMessageService, never()).readMessages(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void csrfMissing_readMessages_returnsForbidden() throws Exception {
+        mockMvc.perform(patch(READ_URL, ROOM_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lastReadMessageId\": 501}")
+                        .with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(anonymousMessageService, never()).readMessages(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void messageNotInRoom_readMessages_returnsUnprocessableContent() throws Exception {
+        willThrow(new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT))
+                .given(anonymousMessageService).readMessages(USER_ID, ROOM_ID, MESSAGE_ID);
+
+        mockMvc.perform(patchRead("{\"lastReadMessageId\": 501}"))
+                .andExpect(status().isUnprocessableContent());
+    }
+
+    @Test
+    void nonParticipant_readMessages_returnsForbidden() throws Exception {
+        willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN))
+                .given(anonymousMessageService).readMessages(USER_ID, ROOM_ID, MESSAGE_ID);
+
+        mockMvc.perform(patchRead("{\"lastReadMessageId\": 501}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 익명대화에 접근할 수 없습니다."));
+    }
+
+    private static MockHttpServletRequestBuilder patchRead(String body) {
+        return patch(READ_URL, ROOM_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(authenticatedUser())
+                .with(csrf());
     }
 
     private static RequestPostProcessor authenticatedUser() {

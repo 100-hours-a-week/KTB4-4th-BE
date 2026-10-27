@@ -17,7 +17,7 @@ class AnonymousChatEntityTest {
     private TestEntityManager entityManager;
 
     @Test
-    void persistsRoomAndIndividualUnreadMessages() {
+    void persistsRoomAndMessages() {
         AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
         UUID clientMessageId = UUID.randomUUID();
         AnonymousMessage question = entityManager.persistAndFlush(
@@ -43,9 +43,8 @@ class AnonymousChatEntityTest {
         assertThat(savedQuestion.getClientMessageId()).isEqualTo(clientMessageId);
         assertThat(savedQuestion.getContent()).isEqualTo("이 선물 어때?");
         assertThat(savedQuestion.getCreatedAt()).isNotNull();
-        assertThat(savedQuestion.getReadAt()).isNull();
         assertThat(savedQuestion.getDeletedAt()).isNull();
-        assertThat(savedReply.getReadAt()).isNull();
+        assertThat(savedReply.getSenderUserId()).isEqualTo(2L);
     }
 
     @Test
