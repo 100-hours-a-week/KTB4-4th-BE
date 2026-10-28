@@ -52,6 +52,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -70,6 +71,7 @@ class AnonymousChatControllerTest {
     private static final String MESSAGES_URL = "/api/v1/anonymous-chats/{roomId}/messages";
     private static final String READ_URL = "/api/v1/anonymous-chats/{roomId}/read";
     private static final String REPORT_URL = "/api/v1/anonymous-chats/{roomId}/reports";
+    private static final String LEAVE_URL = "/api/v1/anonymous-chats/{roomId}/leave";
     private static final String REPORT_BODY = """
             {"reason": "ABUSE", "description": "욕설을 보냈습니다."}
             """;
@@ -452,6 +454,26 @@ class AnonymousChatControllerTest {
         mockMvc.perform(postReport(REPORT_BODY))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("이미 신고한 익명대화입니다."));
+    }
+
+    @Test
+    void participant_leaveRoom_returnsNoContent() throws Exception {
+        mockMvc.perform(put(LEAVE_URL, ROOM_ID)
+                        .with(authenticatedUser())
+                        .with(csrf()))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(anonymousChatService).leaveRoom(USER_ID, ROOM_ID);
+    }
+
+    @Test
+    void csrfMissing_leaveRoom_returnsForbidden() throws Exception {
+        mockMvc.perform(put(LEAVE_URL, ROOM_ID)
+                        .with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(anonymousChatService, never()).leaveRoom(anyLong(), anyLong());
     }
 
     private static MockHttpServletRequestBuilder patchRead(String body) {

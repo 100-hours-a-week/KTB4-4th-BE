@@ -3,8 +3,10 @@ package kr.ktb.zura.needu.anonymouschat.service;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.request.SendAnonymousMessageRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageListResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousMessage;
@@ -17,19 +19,24 @@ import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
+import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -57,8 +64,131 @@ class AnonymousMessageServiceTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private AnonymousMessageService anonymousMessageService;
+
+    @Test
+    void participant_sendMessage_savesMessageAndPublishesSavedEvent() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        SendAnonymousMessageRequest request = sendRequest();
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                ROOM_ID, QUESTIONER_ID, request.clientMessageId())).willReturn(Optional.empty());
+        given(anonymousMessageRepository.saveAndFlush(any(AnonymousMessage.class))).willAnswer(invocation -> {
+            AnonymousMessage saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", MESSAGE_ID);
+            ReflectionTestUtils.setField(saved, "createdAt", LocalDateTime.of(2026, 10, 28, 1, 0));
+            return saved;
+        });
+
+        anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, request);
+
+        verify(anonymousRoomRepository).updateLastActivityAt(ROOM_ID, LocalDateTime.of(2026, 10, 28, 1, 0));
+        AnonymousMessageSavedEvent event = capturePublishedEvent();
+        assertThat(event.roomId()).isEqualTo(room.getId());
+        assertThat(event.senderUserId()).isEqualTo(QUESTIONER_ID);
+        assertThat(event.partnerUserId()).isEqualTo(RECIPIENT_ID);
+        assertThat(event.messageId()).isEqualTo(MESSAGE_ID);
+        assertThat(event.clientMessageId()).isEqualTo(request.clientMessageId());
+        assertThat(event.content()).isEqualTo(request.content());
+        assertThat(event.duplicated()).isFalse();
+    }
+
+    @Test
+    void recipient_sendMessage_publishesQuestionerAsPartner() {
+        givenParticipatingRoom(RECIPIENT_ID);
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                anyLong(), anyLong(), any())).willReturn(Optional.empty());
+        given(anonymousMessageRepository.saveAndFlush(any(AnonymousMessage.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        anonymousMessageService.sendMessage(RECIPIENT_ID, ROOM_ID, sendRequest());
+
+        assertThat(capturePublishedEvent().partnerUserId()).isEqualTo(QUESTIONER_ID);
+    }
+
+    @Test
+    void sentClientMessageId_sendMessage_publishesDuplicatedEventWithoutSaving() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        SendAnonymousMessageRequest request = sendRequest();
+        AnonymousMessage sentMessage = message(room, MESSAGE_ID, QUESTIONER_ID);
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                ROOM_ID, QUESTIONER_ID, request.clientMessageId())).willReturn(Optional.of(sentMessage));
+
+        anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, request);
+
+        verify(anonymousMessageRepository, never()).saveAndFlush(any());
+        verify(anonymousRoomRepository, never()).updateLastActivityAt(anyLong(), any());
+        AnonymousMessageSavedEvent event = capturePublishedEvent();
+        assertThat(event.messageId()).isEqualTo(MESSAGE_ID);
+        assertThat(event.duplicated()).isTrue();
+    }
+
+    @Test
+    void sentClientMessageIdInEndedRoom_sendMessage_publishesDuplicatedEvent() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        room.end(RECIPIENT_ID, LocalDateTime.of(2026, 10, 28, 2, 0));
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                anyLong(), anyLong(), any())).willReturn(Optional.of(message(room, MESSAGE_ID, QUESTIONER_ID)));
+
+        anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest());
+
+        assertThat(capturePublishedEvent().duplicated()).isTrue();
+    }
+
+    @Test
+    void endedRoom_sendMessage_throwsRoomEndedWithoutSaving() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        room.end(RECIPIENT_ID, LocalDateTime.of(2026, 10, 28, 2, 0));
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                anyLong(), anyLong(), any())).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED));
+        verify(anonymousMessageRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void concurrentSameClientMessageId_sendMessage_throwsTooManyRequestsWithoutPublishing() {
+        givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                anyLong(), anyLong(), any())).willReturn(Optional.empty());
+        given(anonymousMessageRepository.saveAndFlush(any(AnonymousMessage.class)))
+                .willThrow(new DataIntegrityViolationException("duplicated"));
+
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest()))
+                .isInstanceOf(TooManyRequestsException.class);
+        verify(anonymousRoomRepository, never()).updateLastActivityAt(anyLong(), any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void nonParticipant_sendMessage_throwsForbiddenWithoutSaving() {
+        willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN))
+                .given(anonymousChatService).findParticipatingRoom(300L, ROOM_ID);
+
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(300L, ROOM_ID, sendRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN));
+        verifyNoInteractions(anonymousMessageRepository, eventPublisher);
+    }
+
+    @Test
+    void inactiveUser_sendMessage_throwsWithoutQueryingRoom() {
+        willThrow(new BusinessException(UserErrorCode.USER_BLOCKED))
+                .given(userService).validateActiveUser(QUESTIONER_ID);
+
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.USER_BLOCKED));
+        verifyNoInteractions(anonymousChatService, anonymousMessageRepository, eventPublisher);
+    }
 
     @Test
     void questioner_readMessages_updatesQuestionerReadPosition() {
@@ -306,6 +436,16 @@ class AnonymousMessageServiceTest {
     private CursorPageResponse<AnonymousMessageSummaryResponse> findMessagePage(
             Long userId, Long roomId, AnonymousMessageSearchCondition condition) {
         return anonymousMessageService.findAllMessages(userId, roomId, condition).page();
+    }
+
+    private static SendAnonymousMessageRequest sendRequest() {
+        return new SendAnonymousMessageRequest(UUID.randomUUID(), "안녕하세요");
+    }
+
+    private AnonymousMessageSavedEvent capturePublishedEvent() {
+        ArgumentCaptor<AnonymousMessageSavedEvent> captor = ArgumentCaptor.forClass(AnonymousMessageSavedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
     }
 
     private AnonymousRoom givenParticipatingRoom(Long userId) {

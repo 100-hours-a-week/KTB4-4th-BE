@@ -36,6 +36,7 @@ import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -57,6 +58,7 @@ public class AnonymousChatService {
     private final ProductService productService;
     private final AnonymousAliasGenerator anonymousAliasGenerator;
     private final NotificationCreationService notificationCreationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Duration notificationExpiration;
 
@@ -68,6 +70,7 @@ public class AnonymousChatService {
             ProductService productService,
             AnonymousAliasGenerator anonymousAliasGenerator,
             NotificationCreationService notificationCreationService,
+            ApplicationEventPublisher eventPublisher,
             Clock clock,
             @Value("${needu.anonymous-chat.notification-expiration}") Duration notificationExpiration
     ) {
@@ -78,6 +81,7 @@ public class AnonymousChatService {
         this.productService = productService;
         this.anonymousAliasGenerator = anonymousAliasGenerator;
         this.notificationCreationService = notificationCreationService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.notificationExpiration = notificationExpiration;
     }
@@ -158,11 +162,34 @@ public class AnonymousChatService {
         );
     }
 
-    public void leaveRoom() {
+    @Transactional
+    public void leaveRoom(Long userId, Long roomId) {
+        userService.validateActiveUser(userId);
+        AnonymousRoom room = findParticipatingRoomForUpdate(userId, roomId);
+        LocalDateTime endedAt = LocalDateTime.now(clock);
+
+        if (!room.end(userId, endedAt)) {
+            return;
+        }
+
+        Long partnerUserId = room.isQuestioner(userId)
+                ? room.getRecipientUserId()
+                : room.getQuestionerUserId();
+        eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
+                partnerUserId, roomId, endedAt.atOffset(ZoneOffset.UTC)));
     }
 
     public AnonymousRoom findParticipatingRoom(Long userId, Long roomId) {
         AnonymousRoom room = anonymousRoomRepository.findById(roomId)
+                .orElseThrow(() -> new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN);
+        }
+        return room;
+    }
+
+    private AnonymousRoom findParticipatingRoomForUpdate(Long userId, Long roomId) {
+        AnonymousRoom room = anonymousRoomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND));
         if (!room.isParticipant(userId)) {
             throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN);

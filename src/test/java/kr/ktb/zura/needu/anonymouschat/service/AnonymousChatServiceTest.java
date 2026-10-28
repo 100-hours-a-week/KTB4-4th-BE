@@ -44,6 +44,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -90,6 +91,9 @@ class AnonymousChatServiceTest {
 
     @Mock
     private NotificationCreationService notificationCreationService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Spy
     private Duration notificationExpiration = Duration.ofDays(30);
@@ -288,10 +292,77 @@ class AnonymousChatServiceTest {
         verifyNoInteractions(anonymousRoomRepository, productService);
     }
 
+    @Test
+    void questioner_leaveRoom_endsRoomAndPublishesPartnerEvent() {
+        AnonymousRoom room = givenRoomForUpdate();
+        Instant now = Instant.parse("2026-10-28T06:30:00Z");
+        given(clock.instant()).willReturn(now);
+        given(clock.getZone()).willReturn(ZoneOffset.UTC);
+
+        anonymousChatService.leaveRoom(QUESTIONER_ID, ROOM_ID);
+
+        verify(userService).validateActiveUser(QUESTIONER_ID);
+        assertThat(room.isEnded()).isTrue();
+        assertThat(room.getEndedByUserId()).isEqualTo(QUESTIONER_ID);
+        assertThat(room.getEndedAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
+        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
+                RECIPIENT_ID, ROOM_ID, OffsetDateTime.ofInstant(now, ZoneOffset.UTC)));
+    }
+
+    @Test
+    void recipient_leaveRoom_publishesEventToQuestioner() {
+        givenRoomForUpdate();
+        Instant now = Instant.parse("2026-10-28T06:30:00Z");
+        given(clock.instant()).willReturn(now);
+        given(clock.getZone()).willReturn(ZoneOffset.UTC);
+
+        anonymousChatService.leaveRoom(RECIPIENT_ID, ROOM_ID);
+
+        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
+                QUESTIONER_ID, ROOM_ID, OffsetDateTime.ofInstant(now, ZoneOffset.UTC)));
+    }
+
+    @Test
+    void alreadyEndedRoom_leaveRoom_doesNotPublishDuplicateEvent() {
+        AnonymousRoom room = givenRoomForUpdate();
+        LocalDateTime firstEndedAt = LocalDateTime.of(2026, 10, 27, 6, 30);
+        room.end(RECIPIENT_ID, firstEndedAt);
+        given(clock.instant()).willReturn(Instant.parse("2026-10-28T06:30:00Z"));
+        given(clock.getZone()).willReturn(ZoneOffset.UTC);
+
+        anonymousChatService.leaveRoom(QUESTIONER_ID, ROOM_ID);
+
+        assertThat(room.getEndedByUserId()).isEqualTo(RECIPIENT_ID);
+        assertThat(room.getEndedAt()).isEqualTo(firstEndedAt);
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void nonParticipant_leaveRoom_throwsForbiddenWithoutPublishingEvent() {
+        givenRoomForUpdate();
+
+        assertThatThrownBy(() -> anonymousChatService.leaveRoom(OUTSIDER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN);
+
+        verifyNoInteractions(eventPublisher);
+    }
+
     private void givenRoom() {
+        given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room()));
+    }
+
+    private AnonymousRoom givenRoomForUpdate() {
+        AnonymousRoom room = room();
+        given(anonymousRoomRepository.findByIdForUpdate(ROOM_ID)).willReturn(Optional.of(room));
+        return room;
+    }
+
+    private AnonymousRoom room() {
         AnonymousRoom room = new AnonymousRoom(PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID, QUESTIONER_ALIAS);
         ReflectionTestUtils.setField(room, "id", ROOM_ID);
-        given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room));
+        return room;
     }
 
     private UserDetailResponse recipient() {
