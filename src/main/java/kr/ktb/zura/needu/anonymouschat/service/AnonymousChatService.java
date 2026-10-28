@@ -80,7 +80,7 @@ public class AnonymousChatService {
         return new CursorPageResponse<>(items, nextCursor, hasNext);
     }
 
-    public void createRoom() {
+    public void createRoom(Long questionerUserId, Long recipientUserId, Long productId) {
     }
 
     @Transactional(readOnly = true)

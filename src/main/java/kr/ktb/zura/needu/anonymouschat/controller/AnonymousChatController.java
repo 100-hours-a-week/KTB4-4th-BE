@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.anonymouschat.controller;
 import jakarta.validation.Valid;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
+import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousRoomRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.request.ReadAnonymousMessagesRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
@@ -45,8 +46,14 @@ public class AnonymousChatController {
         ));
     }
 
-    @PostMapping("/friends/{userId}")
-    public void createRoom() {
+    @PostMapping
+    public ResponseEntity<ApiResponse<Void>> createRoom(
+            @AuthenticationPrincipal Long questionerUserId,
+            @RequestBody @Valid CreateAnonymousRoomRequest request
+    ) {
+        anonymousChatService.createRoom(questionerUserId, request.recipientUserId(), request.productId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.of(AnonymousChatResponseMessages.ROOM_CREATED, null));
     }
 
     @GetMapping("/{roomId}")

@@ -53,10 +53,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AnonymousChatControllerTest {
 
     private static final Long USER_ID = 100L;
+    private static final Long RECIPIENT_USER_ID = 200L;
+    private static final Long PRODUCT_ID = 10L;
     private static final Long ROOM_ID = 1L;
     private static final Long MESSAGE_ID = 501L;
     private static final String ROOM_URL = "/api/v1/anonymous-chats/{roomId}";
     private static final String ROOMS_URL = "/api/v1/anonymous-chats";
+    private static final String CREATE_URL = "/api/v1/anonymous-chats";
     private static final String READ_URL = "/api/v1/anonymous-chats/{roomId}/read";
     private static final String REPORT_URL = "/api/v1/anonymous-chats/{roomId}/reports";
     private static final String REPORT_BODY = """
@@ -123,6 +126,51 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.message").value("요청 형식이 올바르지 않습니다."));
 
         verifyNoInteractions(anonymousChatService);
+    }
+
+    @Test
+    void validRequest_createRoom_returnsCreated() throws Exception {
+        mockMvc.perform(postCreateRoom("{\"recipientUserId\": 200, \"productId\": 10}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.message").value("친구에게 슬쩍 물어봤어요."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verify(anonymousChatService).createRoom(USER_ID, RECIPIENT_USER_ID, PRODUCT_ID);
+    }
+
+    @Test
+    void productIdMissing_createRoom_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(postCreateRoom("{\"recipientUserId\": 200}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(anonymousChatService, never()).createRoom(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void productIdNotPositive_createRoom_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(postCreateRoom("{\"recipientUserId\": 200, \"productId\": 0}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(anonymousChatService, never()).createRoom(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void recipientUserIdMissing_createRoom_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(postCreateRoom("{\"productId\": 10}"))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(anonymousChatService, never()).createRoom(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void csrfMissing_createRoom_returnsForbidden() throws Exception {
+        mockMvc.perform(post(CREATE_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"recipientUserId\": 200, \"productId\": 10}")
+                        .with(authenticatedUser()))
+                .andExpect(status().isForbidden());
+
+        verify(anonymousChatService, never()).createRoom(anyLong(), anyLong(), anyLong());
     }
 
     @Test
@@ -325,6 +373,14 @@ class AnonymousChatControllerTest {
 
     private static MockHttpServletRequestBuilder postReport(String body) {
         return post(REPORT_URL, ROOM_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(authenticatedUser())
+                .with(csrf());
+    }
+
+    private static MockHttpServletRequestBuilder postCreateRoom(String body) {
+        return post(CREATE_URL)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .with(authenticatedUser())
