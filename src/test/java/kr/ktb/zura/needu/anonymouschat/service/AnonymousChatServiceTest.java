@@ -1,5 +1,8 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -25,6 +28,9 @@ import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
+import kr.ktb.zura.needu.notification.service.NotificationCreationService;
+import kr.ktb.zura.needu.notification.type.NotificationResourceType;
+import kr.ktb.zura.needu.notification.type.NotificationType;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.product.type.ProductCategory;
@@ -36,6 +42,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -80,6 +87,15 @@ class AnonymousChatServiceTest {
 
     @Mock
     private AnonymousAliasGenerator anonymousAliasGenerator;
+
+    @Mock
+    private NotificationCreationService notificationCreationService;
+
+    @Spy
+    private Duration notificationExpiration = Duration.ofDays(30);
+
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-10-24T01:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks
     private AnonymousChatService anonymousChatService;
@@ -177,6 +193,17 @@ class AnonymousChatServiceTest {
         verify(userService).validateActiveUserForUpdate(RECIPIENT_ID);
         ArgumentCaptor<AnonymousRoom> roomCaptor = ArgumentCaptor.forClass(AnonymousRoom.class);
         verify(anonymousRoomRepository).save(roomCaptor.capture());
+        verify(notificationCreationService).createNotifications(
+                Set.of(RECIPIENT_ID),
+                NotificationType.CHAT,
+                null,
+                "친구가 슬쩍 물어봤어요.",
+                "익명대화방에서 친구의 질문을 확인해 보세요.",
+                NotificationResourceType.ANONYMOUS_ROOM,
+                ROOM_ID,
+                "ANONYMOUS_CHAT_ROOM_CREATED:" + ROOM_ID,
+                LocalDateTime.of(2026, 11, 23, 1, 0)
+        );
         AnonymousRoom savedRoom = roomCaptor.getValue();
         assertThat(savedRoom.getProductId()).isEqualTo(PRODUCT_ID);
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(QUESTIONER_ID);

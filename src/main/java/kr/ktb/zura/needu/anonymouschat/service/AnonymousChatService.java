@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
@@ -26,22 +28,27 @@ import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
+import kr.ktb.zura.needu.notification.service.NotificationCreationService;
+import kr.ktb.zura.needu.notification.type.NotificationResourceType;
+import kr.ktb.zura.needu.notification.type.NotificationType;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
 import kr.ktb.zura.needu.user.service.UserService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class AnonymousChatService {
 
     private static final String SENDER_ME = "ME";
     private static final String SENDER_OTHER = "OTHER";
+    private static final String ROOM_CREATED_NOTIFICATION_TITLE = "친구가 슬쩍 물어봤어요.";
+    private static final String ROOM_CREATED_NOTIFICATION_BODY = "익명대화방에서 친구의 질문을 확인해 보세요.";
+    private static final String ROOM_CREATED_NOTIFICATION_DEDUP_KEY_PREFIX = "ANONYMOUS_CHAT_ROOM_CREATED:";
 
     private final AnonymousRoomRepository anonymousRoomRepository;
     private final AnonymousMessageRepository anonymousMessageRepository;
@@ -49,6 +56,31 @@ public class AnonymousChatService {
     private final FriendService friendService;
     private final ProductService productService;
     private final AnonymousAliasGenerator anonymousAliasGenerator;
+    private final NotificationCreationService notificationCreationService;
+    private final Clock clock;
+    private final Duration notificationExpiration;
+
+    public AnonymousChatService(
+            AnonymousRoomRepository anonymousRoomRepository,
+            AnonymousMessageRepository anonymousMessageRepository,
+            UserService userService,
+            FriendService friendService,
+            ProductService productService,
+            AnonymousAliasGenerator anonymousAliasGenerator,
+            NotificationCreationService notificationCreationService,
+            Clock clock,
+            @Value("${needu.anonymous-chat.notification-expiration}") Duration notificationExpiration
+    ) {
+        this.anonymousRoomRepository = anonymousRoomRepository;
+        this.anonymousMessageRepository = anonymousMessageRepository;
+        this.userService = userService;
+        this.friendService = friendService;
+        this.productService = productService;
+        this.anonymousAliasGenerator = anonymousAliasGenerator;
+        this.notificationCreationService = notificationCreationService;
+        this.clock = clock;
+        this.notificationExpiration = notificationExpiration;
+    }
 
     @Transactional(readOnly = true)
     public CursorPageResponse<AnonymousChatRoomSummaryResponse> findAllRooms(
@@ -98,6 +130,17 @@ public class AnonymousChatService {
         String questionerAlias = anonymousAliasGenerator.generate(usedAliases);
         AnonymousRoom room = anonymousRoomRepository.save(
                 new AnonymousRoom(productId, questionerUserId, recipientUserId, questionerAlias));
+        notificationCreationService.createNotifications(
+                Set.of(recipientUserId),
+                NotificationType.CHAT,
+                null,
+                ROOM_CREATED_NOTIFICATION_TITLE,
+                ROOM_CREATED_NOTIFICATION_BODY,
+                NotificationResourceType.ANONYMOUS_ROOM,
+                room.getId(),
+                ROOM_CREATED_NOTIFICATION_DEDUP_KEY_PREFIX + room.getId(),
+                LocalDateTime.now(clock).plus(notificationExpiration)
+        );
         return AnonymousRoomCreatedResponse.from(room);
     }
 
