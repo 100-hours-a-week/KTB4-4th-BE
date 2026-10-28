@@ -171,7 +171,7 @@ public class AnonymousChatService {
         );
     }
 
-    private String findTargetName(AnonymousRoom room, boolean askedByMe) {
+    public String findTargetName(AnonymousRoom room, boolean askedByMe) {
         if (!askedByMe) {
             return room.getQuestionerAlias();
         }

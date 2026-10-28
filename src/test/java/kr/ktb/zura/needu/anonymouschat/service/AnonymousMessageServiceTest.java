@@ -1,11 +1,20 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageListResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.entity.AnonymousMessage;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousMessageRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
+import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -13,8 +22,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
@@ -108,9 +119,163 @@ class AnonymousMessageServiceTest {
         verifyNoInteractions(anonymousChatService, anonymousMessageRepository, anonymousRoomRepository);
     }
 
-    private void givenParticipatingRoom(Long userId) {
+    @Test
+    void moreMessagesThanSize_findAllMessages_returnsPageWithNextCursor() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(3))).willReturn(List.of(
+                message(room, 103L, QUESTIONER_ID),
+                message(room, 102L, RECIPIENT_ID),
+                message(room, 101L, QUESTIONER_ID)));
+
+        CursorPageResponse<AnonymousMessageSummaryResponse> page = findMessagePage(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 2));
+
+        verify(userService).validateActiveUser(QUESTIONER_ID);
+        assertThat(page.items()).extracting(AnonymousMessageSummaryResponse::messageId).containsExactly(103L, 102L);
+        assertThat(page.items()).extracting(AnonymousMessageSummaryResponse::sender)
+                .containsExactly(AnonymousMessageSender.ME, AnonymousMessageSender.OTHER);
+        assertThat(page.hasNext()).isTrue();
+        assertThat(AnonymousMessageCursor.decode(page.nextCursor()).messageId()).isEqualTo(102L);
+    }
+
+    @Test
+    void lastPage_findAllMessages_returnsWithoutNextCursor() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(3)))
+                .willReturn(List.of(message(room, 101L, QUESTIONER_ID)));
+
+        CursorPageResponse<AnonymousMessageSummaryResponse> page = findMessagePage(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 2));
+
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.hasNext()).isFalse();
+        assertThat(page.nextCursor()).isNull();
+    }
+
+    @Test
+    void cursorGiven_findAllMessages_queriesMessagesBeforeCursor() {
+        givenParticipatingRoom(QUESTIONER_ID);
+        String cursor = new AnonymousMessageCursor(101L).encode();
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, 101L, Limit.of(21))).willReturn(List.of());
+
+        CursorPageResponse<AnonymousMessageSummaryResponse> page = findMessagePage(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(cursor, 20));
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.hasNext()).isFalse();
+    }
+
+    @Test
+    void partnerReadPosition_findAllMessages_countsOnlyMyMessagesAfterItAsUnread() {
+        AnonymousRoom room = givenParticipatingRoom(RECIPIENT_ID);
+        ReflectionTestUtils.setField(room, "questionerLastReadMessageId", 102L);
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of(
+                message(room, 104L, RECIPIENT_ID),
+                message(room, 103L, QUESTIONER_ID),
+                message(room, 102L, RECIPIENT_ID)));
+
+        CursorPageResponse<AnonymousMessageSummaryResponse> page = findMessagePage(
+                RECIPIENT_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(page.items()).extracting(AnonymousMessageSummaryResponse::unreadCount)
+                .containsExactly(1, 0, 0);
+    }
+
+    @Test
+    void partnerNeverRead_findAllMessages_countsAllMyMessagesAsUnread() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of(
+                message(room, 102L, RECIPIENT_ID),
+                message(room, 101L, QUESTIONER_ID)));
+
+        CursorPageResponse<AnonymousMessageSummaryResponse> page = findMessagePage(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(page.items()).extracting(AnonymousMessageSummaryResponse::unreadCount)
+                .containsExactly(0, 1);
+    }
+
+    @Test
+    void malformedCursor_findAllMessages_throwsInvalidRequest() {
+        givenParticipatingRoom(QUESTIONER_ID);
+
+        assertThatThrownBy(() -> anonymousMessageService.findAllMessages(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition("not-base64!!", 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.COMMON_INVALID_REQUEST);
+
+        verifyNoInteractions(anonymousMessageRepository);
+    }
+
+    @Test
+    void nonParticipant_findAllMessages_throwsForbiddenWithoutQueryingMessages() {
+        given(anonymousChatService.findParticipatingRoom(QUESTIONER_ID, ROOM_ID))
+                .willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN));
+
+        assertThatThrownBy(() -> anonymousMessageService.findAllMessages(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN);
+
+        verifyNoInteractions(anonymousMessageRepository);
+    }
+
+    @Test
+    void inactiveUser_findAllMessages_throwsWithoutQueryingRoom() {
+        willThrow(new BusinessException(UserErrorCode.USER_BLOCKED))
+                .given(userService).validateActiveUser(QUESTIONER_ID);
+
+        assertThatThrownBy(() -> anonymousMessageService.findAllMessages(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(UserErrorCode.USER_BLOCKED);
+
+        verifyNoInteractions(anonymousChatService, anonymousMessageRepository);
+    }
+
+    @Test
+    void recipient_findAllMessages_returnsTargetNameForReceivedRoom() {
+        AnonymousRoom room = givenParticipatingRoom(RECIPIENT_ID);
+        given(anonymousChatService.findTargetName(room, false)).willReturn("익명의 수달");
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of());
+
+        AnonymousMessageListResponse response = anonymousMessageService.findAllMessages(
+                RECIPIENT_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(response.targetName()).isEqualTo("익명의 수달");
+    }
+
+    @Test
+    void questioner_findAllMessages_returnsTargetNameForAskedRoom() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousChatService.findTargetName(room, true)).willReturn("지호");
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of());
+
+        AnonymousMessageListResponse response = anonymousMessageService.findAllMessages(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(response.targetName()).isEqualTo("지호");
+    }
+
+    private CursorPageResponse<AnonymousMessageSummaryResponse> findMessagePage(
+            Long userId, Long roomId, AnonymousMessageSearchCondition condition) {
+        return anonymousMessageService.findAllMessages(userId, roomId, condition).page();
+    }
+
+    private AnonymousRoom givenParticipatingRoom(Long userId) {
         AnonymousRoom room = new AnonymousRoom(10L, QUESTIONER_ID, RECIPIENT_ID, "익명의 수달");
         ReflectionTestUtils.setField(room, "id", ROOM_ID);
         given(anonymousChatService.findParticipatingRoom(userId, ROOM_ID)).willReturn(room);
+        return room;
+    }
+
+    private static AnonymousMessage message(AnonymousRoom room, Long messageId, Long senderUserId) {
+        AnonymousMessage message = new AnonymousMessage(room, senderUserId, UUID.randomUUID(), "메시지 " + messageId);
+        ReflectionTestUtils.setField(message, "id", messageId);
+        ReflectionTestUtils.setField(message, "createdAt", LocalDateTime.of(2026, 10, 24, 1, 0));
+        return message;
     }
 }
