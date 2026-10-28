@@ -3,12 +3,15 @@ package kr.ktb.zura.needu.anonymouschat.entity;
 import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -65,6 +68,14 @@ public class AnonymousRoom {
 
     private LocalDateTime expiresAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomStatus status = AnonymousRoomStatus.ACTIVE;
+
+    private LocalDateTime endedAt;
+
+    private Long endedByUserId;
+
     public AnonymousRoom(Long productId, Long questionerUserId, Long recipientUserId, String questionerAlias) {
         this.productId = productId;
         this.questionerUserId = questionerUserId;
@@ -78,5 +89,19 @@ public class AnonymousRoom {
 
     public boolean isParticipant(Long userId) {
         return isQuestioner(userId) || recipientUserId.equals(userId);
+    }
+
+    public boolean isEnded() {
+        return status == AnonymousRoomStatus.ENDED;
+    }
+
+    public boolean end(Long endedByUserId, LocalDateTime endedAt) {
+        if (isEnded()) {
+            return false;
+        }
+        this.status = AnonymousRoomStatus.ENDED;
+        this.endedByUserId = endedByUserId;
+        this.endedAt = endedAt;
+        return true;
     }
 }
