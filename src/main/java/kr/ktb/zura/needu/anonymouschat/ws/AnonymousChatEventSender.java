@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AnonymousChatEventSender {
 
-    static final String USER_DESTINATION = "/queue/anonymous-chats";
+    public static final String USER_DESTINATION = "/queue/anonymous-chats";
 
     private final SimpMessagingTemplate messagingTemplate;
 

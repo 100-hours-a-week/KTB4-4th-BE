@@ -2,6 +2,8 @@ package kr.ktb.zura.needu.anonymouschat.repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousMessage;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -47,6 +49,9 @@ public interface AnonymousMessageRepository extends JpaRepository<AnonymousMessa
     );
 
     boolean existsByIdAndRoomId(Long id, Long roomId);
+
+    Optional<AnonymousMessage> findByRoomIdAndSenderUserIdAndClientMessageId(
+            Long roomId, Long senderUserId, UUID clientMessageId);
 
     @Query("""
             select message

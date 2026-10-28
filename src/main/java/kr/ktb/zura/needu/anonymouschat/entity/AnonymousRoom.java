@@ -91,6 +91,10 @@ public class AnonymousRoom {
         return isQuestioner(userId) || recipientUserId.equals(userId);
     }
 
+    public Long getPartnerUserId(Long userId) {
+        return isQuestioner(userId) ? recipientUserId : questionerUserId;
+    }
+
     public boolean isEnded() {
         return status == AnonymousRoomStatus.ENDED;
     }
