@@ -10,6 +10,7 @@ import java.util.Set;
 
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
@@ -18,9 +19,11 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomLastMessage;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.product.type.ProductCategory;
@@ -29,6 +32,7 @@ import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +41,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
@@ -67,7 +72,13 @@ class AnonymousChatServiceTest {
     private UserService userService;
 
     @Mock
+    private FriendService friendService;
+
+    @Mock
     private ProductService productService;
+
+    @Mock
+    private AnonymousAliasGenerator anonymousAliasGenerator;
 
     @InjectMocks
     private AnonymousChatService anonymousChatService;
@@ -140,6 +151,38 @@ class AnonymousChatServiceTest {
 
         assertThat(response).isEqualTo(new CursorPageResponse<>(List.of(), null, false));
         verifyNoInteractions(anonymousMessageRepository, productService);
+    }
+
+    @Test
+    void validRequest_createRoom_savesRoomWithGeneratedAlias() {
+        Set<String> usedAliases = Set.of("마음을 전하는 수달");
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 24, 1, 0);
+        given(anonymousRoomRepository.findAllActiveQuestionerAliasesByRecipientUserId(RECIPIENT_ID))
+                .willReturn(usedAliases);
+        given(anonymousAliasGenerator.generate(usedAliases)).willReturn(QUESTIONER_ALIAS);
+        given(anonymousRoomRepository.save(any(AnonymousRoom.class))).willAnswer(invocation -> {
+            AnonymousRoom room = invocation.getArgument(0);
+            ReflectionTestUtils.setField(room, "id", ROOM_ID);
+            ReflectionTestUtils.setField(room, "createdAt", createdAt);
+            return room;
+        });
+
+        AnonymousRoomCreatedResponse response =
+                anonymousChatService.createRoom(QUESTIONER_ID, RECIPIENT_ID, PRODUCT_ID);
+
+        verify(userService).validateActiveUser(QUESTIONER_ID);
+        verify(friendService).validateFriend(QUESTIONER_ID, RECIPIENT_ID);
+        verify(productService).validateGiftProduct(RECIPIENT_ID, PRODUCT_ID);
+        verify(userService).validateActiveUserForUpdate(RECIPIENT_ID);
+        ArgumentCaptor<AnonymousRoom> roomCaptor = ArgumentCaptor.forClass(AnonymousRoom.class);
+        verify(anonymousRoomRepository).save(roomCaptor.capture());
+        AnonymousRoom savedRoom = roomCaptor.getValue();
+        assertThat(savedRoom.getProductId()).isEqualTo(PRODUCT_ID);
+        assertThat(savedRoom.getQuestionerUserId()).isEqualTo(QUESTIONER_ID);
+        assertThat(savedRoom.getRecipientUserId()).isEqualTo(RECIPIENT_ID);
+        assertThat(savedRoom.getQuestionerAlias()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(response.roomId()).isEqualTo(ROOM_ID);
+        assertThat(response.createdAt()).isEqualTo(OffsetDateTime.parse("2026-10-24T10:00:00+09:00"));
     }
 
     @Test

@@ -188,6 +188,15 @@ class UserServiceTest {
     }
 
     @Test
+    void activeUser_validateActiveUserForUpdate_locksUser() {
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
+
+        assertDoesNotThrow(() -> userService.validateActiveUserForUpdate(1L));
+
+        verify(userRepository).findByIdForUpdate(1L);
+    }
+
+    @Test
     void sameKakaoAccount_validateKakaoIdentity_passes() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
 

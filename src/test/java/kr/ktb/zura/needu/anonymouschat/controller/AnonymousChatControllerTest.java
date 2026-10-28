@@ -11,6 +11,7 @@ import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResp
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
@@ -130,10 +131,15 @@ class AnonymousChatControllerTest {
 
     @Test
     void validRequest_createRoom_returnsCreated() throws Exception {
+        given(anonymousChatService.createRoom(USER_ID, RECIPIENT_USER_ID, PRODUCT_ID))
+                .willReturn(new AnonymousRoomCreatedResponse(
+                        ROOM_ID, OffsetDateTime.parse("2026-10-24T10:00:00+09:00")));
+
         mockMvc.perform(postCreateRoom("{\"recipientUserId\": 200, \"productId\": 10}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("친구에게 슬쩍 물어봤어요."))
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(jsonPath("$.data.roomId").value(ROOM_ID))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-24T10:00:00+09:00"));
 
         verify(anonymousChatService).createRoom(USER_ID, RECIPIENT_USER_ID, PRODUCT_ID);
     }

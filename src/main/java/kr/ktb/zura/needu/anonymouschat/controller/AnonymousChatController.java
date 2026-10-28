@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousRoomRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.request.ReadAnonymousMessagesRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
@@ -47,13 +48,16 @@ public class AnonymousChatController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<Void>> createRoom(
+    public ResponseEntity<ApiResponse<AnonymousRoomCreatedResponse>> createRoom(
             @AuthenticationPrincipal Long questionerUserId,
             @RequestBody @Valid CreateAnonymousRoomRequest request
     ) {
-        anonymousChatService.createRoom(questionerUserId, request.recipientUserId(), request.productId());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.of(AnonymousChatResponseMessages.ROOM_CREATED, null));
+                .body(ApiResponse.of(
+                        AnonymousChatResponseMessages.ROOM_CREATED,
+                        anonymousChatService.createRoom(
+                                questionerUserId, request.recipientUserId(), request.productId())
+                ));
     }
 
     @GetMapping("/{roomId}")

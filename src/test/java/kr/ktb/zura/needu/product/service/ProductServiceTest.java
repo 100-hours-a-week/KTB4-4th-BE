@@ -181,6 +181,25 @@ class ProductServiceTest {
     }
 
     @Test
+    void existingGiftProduct_validateGiftProduct_passes() {
+        given(giftProductRepository.findAllActiveByUserIdAndProductId(FRIEND_USER_ID, PRODUCT_ID))
+                .willReturn(List.of(giftProduct(FRIEND_USER_ID, 88L, product())));
+
+        productService.validateGiftProduct(FRIEND_USER_ID, PRODUCT_ID);
+    }
+
+    @Test
+    void missingGiftProduct_validateGiftProduct_throwsRecommendationNotFound() {
+        given(giftProductRepository.findAllActiveByUserIdAndProductId(FRIEND_USER_ID, PRODUCT_ID))
+                .willReturn(List.of());
+
+        assertThatThrownBy(() -> productService.validateGiftProduct(FRIEND_USER_ID, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND);
+    }
+
+    @Test
     void notFriend_findProduct_throwsFriendNotFoundWithoutFindingProduct() {
         willThrow(new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND))
                 .given(giftProductService).validateFriendGiftViewable(USER_ID, FRIEND_USER_ID);

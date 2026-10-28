@@ -74,6 +74,10 @@ public class ProductService {
         };
     }
 
+    public void validateGiftProduct(Long recipientUserId, Long productId) {
+        findGiftProduct(recipientUserId, productId);
+    }
+
     private void validateFriendUserId(ProductContext context, Long friendUserId) {
         if (context == ProductContext.FRIEND_GIFT && friendUserId == null) {
             throw new BusinessException(CommonErrorCode.COMMON_INVALID_INPUT);
@@ -92,10 +96,7 @@ public class ProductService {
     }
 
     private ProductDetailResponse findMyGiftProduct(Long userId, Long productId) {
-        GiftProduct giftProduct = giftProductRepository.findAllActiveByUserIdAndProductId(userId, productId)
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND));
+        GiftProduct giftProduct = findGiftProduct(userId, productId);
         return ProductDetailResponse.from(
                 giftProduct.getProduct(),
                 ProductRecommendationResponse.from(giftProduct),
@@ -104,12 +105,16 @@ public class ProductService {
 
     private ProductDetailResponse findFriendGiftProduct(Long userId, Long friendUserId, Long productId) {
         giftProductService.validateFriendGiftViewable(userId, friendUserId);
-        GiftProduct giftProduct = giftProductRepository.findAllActiveByUserIdAndProductId(friendUserId, productId)
+        GiftProduct giftProduct = findGiftProduct(friendUserId, productId);
+        return ProductDetailResponse.from(
+                giftProduct.getProduct(), ProductRecommendationResponse.from(giftProduct), null);
+    }
+
+    private GiftProduct findGiftProduct(Long userId, Long productId) {
+        return giftProductRepository.findAllActiveByUserIdAndProductId(userId, productId)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND));
-        return ProductDetailResponse.from(
-                giftProduct.getProduct(), ProductRecommendationResponse.from(giftProduct), null);
     }
 
     private ProductFeedbackType findMyFeedback(Long userId, Long productId, ProductContext context) {
