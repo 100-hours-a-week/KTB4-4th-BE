@@ -21,6 +21,8 @@ import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousReportService;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousReportReason;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
@@ -188,7 +190,9 @@ class AnonymousChatControllerTest {
     void validCondition_findAllMessages_returnsCursorResponse() throws Exception {
         AnonymousMessageSearchCondition condition = new AnonymousMessageSearchCondition("cursor", 2);
         given(anonymousMessageService.findAllMessages(USER_ID, ROOM_ID, condition)).willReturn(
-                new AnonymousMessageListResponse("익명의 수달", new CursorPageResponse<>(List.of(
+                new AnonymousMessageListResponse("익명의 수달", AnonymousRoomStatus.ENDED,
+                        AnonymousRoomEndedReason.PARTNER_LEFT, OffsetDateTime.parse("2026-10-25T08:30:00Z"),
+                        new CursorPageResponse<>(List.of(
                         new AnonymousMessageSummaryResponse(101L, AnonymousMessageSender.ME, "안녕하세요", 1,
                                 OffsetDateTime.parse("2026-10-24T01:00:00Z")),
                         new AnonymousMessageSummaryResponse(100L, AnonymousMessageSender.OTHER, "반가워요", 0,
@@ -202,6 +206,9 @@ class AnonymousChatControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("익명대화 메시지를 조회했습니다."))
                 .andExpect(jsonPath("$.data.targetName").value("익명의 수달"))
+                .andExpect(jsonPath("$.data.roomStatus").value("ENDED"))
+                .andExpect(jsonPath("$.data.endedReason").value("PARTNER_LEFT"))
+                .andExpect(jsonPath("$.data.endedAt").value("2026-10-25T08:30:00Z"))
                 .andExpect(jsonPath("$.data.items[0].messageId").value(101))
                 .andExpect(jsonPath("$.data.items[0].sender").value("ME"))
                 .andExpect(jsonPath("$.data.items[0].content").value("안녕하세요"))
@@ -216,10 +223,14 @@ class AnonymousChatControllerTest {
     @Test
     void sizeMissing_findAllMessages_usesDefaultSize() throws Exception {
         given(anonymousMessageService.findAllMessages(USER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20)))
-                .willReturn(new AnonymousMessageListResponse("지호", new CursorPageResponse<>(List.of(), null, false)));
+                .willReturn(new AnonymousMessageListResponse("지호", AnonymousRoomStatus.ACTIVE, null, null,
+                        new CursorPageResponse<>(List.of(), null, false)));
 
         mockMvc.perform(get(MESSAGES_URL, ROOM_ID).with(authenticatedUser()))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.roomStatus").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.endedReason").isEmpty())
+                .andExpect(jsonPath("$.data.endedAt").isEmpty())
                 .andExpect(jsonPath("$.data.items").isEmpty())
                 .andExpect(jsonPath("$.nextCursor").isEmpty())
                 .andExpect(jsonPath("$.hasNext").value(false));

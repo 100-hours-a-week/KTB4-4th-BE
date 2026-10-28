@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
@@ -12,6 +13,8 @@ import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousMessageRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
@@ -258,6 +261,46 @@ class AnonymousMessageServiceTest {
                 QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
 
         assertThat(response.targetName()).isEqualTo("지호");
+    }
+
+    @Test
+    void activeRoom_findAllMessages_returnsActiveStatusWithoutEndInfo() {
+        givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of());
+
+        AnonymousMessageListResponse response = anonymousMessageService.findAllMessages(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(response.roomStatus()).isEqualTo(AnonymousRoomStatus.ACTIVE);
+        assertThat(response.endedReason()).isNull();
+        assertThat(response.endedAt()).isNull();
+    }
+
+    @Test
+    void roomEndedByMe_findAllMessages_returnsMeLeftWithEndedAt() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        room.end(QUESTIONER_ID, LocalDateTime.of(2026, 10, 25, 8, 30));
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of());
+
+        AnonymousMessageListResponse response = anonymousMessageService.findAllMessages(
+                QUESTIONER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(response.roomStatus()).isEqualTo(AnonymousRoomStatus.ENDED);
+        assertThat(response.endedReason()).isEqualTo(AnonymousRoomEndedReason.ME_LEFT);
+        assertThat(response.endedAt()).isEqualTo(OffsetDateTime.parse("2026-10-25T08:30:00Z"));
+    }
+
+    @Test
+    void roomEndedByPartner_findAllMessages_returnsPartnerLeft() {
+        AnonymousRoom room = givenParticipatingRoom(RECIPIENT_ID);
+        room.end(QUESTIONER_ID, LocalDateTime.of(2026, 10, 25, 8, 30));
+        given(anonymousMessageRepository.findAllLatestByRoomId(ROOM_ID, null, Limit.of(21))).willReturn(List.of());
+
+        AnonymousMessageListResponse response = anonymousMessageService.findAllMessages(
+                RECIPIENT_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20));
+
+        assertThat(response.roomStatus()).isEqualTo(AnonymousRoomStatus.ENDED);
+        assertThat(response.endedReason()).isEqualTo(AnonymousRoomEndedReason.PARTNER_LEFT);
     }
 
     private CursorPageResponse<AnonymousMessageSummaryResponse> findMessagePage(

@@ -32,7 +32,9 @@ public class AnonymousMessageService {
         userService.validateActiveUser(userId);
         AnonymousRoom room = anonymousChatService.findParticipatingRoom(userId, roomId);
 
-        return new AnonymousMessageListResponse(
+        return AnonymousMessageListResponse.of(
+                room,
+                userId,
                 anonymousChatService.findTargetName(room, room.isQuestioner(userId)),
                 findMessagePage(userId, room, condition)
         );
