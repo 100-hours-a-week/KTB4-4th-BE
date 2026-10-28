@@ -108,6 +108,11 @@ public class AnonymousChatController {
     }
 
     @PutMapping("/{roomId}/leave")
-    public void leaveRoom() {
+    public ResponseEntity<Void> leaveRoom(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long roomId
+    ) {
+        anonymousChatService.leaveRoom(userId, roomId);
+        return ResponseEntity.noContent().build();
     }
 }
