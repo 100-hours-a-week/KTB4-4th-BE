@@ -66,6 +66,8 @@ class AnonymousChatControllerTest {
     private static final Long MESSAGE_ID = 501L;
     private static final String ROOM_URL = "/api/v1/anonymous-chats/{roomId}";
     private static final String ROOMS_URL = "/api/v1/anonymous-chats";
+    private static final String CREATE_URL = "/api/v1/anonymous-chats";
+    private static final String MESSAGES_URL = "/api/v1/anonymous-chats/{roomId}/messages";
     private static final String READ_URL = "/api/v1/anonymous-chats/{roomId}/read";
     private static final String REPORT_URL = "/api/v1/anonymous-chats/{roomId}/reports";
     private static final String REPORT_BODY = """
