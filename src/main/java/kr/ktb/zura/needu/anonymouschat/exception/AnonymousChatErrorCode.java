@@ -11,6 +11,7 @@ public enum AnonymousChatErrorCode implements ErrorCode {
 
     ANONYMOUS_CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "익명대화방을 찾을 수 없습니다."),
     ANONYMOUS_CHAT_ROOM_FORBIDDEN(HttpStatus.FORBIDDEN, "해당 익명대화에 접근할 수 없습니다."),
+    ANONYMOUS_CHAT_ROOM_ENDED(HttpStatus.CONFLICT, "종료된 익명대화입니다."),
     ANONYMOUS_CHAT_REPORT_DUPLICATED(HttpStatus.CONFLICT, "이미 신고한 익명대화입니다."),
     ANONYMOUS_CHAT_ALIAS_EXHAUSTED(HttpStatus.CONFLICT, "사용 가능한 익명대화 상대명이 없습니다.");
 
