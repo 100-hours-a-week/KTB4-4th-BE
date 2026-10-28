@@ -72,6 +72,13 @@ public class UserService {
         validateActiveUser(findUser(userId));
     }
 
+    @Transactional
+    public void validateActiveUserForUpdate(Long userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+        validateActiveUser(user);
+    }
+
     public UserSummaryResponse findUserSummary(Long userId) {
         User user = findUser(userId);
         validateActiveUser(user);

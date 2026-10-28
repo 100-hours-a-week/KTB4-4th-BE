@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.common.openapi.ControllerDocs;
 import kr.ktb.zura.needu.common.openapi.OperationDoc;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
+import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Component;
 public class AnonymousChatControllerDocs implements ControllerDocs {
 
     private static final List<UserErrorCode> ACTIVE_USER_ERRORS = List.of(
+            UserErrorCode.USER_NOT_FOUND,
+            UserErrorCode.USER_WITHDRAWN,
             UserErrorCode.USER_BLOCKED,
             UserErrorCode.USER_ONBOARDING_REQUIRED);
 
@@ -34,7 +37,10 @@ public class AnonymousChatControllerDocs implements ControllerDocs {
                         .successStatus(HttpStatus.CREATED)
                         .errors(ACTIVE_USER_ERRORS)
                         .errors(FriendErrorCode.FRIEND_NOT_FOUND)
-                        .error(CommonErrorCode.COMMON_TOO_MANY_REQUESTS, new RetryAfterResponse(10))
+                        .errors(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND)
+                        .errors(AnonymousChatErrorCode.ANONYMOUS_CHAT_ALIAS_EXHAUSTED)
+                        .errors(CommonErrorCode.COMMON_INVALID_REQUEST, CommonErrorCode.COMMON_INVALID_INPUT)
+                        .error(CommonErrorCode.COMMON_TOO_MANY_REQUESTS, new RetryAfterResponse(60))
                         .build(),
                 OperationDoc.of(AnonymousChatController.class, "findRoom")
                         .errors(ACTIVE_USER_ERRORS)

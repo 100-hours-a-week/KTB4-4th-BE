@@ -5,12 +5,14 @@ import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
@@ -19,9 +21,11 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomLastMessage;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.user.dto.response.UserDetailResponse;
@@ -29,6 +33,7 @@ import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -41,7 +46,9 @@ public class AnonymousChatService {
     private final AnonymousRoomRepository anonymousRoomRepository;
     private final AnonymousMessageRepository anonymousMessageRepository;
     private final UserService userService;
+    private final FriendService friendService;
     private final ProductService productService;
+    private final AnonymousAliasGenerator anonymousAliasGenerator;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<AnonymousChatRoomSummaryResponse> findAllRooms(
@@ -80,7 +87,18 @@ public class AnonymousChatService {
         return new CursorPageResponse<>(items, nextCursor, hasNext);
     }
 
-    public void createRoom() {
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public AnonymousRoomCreatedResponse createRoom(Long questionerUserId, Long recipientUserId, Long productId) {
+        userService.validateActiveUser(questionerUserId);
+        friendService.validateFriend(questionerUserId, recipientUserId);
+        productService.validateGiftProduct(recipientUserId, productId);
+        userService.validateActiveUserForUpdate(recipientUserId);
+        Set<String> usedAliases = anonymousRoomRepository
+                .findAllActiveQuestionerAliasesByRecipientUserId(recipientUserId);
+        String questionerAlias = anonymousAliasGenerator.generate(usedAliases);
+        AnonymousRoom room = anonymousRoomRepository.save(
+                new AnonymousRoom(productId, questionerUserId, recipientUserId, questionerAlias));
+        return AnonymousRoomCreatedResponse.from(room);
     }
 
     @Transactional(readOnly = true)

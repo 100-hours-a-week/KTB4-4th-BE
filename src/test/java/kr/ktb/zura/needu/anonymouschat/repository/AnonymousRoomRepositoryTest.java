@@ -1,10 +1,13 @@
 package kr.ktb.zura.needu.anonymouschat.repository;
 
+import java.time.LocalDateTime;
+import java.util.Set;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,6 +54,18 @@ class AnonymousRoomRepositoryTest {
         assertThat(smaller).isZero();
         assertThat(same).isZero();
         assertThat(reload(room).getRecipientLastReadMessageId()).isEqualTo(8L);
+    }
+
+    @Test
+    void activeRooms_findAllActiveQuestionerAliases_returnsOnlyActiveAliases() {
+        entityManager.persist(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom expiredRoom = new AnonymousRoom(20L, 3L, 2L, "익명의 여우");
+        ReflectionTestUtils.setField(expiredRoom, "expiresAt", LocalDateTime.now());
+        entityManager.persistAndFlush(expiredRoom);
+
+        Set<String> aliases = anonymousRoomRepository.findAllActiveQuestionerAliasesByRecipientUserId(2L);
+
+        assertThat(aliases).containsExactly("익명의 수달");
     }
 
     private AnonymousRoom persistRoom() {

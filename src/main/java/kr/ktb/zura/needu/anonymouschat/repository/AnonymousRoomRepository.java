@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.anonymouschat.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,16 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Long> {
+
+    @Query("""
+            select distinct room.questionerAlias
+            from AnonymousRoom room
+            where room.recipientUserId = :recipientUserId
+              and room.expiresAt is null
+            """)
+    Set<String> findAllActiveQuestionerAliasesByRecipientUserId(
+            @Param("recipientUserId") Long recipientUserId
+    );
 
     @Query("""
             select new kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow(

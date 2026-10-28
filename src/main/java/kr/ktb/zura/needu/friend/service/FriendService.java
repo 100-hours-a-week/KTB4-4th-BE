@@ -75,10 +75,14 @@ public class FriendService {
     }
 
     public UserDetailResponse findFriendUser(Long ownerUserId, Long friendUserId) {
+        validateFriend(ownerUserId, friendUserId);
+        return findActiveFriendUser(friendUserId);
+    }
+
+    public void validateFriend(Long ownerUserId, Long friendUserId) {
         if (!friendRepository.existsByOwnerUserIdAndFriendUserId(ownerUserId, friendUserId)) {
             throw new BusinessException(FriendErrorCode.FRIEND_NOT_FOUND);
         }
-        return findActiveFriendUser(friendUserId);
     }
 
     public Map<Long, String> findAllFriendNicknames(Long ownerUserId, Collection<Long> friendUserIds) {

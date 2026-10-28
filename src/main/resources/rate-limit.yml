@@ -226,6 +226,11 @@ needu:
         path-pattern: /api/v1/anonymous-chats/{roomId}
         limit: 120
         window: 1m
+      anonymous-chat-create:
+        method: POST
+        path-pattern: /api/v1/anonymous-chats
+        limit: 30
+        window: 1m
       anonymous-chat-messages:
         method: GET
         path-pattern: /api/v1/anonymous-chats/{roomId}/messages

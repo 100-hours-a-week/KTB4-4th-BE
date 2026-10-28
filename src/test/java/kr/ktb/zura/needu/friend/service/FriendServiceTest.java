@@ -135,6 +135,22 @@ class FriendServiceTest {
     }
 
     @Test
+    void friendExists_validateFriend_passes() {
+        when(friendRepository.existsByOwnerUserIdAndFriendUserId(1L, 2L)).thenReturn(true);
+
+        friendService.validateFriend(1L, 2L);
+
+        verify(friendRepository).existsByOwnerUserIdAndFriendUserId(1L, 2L);
+    }
+
+    @Test
+    void notFriend_validateFriend_throwsFriendNotFound() {
+        assertThatThrownBy(() -> friendService.validateFriend(1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(FriendErrorCode.FRIEND_NOT_FOUND);
+    }
+
+    @Test
     void blockedLoginUser_findFriend_throwsUserBlockedWithoutFindingFriend() {
         doThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).when(userService).validateActiveUser(1L);
 
