@@ -5,11 +5,14 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageListResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
@@ -17,6 +20,7 @@ import kr.ktb.zura.needu.anonymouschat.service.AnonymousChatService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousReportService;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousReportReason;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
@@ -57,6 +61,7 @@ class AnonymousChatControllerTest {
     private static final Long MESSAGE_ID = 501L;
     private static final String ROOM_URL = "/api/v1/anonymous-chats/{roomId}";
     private static final String ROOMS_URL = "/api/v1/anonymous-chats";
+    private static final String MESSAGES_URL = "/api/v1/anonymous-chats/{roomId}/messages";
     private static final String READ_URL = "/api/v1/anonymous-chats/{roomId}/read";
     private static final String REPORT_URL = "/api/v1/anonymous-chats/{roomId}/reports";
     private static final String REPORT_BODY = """
@@ -177,6 +182,75 @@ class AnonymousChatControllerTest {
         mockMvc.perform(get(ROOM_URL, ROOM_ID).with(authenticatedUser()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("익명대화방을 찾을 수 없습니다."));
+    }
+
+    @Test
+    void validCondition_findAllMessages_returnsCursorResponse() throws Exception {
+        AnonymousMessageSearchCondition condition = new AnonymousMessageSearchCondition("cursor", 2);
+        given(anonymousMessageService.findAllMessages(USER_ID, ROOM_ID, condition)).willReturn(
+                new AnonymousMessageListResponse("익명의 수달", new CursorPageResponse<>(List.of(
+                        new AnonymousMessageSummaryResponse(101L, AnonymousMessageSender.ME, "안녕하세요", 1,
+                                OffsetDateTime.parse("2026-10-24T01:00:00Z")),
+                        new AnonymousMessageSummaryResponse(100L, AnonymousMessageSender.OTHER, "반가워요", 0,
+                                OffsetDateTime.parse("2026-10-24T00:59:00Z"))
+                ), "next-cursor", true)));
+
+        mockMvc.perform(get(MESSAGES_URL, ROOM_ID)
+                        .param("cursor", "cursor")
+                        .param("size", "2")
+                        .with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("익명대화 메시지를 조회했습니다."))
+                .andExpect(jsonPath("$.data.targetName").value("익명의 수달"))
+                .andExpect(jsonPath("$.data.items[0].messageId").value(101))
+                .andExpect(jsonPath("$.data.items[0].sender").value("ME"))
+                .andExpect(jsonPath("$.data.items[0].content").value("안녕하세요"))
+                .andExpect(jsonPath("$.data.items[0].unreadCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].sentAt").value("2026-10-24T01:00:00Z"))
+                .andExpect(jsonPath("$.data.items[1].sender").value("OTHER"))
+                .andExpect(jsonPath("$.data.items[1].unreadCount").value(0))
+                .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
+                .andExpect(jsonPath("$.hasNext").value(true));
+    }
+
+    @Test
+    void sizeMissing_findAllMessages_usesDefaultSize() throws Exception {
+        given(anonymousMessageService.findAllMessages(USER_ID, ROOM_ID, new AnonymousMessageSearchCondition(null, 20)))
+                .willReturn(new AnonymousMessageListResponse("지호", new CursorPageResponse<>(List.of(), null, false)));
+
+        mockMvc.perform(get(MESSAGES_URL, ROOM_ID).with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isEmpty())
+                .andExpect(jsonPath("$.nextCursor").isEmpty())
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void sizeOutOfRange_findAllMessages_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(get(MESSAGES_URL, ROOM_ID)
+                        .param("size", "51")
+                        .with(authenticatedUser()))
+                .andExpect(status().isUnprocessableContent());
+
+        verifyNoInteractions(anonymousMessageService);
+    }
+
+    @Test
+    void roomIdNotNumber_findAllMessages_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(MESSAGES_URL, "abc").with(authenticatedUser()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(anonymousMessageService);
+    }
+
+    @Test
+    void nonParticipant_findAllMessages_returnsForbidden() throws Exception {
+        given(anonymousMessageService.findAllMessages(anyLong(), anyLong(), any()))
+                .willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN));
+
+        mockMvc.perform(get(MESSAGES_URL, ROOM_ID).with(authenticatedUser()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 익명대화에 접근할 수 없습니다."));
     }
 
     @Test
