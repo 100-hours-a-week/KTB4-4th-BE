@@ -49,6 +49,7 @@ public class AnonymousChatControllerDocs implements ControllerDocs {
                         .error(CommonErrorCode.COMMON_TOO_MANY_REQUESTS, new RetryAfterResponse(10))
                         .build(),
                 OperationDoc.of(AnonymousChatController.class, "findAllMessages")
+                        .errors(ACTIVE_USER_ERRORS)
                         .errors(ROOM_ERRORS)
                         .errors(CommonErrorCode.COMMON_INVALID_REQUEST, CommonErrorCode.COMMON_INVALID_INPUT)
                         .error(CommonErrorCode.COMMON_TOO_MANY_REQUESTS, new RetryAfterResponse(10))

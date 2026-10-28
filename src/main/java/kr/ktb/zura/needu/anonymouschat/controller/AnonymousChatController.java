@@ -1,11 +1,13 @@
 package kr.ktb.zura.needu.anonymouschat.controller;
 
 import jakarta.validation.Valid;
+import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousRoomRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.request.ReadAnonymousMessagesRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageListApiResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
@@ -72,7 +74,15 @@ public class AnonymousChatController {
     }
 
     @GetMapping("/{roomId}/messages")
-    public void findAllMessages() {
+    public ResponseEntity<AnonymousMessageListApiResponse> findAllMessages(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long roomId,
+            @Valid AnonymousMessageSearchCondition condition
+    ) {
+        return ResponseEntity.ok(AnonymousMessageListApiResponse.of(
+                AnonymousChatResponseMessages.MESSAGES_FOUND,
+                anonymousMessageService.findAllMessages(userId, roomId, condition)
+        ));
     }
 
     @PatchMapping("/{roomId}/read")
