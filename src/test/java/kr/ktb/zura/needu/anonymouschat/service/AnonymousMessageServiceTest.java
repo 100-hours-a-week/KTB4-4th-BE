@@ -1,7 +1,10 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -66,6 +69,9 @@ class AnonymousMessageServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private AnonymousMessageService anonymousMessageService;
@@ -188,6 +194,43 @@ class AnonymousMessageServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.USER_BLOCKED));
         verifyNoInteractions(anonymousChatService, anonymousMessageRepository, eventPublisher);
+    }
+
+    @Test
+    void questionerReadPositionAdvanced_readMessages_publishesReadEventToRecipient() {
+        givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.existsByIdAndRoomId(MESSAGE_ID, ROOM_ID)).willReturn(true);
+        given(anonymousRoomRepository.updateQuestionerLastReadMessageId(ROOM_ID, MESSAGE_ID)).willReturn(1);
+        givenNow(Instant.parse("2026-10-28T01:05:00Z"));
+
+        anonymousMessageService.readMessages(QUESTIONER_ID, ROOM_ID, MESSAGE_ID);
+
+        verify(eventPublisher).publishEvent(new AnonymousReadPositionUpdatedEvent(
+                ROOM_ID, RECIPIENT_ID, MESSAGE_ID, LocalDateTime.of(2026, 10, 28, 1, 5)));
+    }
+
+    @Test
+    void recipientReadPositionAdvanced_readMessages_publishesReadEventToQuestioner() {
+        givenParticipatingRoom(RECIPIENT_ID);
+        given(anonymousMessageRepository.existsByIdAndRoomId(MESSAGE_ID, ROOM_ID)).willReturn(true);
+        given(anonymousRoomRepository.updateRecipientLastReadMessageId(ROOM_ID, MESSAGE_ID)).willReturn(1);
+        givenNow(Instant.parse("2026-10-28T01:05:00Z"));
+
+        anonymousMessageService.readMessages(RECIPIENT_ID, ROOM_ID, MESSAGE_ID);
+
+        verify(eventPublisher).publishEvent(new AnonymousReadPositionUpdatedEvent(
+                ROOM_ID, QUESTIONER_ID, MESSAGE_ID, LocalDateTime.of(2026, 10, 28, 1, 5)));
+    }
+
+    @Test
+    void readPositionNotAdvanced_readMessages_doesNotPublishReadEvent() {
+        givenParticipatingRoom(QUESTIONER_ID);
+        given(anonymousMessageRepository.existsByIdAndRoomId(MESSAGE_ID, ROOM_ID)).willReturn(true);
+        given(anonymousRoomRepository.updateQuestionerLastReadMessageId(ROOM_ID, MESSAGE_ID)).willReturn(0);
+
+        anonymousMessageService.readMessages(QUESTIONER_ID, ROOM_ID, MESSAGE_ID);
+
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -436,6 +479,11 @@ class AnonymousMessageServiceTest {
     private CursorPageResponse<AnonymousMessageSummaryResponse> findMessagePage(
             Long userId, Long roomId, AnonymousMessageSearchCondition condition) {
         return anonymousMessageService.findAllMessages(userId, roomId, condition).page();
+    }
+
+    private void givenNow(Instant now) {
+        given(clock.instant()).willReturn(now);
+        given(clock.getZone()).willReturn(ZoneOffset.UTC);
     }
 
     private static SendAnonymousMessageRequest sendRequest() {

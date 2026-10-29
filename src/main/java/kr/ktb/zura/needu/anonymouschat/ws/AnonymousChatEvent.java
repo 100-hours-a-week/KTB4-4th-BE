@@ -14,4 +14,8 @@ public record AnonymousChatEvent(
     public static AnonymousChatEvent messageReceived(AnonymousMessageReceivedEvent data) {
         return new AnonymousChatEvent(AnonymousChatEventType.ANONYMOUS_CHAT_MESSAGE_RECEIVED, data);
     }
+
+    public static AnonymousChatEvent messageRead(AnonymousMessageReadEvent data) {
+        return new AnonymousChatEvent(AnonymousChatEventType.ANONYMOUS_CHAT_MESSAGE_READ, data);
+    }
 }
