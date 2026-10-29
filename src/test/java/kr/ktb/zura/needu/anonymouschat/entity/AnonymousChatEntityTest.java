@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.anonymouschat.entity;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class AnonymousChatEntityTest {
         assertThat(savedRoom.getProductId()).isEqualTo(10L);
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(1L);
         assertThat(savedRoom.getRecipientUserId()).isEqualTo(2L);
+        assertThat(savedRoom.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
+        assertThat(savedRoom.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
         assertThat(savedRoom.getQuestionerAlias()).isEqualTo("익명의 수달");
         assertThat(savedRoom.getLastActivityAt()).isNotNull();
         assertThat(savedRoom.getCreatedAt()).isNotNull();

@@ -221,9 +221,9 @@ public class AnonymousChatService {
         LocalDateTime cursorActivityAt = cursor == null ? null : cursor.lastActivityAt();
         Long cursorRoomId = cursor == null ? null : cursor.roomId();
         return switch (role) {
-            case ASKER -> anonymousRoomRepository.findAllAskedByUserId(
+            case ASKER -> anonymousRoomRepository.findAllActiveAskedByUserId(
                     userId, cursorActivityAt, cursorRoomId, Limit.of(limit));
-            case RESPONDER -> anonymousRoomRepository.findAllReceivedByUserId(
+            case RESPONDER -> anonymousRoomRepository.findAllActiveReceivedByUserId(
                     userId, cursorActivityAt, cursorRoomId, Limit.of(limit));
         };
     }

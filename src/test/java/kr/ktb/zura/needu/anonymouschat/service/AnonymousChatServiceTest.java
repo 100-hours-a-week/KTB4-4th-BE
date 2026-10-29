@@ -111,7 +111,7 @@ class AnonymousChatServiceTest {
         AnonymousRoomListRow first = roomRow(3L, 30L, 300L, "익명의 수달", latestAt);
         AnonymousRoomListRow second = roomRow(2L, 20L, 200L, "익명의 여우", latestAt.minusHours(1));
         AnonymousRoomListRow extra = roomRow(1L, 10L, 400L, "익명의 토끼", latestAt.minusHours(2));
-        given(anonymousRoomRepository.findAllAskedByUserId(
+        given(anonymousRoomRepository.findAllActiveAskedByUserId(
                 QUESTIONER_ID, null, null, Limit.of(3))).willReturn(List.of(first, second, extra));
         given(anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(3L, 2L)))
                 .willReturn(List.of(new AnonymousRoomLastMessage(
@@ -146,7 +146,7 @@ class AnonymousChatServiceTest {
     void responder_findAllRooms_usesQuestionerAliasWithoutLoadingUsers() {
         LocalDateTime activityAt = LocalDateTime.of(2026, 10, 24, 15, 30);
         AnonymousRoomListRow room = roomRow(1L, PRODUCT_ID, RECIPIENT_ID, QUESTIONER_ALIAS, activityAt);
-        given(anonymousRoomRepository.findAllReceivedByUserId(
+        given(anonymousRoomRepository.findAllActiveReceivedByUserId(
                 RECIPIENT_ID, null, null, Limit.of(21))).willReturn(List.of(room));
         given(anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(ROOM_ID))).willReturn(List.of());
         given(anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(ROOM_ID), RECIPIENT_ID))
@@ -165,7 +165,7 @@ class AnonymousChatServiceTest {
 
     @Test
     void noRooms_findAllRooms_returnsEmptyPageWithoutLoadingRelatedData() {
-        given(anonymousRoomRepository.findAllAskedByUserId(
+        given(anonymousRoomRepository.findAllActiveAskedByUserId(
                 QUESTIONER_ID, null, null, Limit.of(21))).willReturn(List.of());
 
         CursorPageResponse<AnonymousChatRoomSummaryResponse> response = anonymousChatService.findAllRooms(

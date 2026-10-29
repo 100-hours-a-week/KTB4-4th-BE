@@ -38,11 +38,11 @@ class AnonymousChatRepositoryTest {
         updateActivityAt(newerAskedRoom, newerActivityAt);
         updateActivityAt(receivedRoom, newerActivityAt.plusHours(1));
 
-        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllAskedByUserId(
+        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllActiveAskedByUserId(
                 1L, null, null, Limit.of(10));
-        List<AnonymousRoomListRow> nextAskedRooms = anonymousRoomRepository.findAllAskedByUserId(
+        List<AnonymousRoomListRow> nextAskedRooms = anonymousRoomRepository.findAllActiveAskedByUserId(
                 1L, newerActivityAt, newerAskedRoom.getId(), Limit.of(10));
-        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllReceivedByUserId(
+        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllActiveReceivedByUserId(
                 1L, null, null, Limit.of(10));
 
         assertThat(askedRooms).extracting(AnonymousRoomListRow::roomId)
@@ -51,6 +51,27 @@ class AnonymousChatRepositoryTest {
                 .containsExactly(olderAskedRoom.getId());
         assertThat(receivedRooms).extracting(AnonymousRoomListRow::roomId)
                 .containsExactly(receivedRoom.getId());
+    }
+
+    @Test
+    void endedRooms_findAllActiveRooms_excludesEndedRoomsForBothRoles() {
+        AnonymousRoom activeAskedRoom = persistRoom(10L, 1L, 2L, "익명의 수달");
+        AnonymousRoom endedAskedRoom = persistRoom(20L, 1L, 3L, "익명의 여우");
+        AnonymousRoom activeReceivedRoom = persistRoom(30L, 4L, 1L, "익명의 토끼");
+        AnonymousRoom endedReceivedRoom = persistRoom(40L, 5L, 1L, "익명의 고양이");
+        endedAskedRoom.end(1L, LocalDateTime.now());
+        endedReceivedRoom.end(5L, LocalDateTime.now());
+        entityManager.flush();
+
+        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllActiveAskedByUserId(
+                1L, null, null, Limit.of(10));
+        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllActiveReceivedByUserId(
+                1L, null, null, Limit.of(10));
+
+        assertThat(askedRooms).extracting(AnonymousRoomListRow::roomId)
+                .containsExactly(activeAskedRoom.getId());
+        assertThat(receivedRooms).extracting(AnonymousRoomListRow::roomId)
+                .containsExactly(activeReceivedRoom.getId());
     }
 
     @Test

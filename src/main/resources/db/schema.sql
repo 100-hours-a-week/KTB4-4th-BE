@@ -360,6 +360,8 @@ CREATE TABLE IF NOT EXISTS anonymous_rooms (
     product_id         BIGINT      NOT NULL,
     questioner_user_id BIGINT      NOT NULL,
     recipient_user_id  BIGINT      NOT NULL,
+    questioner_status  VARCHAR(20) NOT NULL DEFAULT 'JOINED' COMMENT 'JOINED, LEFT',
+    recipient_status   VARCHAR(20) NOT NULL DEFAULT 'JOINED' COMMENT 'JOINED, LEFT',
     questioner_alias   VARCHAR(20) NOT NULL COMMENT '질문받은 사용자에게 보여주는 질문자 익명 별칭',
     last_activity_at   DATETIME(6) NOT NULL,
     questioner_last_read_message_id BIGINT NULL COMMENT '질문자가 마지막으로 읽은 메시지 ID',
@@ -457,6 +459,32 @@ PREPARE add_anonymous_room_recipient_activity_index_statement
     FROM @add_anonymous_room_recipient_activity_index;
 EXECUTE add_anonymous_room_recipient_activity_index_statement;
 DEALLOCATE PREPARE add_anonymous_room_recipient_activity_index_statement;
+
+SET @add_anonymous_room_questioner_status = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN questioner_status VARCHAR(20) NOT NULL DEFAULT ''JOINED'' COMMENT ''JOINED, LEFT'' AFTER recipient_user_id',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'questioner_status'
+);
+PREPARE add_anonymous_room_questioner_status_statement FROM @add_anonymous_room_questioner_status;
+EXECUTE add_anonymous_room_questioner_status_statement;
+DEALLOCATE PREPARE add_anonymous_room_questioner_status_statement;
+
+SET @add_anonymous_room_recipient_status = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN recipient_status VARCHAR(20) NOT NULL DEFAULT ''JOINED'' COMMENT ''JOINED, LEFT'' AFTER questioner_status',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'recipient_status'
+);
+PREPARE add_anonymous_room_recipient_status_statement FROM @add_anonymous_room_recipient_status;
+EXECUTE add_anonymous_room_recipient_status_statement;
+DEALLOCATE PREPARE add_anonymous_room_recipient_status_statement;
 
 -- ---------------------------------------------------------------------------
 -- product

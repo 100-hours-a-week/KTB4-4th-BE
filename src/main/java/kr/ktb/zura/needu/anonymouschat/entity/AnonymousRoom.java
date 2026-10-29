@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -47,6 +48,14 @@ public class AnonymousRoom {
 
     @Column(nullable = false)
     private Long recipientUserId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomParticipantStatus questionerStatus = AnonymousRoomParticipantStatus.JOINED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomParticipantStatus recipientStatus = AnonymousRoomParticipantStatus.JOINED;
 
     @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
     private String questionerAlias;
