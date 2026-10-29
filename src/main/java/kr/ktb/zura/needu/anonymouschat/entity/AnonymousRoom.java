@@ -100,6 +100,18 @@ public class AnonymousRoom {
         return isQuestioner(userId) || recipientUserId.equals(userId);
     }
 
+    public boolean isJoined(Long userId) {
+        return isQuestioner(userId)
+                ? questionerStatus == AnonymousRoomParticipantStatus.JOINED
+                : recipientStatus == AnonymousRoomParticipantStatus.JOINED;
+    }
+
+    public boolean isPartnerJoined(Long userId) {
+        return isQuestioner(userId)
+                ? recipientStatus == AnonymousRoomParticipantStatus.JOINED
+                : questionerStatus == AnonymousRoomParticipantStatus.JOINED;
+    }
+
     public Long getPartnerUserId(Long userId) {
         return isQuestioner(userId) ? recipientUserId : questionerUserId;
     }
@@ -108,19 +120,32 @@ public class AnonymousRoom {
         return status == AnonymousRoomStatus.ENDED;
     }
 
-    public boolean leave(Long userId) {
+    public boolean isActive() {
+        return status == AnonymousRoomStatus.ACTIVE;
+    }
+
+    public boolean leave(Long userId, LocalDateTime expiresAt) {
         if (isQuestioner(userId)) {
             if (questionerStatus == AnonymousRoomParticipantStatus.LEFT) {
                 return false;
             }
             questionerStatus = AnonymousRoomParticipantStatus.LEFT;
-            return true;
+        } else {
+            if (recipientStatus == AnonymousRoomParticipantStatus.LEFT) {
+                return false;
+            }
+            recipientStatus = AnonymousRoomParticipantStatus.LEFT;
         }
-        if (recipientStatus == AnonymousRoomParticipantStatus.LEFT) {
-            return false;
-        }
-        recipientStatus = AnonymousRoomParticipantStatus.LEFT;
+        expire(expiresAt);
         return true;
+    }
+
+    private void expire(LocalDateTime expiresAt) {
+        if (!isActive()) {
+            return;
+        }
+        status = AnonymousRoomStatus.EXPIRED;
+        this.expiresAt = expiresAt;
     }
 
     public boolean end(Long endedByUserId, LocalDateTime endedAt) {

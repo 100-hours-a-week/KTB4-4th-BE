@@ -23,7 +23,9 @@ public class AnonymousChatControllerDocs implements ControllerDocs {
 
     private static final List<AnonymousChatErrorCode> ROOM_ERRORS = List.of(
             AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN,
-            AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND);
+            AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND,
+            AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED,
+            AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTICIPANT_LEFT);
 
     @Override
     public List<OperationDoc> operations() {

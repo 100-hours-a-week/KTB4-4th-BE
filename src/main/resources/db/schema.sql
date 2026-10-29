@@ -369,7 +369,7 @@ CREATE TABLE IF NOT EXISTS anonymous_rooms (
     created_at         DATETIME(6) NOT NULL,
     opened_at          DATETIME(6) NULL COMMENT '질문받은 사용자의 최초 방 확인 시각',
     expires_at         DATETIME(6) NULL,
-    status             VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE, ENDED',
+    status             VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE, EXPIRED, ENDED',
     ended_at           DATETIME(6) NULL,
     ended_by_user_id   BIGINT      NULL COMMENT '방을 종료한 참여자. 나가기 또는 정지된 사용자',
     PRIMARY KEY (id),

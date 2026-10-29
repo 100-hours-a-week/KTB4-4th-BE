@@ -65,6 +65,7 @@ public class AnonymousMessageService {
             return;
         }
 
+        anonymousChatService.validatePartnerJoined(room, userId);
         validateRoomActive(room);
         AnonymousMessage message = saveMessage(
                 new AnonymousMessage(room, userId, request.clientMessageId(), request.content()));
@@ -115,8 +116,11 @@ public class AnonymousMessageService {
     }
 
     private void validateRoomActive(AnonymousRoom room) {
-        if (room.isEnded()) {
-            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED);
+        if (!room.isActive()) {
+            if (room.isEnded()) {
+                throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED);
+            }
+            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_EXPIRED);
         }
     }
 

@@ -53,13 +53,15 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
                 room.id, room.productId, room.recipientUserId, room.questionerAlias, room.lastActivityAt)
             from AnonymousRoom room
             where room.questionerUserId = :userId
-              and room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.ACTIVE
+              and (room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.ACTIVE
+                or room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.EXPIRED)
+              and room.questionerStatus = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus.JOINED
               and (:cursorActivityAt is null
                 or room.lastActivityAt < :cursorActivityAt
                 or (room.lastActivityAt = :cursorActivityAt and room.id < :cursorRoomId))
             order by room.lastActivityAt desc, room.id desc
             """)
-    List<AnonymousRoomListRow> findAllActiveAskedByUserId(
+    List<AnonymousRoomListRow> findAllVisibleAskedByUserId(
             @Param("userId") Long userId,
             @Param("cursorActivityAt") LocalDateTime cursorActivityAt,
             @Param("cursorRoomId") Long cursorRoomId,
@@ -71,13 +73,15 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
                 room.id, room.productId, room.recipientUserId, room.questionerAlias, room.lastActivityAt)
             from AnonymousRoom room
             where room.recipientUserId = :userId
-              and room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.ACTIVE
+              and (room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.ACTIVE
+                or room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.EXPIRED)
+              and room.recipientStatus = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus.JOINED
               and (:cursorActivityAt is null
                 or room.lastActivityAt < :cursorActivityAt
                 or (room.lastActivityAt = :cursorActivityAt and room.id < :cursorRoomId))
             order by room.lastActivityAt desc, room.id desc
             """)
-    List<AnonymousRoomListRow> findAllActiveReceivedByUserId(
+    List<AnonymousRoomListRow> findAllVisibleReceivedByUserId(
             @Param("userId") Long userId,
             @Param("cursorActivityAt") LocalDateTime cursorActivityAt,
             @Param("cursorRoomId") Long cursorRoomId,

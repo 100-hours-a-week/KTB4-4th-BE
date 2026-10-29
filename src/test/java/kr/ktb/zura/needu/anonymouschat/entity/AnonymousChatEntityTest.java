@@ -69,14 +69,16 @@ class AnonymousChatEntityTest {
     void questioner_leave_savesOnlyQuestionerStatusAsLeft() {
         AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
 
-        room.leave(1L);
+        LocalDateTime expiresAt = LocalDateTime.of(2026, 10, 29, 10, 0);
+        room.leave(1L, expiresAt);
         entityManager.flush();
         entityManager.clear();
 
         AnonymousRoom savedRoom = entityManager.find(AnonymousRoom.class, room.getId());
         assertThat(savedRoom.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(savedRoom.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
-        assertThat(savedRoom.getStatus()).isEqualTo(AnonymousRoomStatus.ACTIVE);
+        assertThat(savedRoom.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
+        assertThat(savedRoom.getExpiresAt()).isEqualTo(expiresAt);
     }
 
     @Test

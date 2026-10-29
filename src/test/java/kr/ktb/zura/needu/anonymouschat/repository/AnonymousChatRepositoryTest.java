@@ -38,11 +38,11 @@ class AnonymousChatRepositoryTest {
         updateActivityAt(newerAskedRoom, newerActivityAt);
         updateActivityAt(receivedRoom, newerActivityAt.plusHours(1));
 
-        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllActiveAskedByUserId(
+        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllVisibleAskedByUserId(
                 1L, null, null, Limit.of(10));
-        List<AnonymousRoomListRow> nextAskedRooms = anonymousRoomRepository.findAllActiveAskedByUserId(
+        List<AnonymousRoomListRow> nextAskedRooms = anonymousRoomRepository.findAllVisibleAskedByUserId(
                 1L, newerActivityAt, newerAskedRoom.getId(), Limit.of(10));
-        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllActiveReceivedByUserId(
+        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllVisibleReceivedByUserId(
                 1L, null, null, Limit.of(10));
 
         assertThat(askedRooms).extracting(AnonymousRoomListRow::roomId)
@@ -54,31 +54,40 @@ class AnonymousChatRepositoryTest {
     }
 
     @Test
-    void endedRooms_findAllActiveRooms_excludesEndedRoomsForBothRoles() {
+    void endedOrLeftRooms_findAllVisibleRooms_returnsJoinedActiveOrExpiredRoomsForBothRoles() {
         AnonymousRoom activeAskedRoom = persistRoom(10L, 1L, 2L, "익명의 수달");
         AnonymousRoom endedAskedRoom = persistRoom(20L, 1L, 3L, "익명의 여우");
+        AnonymousRoom leftAskedRoom = persistRoom(30L, 1L, 4L, "익명의 토끼");
+        AnonymousRoom partnerLeftAskedRoom = persistRoom(40L, 1L, 7L, "익명의 여우");
         AnonymousRoom activeReceivedRoom = persistRoom(30L, 4L, 1L, "익명의 토끼");
         AnonymousRoom endedReceivedRoom = persistRoom(40L, 5L, 1L, "익명의 고양이");
+        AnonymousRoom leftReceivedRoom = persistRoom(50L, 6L, 1L, "익명의 사슴");
+        AnonymousRoom partnerLeftReceivedRoom = persistRoom(60L, 8L, 1L, "익명의 수달");
         endedAskedRoom.end(1L, LocalDateTime.now());
         endedReceivedRoom.end(5L, LocalDateTime.now());
+        LocalDateTime expiresAt = LocalDateTime.now();
+        leftAskedRoom.leave(1L, expiresAt);
+        leftReceivedRoom.leave(1L, expiresAt);
+        partnerLeftAskedRoom.leave(7L, expiresAt);
+        partnerLeftReceivedRoom.leave(8L, expiresAt);
         entityManager.flush();
 
-        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllActiveAskedByUserId(
+        List<AnonymousRoomListRow> askedRooms = anonymousRoomRepository.findAllVisibleAskedByUserId(
                 1L, null, null, Limit.of(10));
-        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllActiveReceivedByUserId(
+        List<AnonymousRoomListRow> receivedRooms = anonymousRoomRepository.findAllVisibleReceivedByUserId(
                 1L, null, null, Limit.of(10));
 
         assertThat(askedRooms).extracting(AnonymousRoomListRow::roomId)
-                .containsExactly(activeAskedRoom.getId());
+                .containsExactlyInAnyOrder(activeAskedRoom.getId(), partnerLeftAskedRoom.getId());
         assertThat(receivedRooms).extracting(AnonymousRoomListRow::roomId)
-                .containsExactly(activeReceivedRoom.getId());
+                .containsExactlyInAnyOrder(activeReceivedRoom.getId(), partnerLeftReceivedRoom.getId());
     }
 
     @Test
     void endedOrExpiredRooms_findLatestActiveRoom_returnsOnlyValidRoom() {
         AnonymousRoom activeRoom = persistRoom(10L, 1L, 2L, "익명의 수달");
         AnonymousRoom expiredRoom = persistRoom(10L, 1L, 2L, "익명의 여우");
-        ReflectionTestUtils.setField(expiredRoom, "expiresAt", LocalDateTime.now());
+        expiredRoom.leave(1L, LocalDateTime.now());
         entityManager.flush();
         AnonymousRoom endedRoom = persistRoom(10L, 1L, 2L, "익명의 토끼");
         endedRoom.end(1L, LocalDateTime.now());
