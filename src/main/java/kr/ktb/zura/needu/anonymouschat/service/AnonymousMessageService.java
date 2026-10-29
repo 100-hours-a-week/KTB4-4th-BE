@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
@@ -36,6 +38,7 @@ public class AnonymousMessageService {
     private final AnonymousMessageRepository anonymousMessageRepository;
     private final UserService userService;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public AnonymousMessageListResponse findAllMessages(
@@ -81,12 +84,14 @@ public class AnonymousMessageService {
         AnonymousRoom room = anonymousChatService.findParticipatingRoom(userId, roomId);
         validateMessageInRoom(roomId, lastReadMessageId);
 
-        if (room.isQuestioner(userId)) {
-            anonymousRoomRepository.updateQuestionerLastReadMessageId(roomId, lastReadMessageId);
-            return;
-        }
+        int updatedCount = room.isQuestioner(userId)
+                ? anonymousRoomRepository.updateQuestionerLastReadMessageId(roomId, lastReadMessageId)
+                : anonymousRoomRepository.updateRecipientLastReadMessageId(roomId, lastReadMessageId);
 
-        anonymousRoomRepository.updateRecipientLastReadMessageId(roomId, lastReadMessageId);
+        if (updatedCount > 0) {
+            eventPublisher.publishEvent(new AnonymousReadPositionUpdatedEvent(
+                    roomId, room.getPartnerUserId(userId), lastReadMessageId, LocalDateTime.now(clock)));
+        }
     }
 
     private CursorPageResponse<AnonymousMessageSummaryResponse> findMessagePage(
