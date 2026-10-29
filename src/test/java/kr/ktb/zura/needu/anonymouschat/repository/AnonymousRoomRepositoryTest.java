@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -80,6 +81,22 @@ class AnonymousRoomRepositoryTest {
                 List.of(own.getId(), others.getId()), 2L);
 
         assertThat(rooms).extracting(AnonymousRoom::getId).containsExactly(own.getId());
+    }
+
+    @Test
+    void mixedRooms_findAllParticipatingByUserIdAndStatusForUpdate_returnsOnlyActiveParticipatingRooms() {
+        AnonymousRoom askedRoom = entityManager.persist(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom receivedRoom = entityManager.persist(new AnonymousRoom(20L, 3L, 1L, "익명의 여우"));
+        AnonymousRoom endedRoom = new AnonymousRoom(30L, 1L, 4L, "익명의 토끼");
+        endedRoom.end(1L, LocalDateTime.of(2026, 10, 28, 1, 0));
+        entityManager.persist(endedRoom);
+        entityManager.persistAndFlush(new AnonymousRoom(40L, 5L, 6L, "익명의 고양이"));
+
+        List<AnonymousRoom> rooms = anonymousRoomRepository.findAllParticipatingByUserIdAndStatusForUpdate(
+                1L, AnonymousRoomStatus.ACTIVE);
+
+        assertThat(rooms).extracting(AnonymousRoom::getId)
+                .containsExactlyInAnyOrder(askedRoom.getId(), receivedRoom.getId());
     }
 
     private AnonymousRoom persistRoom() {

@@ -187,6 +187,17 @@ public class AnonymousChatService {
                 partnerUserId, roomId, endedAt.atOffset(ZoneOffset.UTC)));
     }
 
+    @Transactional
+    public void endAllActiveRoomsByBlockedUser(Long userId) {
+        LocalDateTime endedAt = LocalDateTime.now(clock);
+        anonymousRoomRepository.findAllParticipatingByUserIdAndStatusForUpdate(userId, AnonymousRoomStatus.ACTIVE)
+                .forEach(room -> {
+                    room.end(userId, endedAt);
+                    eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
+                            room.getPartnerUserId(userId), room.getId(), endedAt.atOffset(ZoneOffset.UTC)));
+                });
+    }
+
     public AnonymousRoom findParticipatingRoom(Long userId, Long roomId) {
         AnonymousRoom room = anonymousRoomRepository.findById(roomId)
                 .orElseThrow(() -> new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND));

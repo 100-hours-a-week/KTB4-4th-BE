@@ -97,10 +97,12 @@ class AnonymousReportServiceTest {
         givenSavedReport();
         given(userService.findLastBlockedAt(QUESTIONER_ID)).willReturn(Optional.empty());
         given(anonymousReportRepository.countByReportedUserId(QUESTIONER_ID)).willReturn(5L);
+        given(userBlockService.blockFor(QUESTIONER_ID, BLOCK_DURATION)).willReturn(true);
 
         anonymousReportService.reportRoom(RECIPIENT_ID, ROOM_ID, REQUEST);
 
         verify(userBlockService).blockFor(QUESTIONER_ID, BLOCK_DURATION);
+        verify(anonymousChatService).endAllActiveRoomsByBlockedUser(QUESTIONER_ID);
     }
 
     @Test
@@ -113,6 +115,20 @@ class AnonymousReportServiceTest {
         anonymousReportService.reportRoom(RECIPIENT_ID, ROOM_ID, REQUEST);
 
         verify(userBlockService, never()).blockFor(anyLong(), any());
+        verify(anonymousChatService, never()).endAllActiveRoomsByBlockedUser(anyLong());
+    }
+
+    @Test
+    void alreadyBlockedUser_reportRoom_doesNotEndRoomsAgain() {
+        givenParticipatingRoom(RECIPIENT_ID);
+        givenSavedReport();
+        given(userService.findLastBlockedAt(QUESTIONER_ID)).willReturn(Optional.empty());
+        given(anonymousReportRepository.countByReportedUserId(QUESTIONER_ID)).willReturn(5L);
+        given(userBlockService.blockFor(QUESTIONER_ID, BLOCK_DURATION)).willReturn(false);
+
+        anonymousReportService.reportRoom(RECIPIENT_ID, ROOM_ID, REQUEST);
+
+        verify(anonymousChatService, never()).endAllActiveRoomsByBlockedUser(anyLong());
     }
 
     @Test

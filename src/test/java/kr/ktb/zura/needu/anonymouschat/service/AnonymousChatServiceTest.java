@@ -370,6 +370,33 @@ class AnonymousChatServiceTest {
         verifyNoInteractions(eventPublisher);
     }
 
+    @Test
+    void blockedUser_endAllActiveRooms_endsRoomsAndPublishesPartnerEvents() {
+        AnonymousRoom askedRoom = room();
+        AnonymousRoom receivedRoom = new AnonymousRoom(20L, OUTSIDER_ID, QUESTIONER_ID, "익명의 여우");
+        ReflectionTestUtils.setField(receivedRoom, "id", 2L);
+        given(anonymousRoomRepository.findAllParticipatingByUserIdAndStatusForUpdate(
+                QUESTIONER_ID, AnonymousRoomStatus.ACTIVE)).willReturn(List.of(askedRoom, receivedRoom));
+        Instant now = Instant.parse("2026-10-29T06:30:00Z");
+        given(clock.instant()).willReturn(now);
+        given(clock.getZone()).willReturn(ZoneOffset.UTC);
+
+        anonymousChatService.endAllActiveRoomsByBlockedUser(QUESTIONER_ID);
+
+        LocalDateTime endedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
+        OffsetDateTime eventEndedAt = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
+        assertThat(askedRoom.isEnded()).isTrue();
+        assertThat(askedRoom.getEndedByUserId()).isEqualTo(QUESTIONER_ID);
+        assertThat(askedRoom.getEndedAt()).isEqualTo(endedAt);
+        assertThat(receivedRoom.isEnded()).isTrue();
+        assertThat(receivedRoom.getEndedByUserId()).isEqualTo(QUESTIONER_ID);
+        assertThat(receivedRoom.getEndedAt()).isEqualTo(endedAt);
+        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
+                RECIPIENT_ID, ROOM_ID, eventEndedAt));
+        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
+                OUTSIDER_ID, 2L, eventEndedAt));
+    }
+
     private void givenRoom() {
         given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room()));
     }

@@ -77,8 +77,8 @@ public class AnonymousReportService {
         long reportCount = userService.findLastBlockedAt(reportedUserId)
                 .map(lastBlockedAt -> countReportsAfter(reportedUserId, lastBlockedAt))
                 .orElseGet(() -> anonymousReportRepository.countByReportedUserId(reportedUserId));
-        if (reportCount >= blockThreshold) {
-            userBlockService.blockFor(reportedUserId, blockDuration);
+        if (reportCount >= blockThreshold && userBlockService.blockFor(reportedUserId, blockDuration)) {
+            anonymousChatService.endAllActiveRoomsByBlockedUser(reportedUserId);
         }
     }
 
