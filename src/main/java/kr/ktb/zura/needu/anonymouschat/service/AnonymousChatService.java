@@ -25,6 +25,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
@@ -130,8 +131,8 @@ public class AnonymousChatService {
         productService.validateGiftProduct(recipientUserId, productId);
         userService.validateActiveUserForUpdate(recipientUserId);
         AnonymousRoom existingRoom = anonymousRoomRepository
-                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdOrderByIdDesc(
-                        productId, questionerUserId, recipientUserId)
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdAndStatusAndExpiresAtIsNullOrderByIdDesc(
+                        productId, questionerUserId, recipientUserId, AnonymousRoomStatus.ACTIVE)
                 .orElse(null);
         if (existingRoom != null) {
             return AnonymousRoomCreatedResponse.from(existingRoom);

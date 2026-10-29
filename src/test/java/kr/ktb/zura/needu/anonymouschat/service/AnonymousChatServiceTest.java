@@ -25,6 +25,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
@@ -218,13 +219,13 @@ class AnonymousChatServiceTest {
     }
 
     @Test
-    void sameParticipantsAndProduct_createRoom_returnsLatestRoomWithoutCreatingOrNotifying() {
+    void sameParticipantsAndProductWithActiveRoom_createRoom_returnsLatestRoomWithoutCreatingOrNotifying() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 10, 23, 1, 0);
         AnonymousRoom existingRoom = room();
         ReflectionTestUtils.setField(existingRoom, "createdAt", createdAt);
         given(anonymousRoomRepository
-                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdOrderByIdDesc(
-                        PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID))
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdAndStatusAndExpiresAtIsNullOrderByIdDesc(
+                        PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID, AnonymousRoomStatus.ACTIVE))
                 .willReturn(Optional.of(existingRoom));
 
         AnonymousRoomCreatedResponse response =
