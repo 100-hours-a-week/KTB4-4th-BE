@@ -1,11 +1,13 @@
 package kr.ktb.zura.needu.anonymouschat.repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import jakarta.persistence.LockModeType;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +16,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Long> {
+
+    List<AnonymousRoom> findAllByIdInAndRecipientUserId(Collection<Long> ids, Long recipientUserId);
+
+    Optional<AnonymousRoom> findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdAndStatusAndExpiresAtIsNullOrderByIdDesc(
+            Long productId, Long questionerUserId, Long recipientUserId, AnonymousRoomStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select room from AnonymousRoom room where room.id = :roomId")

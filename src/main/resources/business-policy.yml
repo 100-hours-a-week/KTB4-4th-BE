@@ -44,6 +44,7 @@ needu:
       lock-at-most-for: ${FRIEND_BIRTHDAY_LOCK_AT_MOST_FOR:10m}
       lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
   anonymous-chat:
+    notification-expiration: ${ANONYMOUS_CHAT_NOTIFICATION_EXPIRATION:30d}
     report:
       # 마지막 정지 이후 받은 신고가 이 수에 이르면 정지한다. 신고는 대화방마다 한 건이다
       block-threshold: ${ANONYMOUS_CHAT_REPORT_BLOCK_THRESHOLD:5}

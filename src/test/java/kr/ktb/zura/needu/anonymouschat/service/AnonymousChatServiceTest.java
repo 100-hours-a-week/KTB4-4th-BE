@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,9 +25,13 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.friend.service.FriendService;
+import kr.ktb.zura.needu.notification.service.NotificationCreationService;
+import kr.ktb.zura.needu.notification.type.NotificationResourceType;
+import kr.ktb.zura.needu.notification.type.NotificationType;
 import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.service.ProductService;
 import kr.ktb.zura.needu.product.type.ProductCategory;
@@ -38,6 +43,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
@@ -85,10 +91,16 @@ class AnonymousChatServiceTest {
     private AnonymousAliasGenerator anonymousAliasGenerator;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private NotificationCreationService notificationCreationService;
 
     @Mock
-    private Clock clock;
+    private ApplicationEventPublisher eventPublisher;
+
+    @Spy
+    private Duration notificationExpiration = Duration.ofDays(30);
+
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-10-24T01:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks
     private AnonymousChatService anonymousChatService;
@@ -186,6 +198,17 @@ class AnonymousChatServiceTest {
         verify(userService).validateActiveUserForUpdate(RECIPIENT_ID);
         ArgumentCaptor<AnonymousRoom> roomCaptor = ArgumentCaptor.forClass(AnonymousRoom.class);
         verify(anonymousRoomRepository).save(roomCaptor.capture());
+        verify(notificationCreationService).createNotifications(
+                Set.of(RECIPIENT_ID),
+                NotificationType.CHAT,
+                null,
+                "친구가 슬쩍 물어봤어요.",
+                "익명대화방에서 친구의 질문을 확인해 보세요.",
+                NotificationResourceType.ANONYMOUS_ROOM,
+                ROOM_ID,
+                "ANONYMOUS_CHAT_ROOM_CREATED:" + ROOM_ID,
+                LocalDateTime.of(2026, 11, 23, 1, 0)
+        );
         AnonymousRoom savedRoom = roomCaptor.getValue();
         assertThat(savedRoom.getProductId()).isEqualTo(PRODUCT_ID);
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(QUESTIONER_ID);
@@ -193,6 +216,26 @@ class AnonymousChatServiceTest {
         assertThat(savedRoom.getQuestionerAlias()).isEqualTo(QUESTIONER_ALIAS);
         assertThat(response.roomId()).isEqualTo(ROOM_ID);
         assertThat(response.createdAt()).isEqualTo(OffsetDateTime.parse("2026-10-24T10:00:00+09:00"));
+    }
+
+    @Test
+    void sameParticipantsAndProductWithActiveRoom_createRoom_returnsLatestRoomWithoutCreatingOrNotifying() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 23, 1, 0);
+        AnonymousRoom existingRoom = room();
+        ReflectionTestUtils.setField(existingRoom, "createdAt", createdAt);
+        given(anonymousRoomRepository
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdAndStatusAndExpiresAtIsNullOrderByIdDesc(
+                        PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID, AnonymousRoomStatus.ACTIVE))
+                .willReturn(Optional.of(existingRoom));
+
+        AnonymousRoomCreatedResponse response =
+                anonymousChatService.createRoom(QUESTIONER_ID, RECIPIENT_ID, PRODUCT_ID);
+
+        assertThat(response.roomId()).isEqualTo(ROOM_ID);
+        assertThat(response.createdAt()).isEqualTo(OffsetDateTime.parse("2026-10-23T10:00:00+09:00"));
+        verify(userService).validateActiveUserForUpdate(RECIPIENT_ID);
+        verify(anonymousRoomRepository, never()).save(any());
+        verifyNoInteractions(anonymousAliasGenerator, notificationCreationService);
     }
 
     @Test

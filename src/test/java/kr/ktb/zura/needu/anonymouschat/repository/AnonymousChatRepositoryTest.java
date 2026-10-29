@@ -5,11 +5,13 @@ import java.util.List;
 import java.util.UUID;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousMessage;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,6 +51,22 @@ class AnonymousChatRepositoryTest {
                 .containsExactly(olderAskedRoom.getId());
         assertThat(receivedRooms).extracting(AnonymousRoomListRow::roomId)
                 .containsExactly(receivedRoom.getId());
+    }
+
+    @Test
+    void endedOrExpiredRooms_findLatestActiveRoom_returnsOnlyValidRoom() {
+        AnonymousRoom activeRoom = persistRoom(10L, 1L, 2L, "익명의 수달");
+        AnonymousRoom expiredRoom = persistRoom(10L, 1L, 2L, "익명의 여우");
+        ReflectionTestUtils.setField(expiredRoom, "expiresAt", LocalDateTime.now());
+        entityManager.flush();
+        AnonymousRoom endedRoom = persistRoom(10L, 1L, 2L, "익명의 토끼");
+        endedRoom.end(1L, LocalDateTime.now());
+        entityManager.flush();
+
+        assertThat(anonymousRoomRepository
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdAndStatusAndExpiresAtIsNullOrderByIdDesc(
+                        10L, 1L, 2L, AnonymousRoomStatus.ACTIVE))
+                .contains(activeRoom);
     }
 
     @Test

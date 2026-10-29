@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.anonymouschat.repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,19 @@ class AnonymousRoomRepositoryTest {
         Set<String> aliases = anonymousRoomRepository.findAllActiveQuestionerAliasesByRecipientUserId(2L);
 
         assertThat(aliases).containsExactly("익명의 수달");
+    }
+
+    @Test
+    void mixedRecipients_findAllByIdInAndRecipientUserId_returnsOnlyOwnedRooms() {
+        AnonymousRoom own = entityManager.persistAndFlush(
+                new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom others = entityManager.persistAndFlush(
+                new AnonymousRoom(20L, 3L, 4L, "익명의 여우"));
+
+        List<AnonymousRoom> rooms = anonymousRoomRepository.findAllByIdInAndRecipientUserId(
+                List.of(own.getId(), others.getId()), 2L);
+
+        assertThat(rooms).extracting(AnonymousRoom::getId).containsExactly(own.getId());
     }
 
     private AnonymousRoom persistRoom() {
