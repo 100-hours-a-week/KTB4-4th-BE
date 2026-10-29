@@ -241,7 +241,8 @@ class AnonymousChatServiceTest {
 
     @Test
     void questioner_findRoom_returnsRecipientNicknameAndProduct() {
-        givenRoom();
+        AnonymousRoom room = givenRoom();
+        room.leave(RECIPIENT_ID);
         given(productService.findProductSummary(PRODUCT_ID)).willReturn(PRODUCT);
         given(userService.findUserById(RECIPIENT_ID)).willReturn(Optional.of(recipient()));
 
@@ -251,18 +252,21 @@ class AnonymousChatServiceTest {
         assertThat(response.roomId()).isEqualTo(ROOM_ID);
         assertThat(response.askedByMe()).isTrue();
         assertThat(response.targetName()).isEqualTo("지호");
+        assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(response.product()).isEqualTo(PRODUCT);
     }
 
     @Test
     void recipient_findRoom_returnsQuestionerAliasInsteadOfName() {
-        givenRoom();
+        AnonymousRoom room = givenRoom();
+        room.leave(QUESTIONER_ID);
         given(productService.findProductSummary(PRODUCT_ID)).willReturn(PRODUCT);
 
         AnonymousRoomDetailResponse response = anonymousChatService.findRoom(RECIPIENT_ID, ROOM_ID);
 
         assertThat(response.askedByMe()).isFalse();
         assertThat(response.targetName()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         verify(userService, never()).findUserById(anyLong());
     }
 
@@ -390,8 +394,10 @@ class AnonymousChatServiceTest {
                 OUTSIDER_ID, 2L, eventEndedAt));
     }
 
-    private void givenRoom() {
-        given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room()));
+    private AnonymousRoom givenRoom() {
+        AnonymousRoom room = room();
+        given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room));
+        return room;
     }
 
     private AnonymousRoom givenRoomForUpdate() {
