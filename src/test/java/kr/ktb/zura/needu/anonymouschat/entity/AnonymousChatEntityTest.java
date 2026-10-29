@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.anonymouschat.entity;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class AnonymousChatEntityTest {
         assertThat(savedRoom.getProductId()).isEqualTo(10L);
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(1L);
         assertThat(savedRoom.getRecipientUserId()).isEqualTo(2L);
+        assertThat(savedRoom.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
+        assertThat(savedRoom.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
         assertThat(savedRoom.getQuestionerAlias()).isEqualTo("익명의 수달");
         assertThat(savedRoom.getLastActivityAt()).isNotNull();
         assertThat(savedRoom.getCreatedAt()).isNotNull();
@@ -60,6 +63,22 @@ class AnonymousChatEntityTest {
         assertThat(savedRoom.isEnded()).isFalse();
         assertThat(savedRoom.getEndedAt()).isNull();
         assertThat(savedRoom.getEndedByUserId()).isNull();
+    }
+
+    @Test
+    void questioner_leave_savesOnlyQuestionerStatusAsLeft() {
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+
+        LocalDateTime expiresAt = LocalDateTime.of(2026, 10, 29, 10, 0);
+        room.leave(1L, expiresAt);
+        entityManager.flush();
+        entityManager.clear();
+
+        AnonymousRoom savedRoom = entityManager.find(AnonymousRoom.class, room.getId());
+        assertThat(savedRoom.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(savedRoom.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
+        assertThat(savedRoom.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
+        assertThat(savedRoom.getExpiresAt()).isEqualTo(expiresAt);
     }
 
     @Test

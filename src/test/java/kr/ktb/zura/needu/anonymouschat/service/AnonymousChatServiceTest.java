@@ -25,6 +25,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
@@ -111,7 +112,7 @@ class AnonymousChatServiceTest {
         AnonymousRoomListRow first = roomRow(3L, 30L, 300L, "익명의 수달", latestAt);
         AnonymousRoomListRow second = roomRow(2L, 20L, 200L, "익명의 여우", latestAt.minusHours(1));
         AnonymousRoomListRow extra = roomRow(1L, 10L, 400L, "익명의 토끼", latestAt.minusHours(2));
-        given(anonymousRoomRepository.findAllAskedByUserId(
+        given(anonymousRoomRepository.findAllVisibleAskedByUserId(
                 QUESTIONER_ID, null, null, Limit.of(3))).willReturn(List.of(first, second, extra));
         given(anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(3L, 2L)))
                 .willReturn(List.of(new AnonymousRoomLastMessage(
@@ -146,7 +147,7 @@ class AnonymousChatServiceTest {
     void responder_findAllRooms_usesQuestionerAliasWithoutLoadingUsers() {
         LocalDateTime activityAt = LocalDateTime.of(2026, 10, 24, 15, 30);
         AnonymousRoomListRow room = roomRow(1L, PRODUCT_ID, RECIPIENT_ID, QUESTIONER_ALIAS, activityAt);
-        given(anonymousRoomRepository.findAllReceivedByUserId(
+        given(anonymousRoomRepository.findAllVisibleReceivedByUserId(
                 RECIPIENT_ID, null, null, Limit.of(21))).willReturn(List.of(room));
         given(anonymousMessageRepository.findAllLastMessagesByRoomIdIn(List.of(ROOM_ID))).willReturn(List.of());
         given(anonymousMessageRepository.countAllUnreadByRoomIdIn(List.of(ROOM_ID), RECIPIENT_ID))
@@ -165,7 +166,7 @@ class AnonymousChatServiceTest {
 
     @Test
     void noRooms_findAllRooms_returnsEmptyPageWithoutLoadingRelatedData() {
-        given(anonymousRoomRepository.findAllAskedByUserId(
+        given(anonymousRoomRepository.findAllVisibleAskedByUserId(
                 QUESTIONER_ID, null, null, Limit.of(21))).willReturn(List.of());
 
         CursorPageResponse<AnonymousChatRoomSummaryResponse> response = anonymousChatService.findAllRooms(
@@ -240,7 +241,8 @@ class AnonymousChatServiceTest {
 
     @Test
     void questioner_findRoom_returnsRecipientNicknameAndProduct() {
-        givenRoom();
+        AnonymousRoom room = givenRoom();
+        room.leave(RECIPIENT_ID, LocalDateTime.now());
         given(productService.findProductSummary(PRODUCT_ID)).willReturn(PRODUCT);
         given(userService.findUserById(RECIPIENT_ID)).willReturn(Optional.of(recipient()));
 
@@ -250,18 +252,21 @@ class AnonymousChatServiceTest {
         assertThat(response.roomId()).isEqualTo(ROOM_ID);
         assertThat(response.askedByMe()).isTrue();
         assertThat(response.targetName()).isEqualTo("지호");
+        assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(response.product()).isEqualTo(PRODUCT);
     }
 
     @Test
     void recipient_findRoom_returnsQuestionerAliasInsteadOfName() {
-        givenRoom();
+        AnonymousRoom room = givenRoom();
+        room.leave(QUESTIONER_ID, LocalDateTime.now());
         given(productService.findProductSummary(PRODUCT_ID)).willReturn(PRODUCT);
 
         AnonymousRoomDetailResponse response = anonymousChatService.findRoom(RECIPIENT_ID, ROOM_ID);
 
         assertThat(response.askedByMe()).isFalse();
         assertThat(response.targetName()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         verify(userService, never()).findUserById(anyLong());
     }
 
@@ -301,6 +306,32 @@ class AnonymousChatServiceTest {
     }
 
     @Test
+    void endedRoom_findRoom_throwsRoomEndedWithoutLoadingProduct() {
+        AnonymousRoom room = givenRoom();
+        room.end(RECIPIENT_ID, LocalDateTime.now());
+
+        assertThatThrownBy(() -> anonymousChatService.findRoom(QUESTIONER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED);
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void leftParticipant_findRoom_throwsParticipantLeftWithoutLoadingProduct() {
+        AnonymousRoom room = givenRoom();
+        room.leave(QUESTIONER_ID, LocalDateTime.now());
+
+        assertThatThrownBy(() -> anonymousChatService.findRoom(QUESTIONER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTICIPANT_LEFT);
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
     void inactiveUser_findRoom_throwsWithoutQueryingRoom() {
         willThrow(new BusinessException(UserErrorCode.USER_ONBOARDING_REQUIRED))
                 .given(userService).validateActiveUser(QUESTIONER_ID);
@@ -314,47 +345,66 @@ class AnonymousChatServiceTest {
     }
 
     @Test
-    void questioner_leaveRoom_endsRoomAndPublishesPartnerEvent() {
+    void questioner_leaveRoom_expiresRoomAndUpdatesOnlyQuestionerStatus() {
         AnonymousRoom room = givenRoomForUpdate();
-        Instant now = Instant.parse("2026-10-28T06:30:00Z");
+        Instant now = Instant.parse("2026-10-29T06:30:00Z");
         given(clock.instant()).willReturn(now);
         given(clock.getZone()).willReturn(ZoneOffset.UTC);
 
         anonymousChatService.leaveRoom(QUESTIONER_ID, ROOM_ID);
 
         verify(userService).validateActiveUser(QUESTIONER_ID);
-        assertThat(room.isEnded()).isTrue();
-        assertThat(room.getEndedByUserId()).isEqualTo(QUESTIONER_ID);
-        assertThat(room.getEndedAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
-        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
-                RECIPIENT_ID, ROOM_ID, OffsetDateTime.ofInstant(now, ZoneOffset.UTC)));
+        assertThat(room.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
+        assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
+        assertThat(room.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
-    void recipient_leaveRoom_publishesEventToQuestioner() {
-        givenRoomForUpdate();
-        Instant now = Instant.parse("2026-10-28T06:30:00Z");
+    void recipient_leaveRoom_expiresRoomAndUpdatesOnlyRecipientStatus() {
+        AnonymousRoom room = givenRoomForUpdate();
+        Instant now = Instant.parse("2026-10-29T06:30:00Z");
         given(clock.instant()).willReturn(now);
         given(clock.getZone()).willReturn(ZoneOffset.UTC);
 
         anonymousChatService.leaveRoom(RECIPIENT_ID, ROOM_ID);
 
-        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
-                QUESTIONER_ID, ROOM_ID, OffsetDateTime.ofInstant(now, ZoneOffset.UTC)));
+        assertThat(room.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
+        assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
+        assertThat(room.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
-    void alreadyEndedRoom_leaveRoom_doesNotPublishDuplicateEvent() {
+    void remainingParticipant_leaveExpiredRoom_updatesRemainingParticipantStatus() {
         AnonymousRoom room = givenRoomForUpdate();
-        LocalDateTime firstEndedAt = LocalDateTime.of(2026, 10, 27, 6, 30);
-        room.end(RECIPIENT_ID, firstEndedAt);
-        given(clock.instant()).willReturn(Instant.parse("2026-10-28T06:30:00Z"));
+        LocalDateTime firstExpiresAt = LocalDateTime.of(2026, 10, 29, 6, 0);
+        room.leave(QUESTIONER_ID, firstExpiresAt);
+        given(clock.instant()).willReturn(Instant.parse("2026-10-29T06:30:00Z"));
         given(clock.getZone()).willReturn(ZoneOffset.UTC);
 
-        anonymousChatService.leaveRoom(QUESTIONER_ID, ROOM_ID);
+        anonymousChatService.leaveRoom(RECIPIENT_ID, ROOM_ID);
 
-        assertThat(room.getEndedByUserId()).isEqualTo(RECIPIENT_ID);
-        assertThat(room.getEndedAt()).isEqualTo(firstEndedAt);
+        assertThat(room.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
+        assertThat(room.getExpiresAt()).isEqualTo(firstExpiresAt);
+    }
+
+    @Test
+    void alreadyLeftParticipant_leaveRoom_throwsParticipantLeft() {
+        AnonymousRoom room = givenRoomForUpdate();
+        room.leave(QUESTIONER_ID, LocalDateTime.now());
+
+        assertThatThrownBy(() -> anonymousChatService.leaveRoom(QUESTIONER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTICIPANT_LEFT);
+
+        assertThat(room.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
         verifyNoInteractions(eventPublisher);
     }
 
@@ -397,8 +447,10 @@ class AnonymousChatServiceTest {
                 OUTSIDER_ID, 2L, eventEndedAt));
     }
 
-    private void givenRoom() {
-        given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room()));
+    private AnonymousRoom givenRoom() {
+        AnonymousRoom room = room();
+        given(anonymousRoomRepository.findById(ROOM_ID)).willReturn(Optional.of(room));
+        return room;
     }
 
     private AnonymousRoom givenRoomForUpdate() {

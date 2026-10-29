@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -47,6 +48,14 @@ public class AnonymousRoom {
 
     @Column(nullable = false)
     private Long recipientUserId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomParticipantStatus questionerStatus = AnonymousRoomParticipantStatus.JOINED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomParticipantStatus recipientStatus = AnonymousRoomParticipantStatus.JOINED;
 
     @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
     private String questionerAlias;
@@ -91,12 +100,52 @@ public class AnonymousRoom {
         return isQuestioner(userId) || recipientUserId.equals(userId);
     }
 
+    public boolean isJoined(Long userId) {
+        return isQuestioner(userId)
+                ? questionerStatus == AnonymousRoomParticipantStatus.JOINED
+                : recipientStatus == AnonymousRoomParticipantStatus.JOINED;
+    }
+
+    public boolean isPartnerJoined(Long userId) {
+        return isQuestioner(userId)
+                ? recipientStatus == AnonymousRoomParticipantStatus.JOINED
+                : questionerStatus == AnonymousRoomParticipantStatus.JOINED;
+    }
+
     public Long getPartnerUserId(Long userId) {
         return isQuestioner(userId) ? recipientUserId : questionerUserId;
     }
 
     public boolean isEnded() {
         return status == AnonymousRoomStatus.ENDED;
+    }
+
+    public boolean isActive() {
+        return status == AnonymousRoomStatus.ACTIVE;
+    }
+
+    public boolean leave(Long userId, LocalDateTime expiresAt) {
+        if (isQuestioner(userId)) {
+            if (questionerStatus == AnonymousRoomParticipantStatus.LEFT) {
+                return false;
+            }
+            questionerStatus = AnonymousRoomParticipantStatus.LEFT;
+        } else {
+            if (recipientStatus == AnonymousRoomParticipantStatus.LEFT) {
+                return false;
+            }
+            recipientStatus = AnonymousRoomParticipantStatus.LEFT;
+        }
+        expire(expiresAt);
+        return true;
+    }
+
+    private void expire(LocalDateTime expiresAt) {
+        if (!isActive()) {
+            return;
+        }
+        status = AnonymousRoomStatus.EXPIRED;
+        this.expiresAt = expiresAt;
     }
 
     public boolean end(Long endedByUserId, LocalDateTime endedAt) {

@@ -133,15 +133,16 @@ class AnonymousMessageServiceTest {
     }
 
     @Test
-    void sentClientMessageIdInEndedRoom_sendMessage_publishesDuplicatedEvent() {
-        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
-        room.end(RECIPIENT_ID, LocalDateTime.of(2026, 10, 28, 2, 0));
-        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
-                anyLong(), anyLong(), any())).willReturn(Optional.of(message(room, MESSAGE_ID, QUESTIONER_ID)));
+    void endedRoom_sendMessage_throwsBeforeFindingDuplicatedMessage() {
+        willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED))
+                .given(anonymousChatService).findParticipatingRoom(QUESTIONER_ID, ROOM_ID);
 
-        anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest());
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED));
 
-        assertThat(capturePublishedEvent().duplicated()).isTrue();
+        verifyNoInteractions(anonymousMessageRepository, eventPublisher);
     }
 
     @Test
@@ -155,6 +156,23 @@ class AnonymousMessageServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED));
+        verify(anonymousMessageRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void partnerLeft_sendMessage_throwsPartnerLeftWithoutSaving() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        room.leave(RECIPIENT_ID, LocalDateTime.now());
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                anyLong(), anyLong(), any())).willReturn(Optional.empty());
+        willThrow(new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTNER_LEFT))
+                .given(anonymousChatService).validatePartnerJoined(room, QUESTIONER_ID);
+
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTNER_LEFT));
         verify(anonymousMessageRepository, never()).saveAndFlush(any());
         verifyNoInteractions(eventPublisher);
     }

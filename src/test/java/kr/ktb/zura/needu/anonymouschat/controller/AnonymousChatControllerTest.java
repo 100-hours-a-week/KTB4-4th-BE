@@ -23,6 +23,7 @@ import kr.ktb.zura.needu.anonymouschat.service.AnonymousReportService;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousReportReason;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -194,6 +195,7 @@ class AnonymousChatControllerTest {
                 ROOM_ID,
                 true,
                 "지호",
+                AnonymousRoomParticipantStatus.LEFT,
                 new ProductSummaryResponse(10L, "무선 헤드폰", 129000L, ProductCategory.DIGITAL,
                         "https://example.com/product.png")
         ));
@@ -204,6 +206,7 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.data.roomId").value(ROOM_ID))
                 .andExpect(jsonPath("$.data.askedByMe").value(true))
                 .andExpect(jsonPath("$.data.targetName").value("지호"))
+                .andExpect(jsonPath("$.data.partnerStatus").value("LEFT"))
                 .andExpect(jsonPath("$.data.product.productId").value(10))
                 .andExpect(jsonPath("$.data.product.name").value("무선 헤드폰"))
                 .andExpect(jsonPath("$.data.product.price").value(129000))

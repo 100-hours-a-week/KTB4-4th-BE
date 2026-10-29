@@ -174,17 +174,7 @@ public class AnonymousChatService {
     public void leaveRoom(Long userId, Long roomId) {
         userService.validateActiveUser(userId);
         AnonymousRoom room = findParticipatingRoomForUpdate(userId, roomId);
-        LocalDateTime endedAt = LocalDateTime.now(clock);
-
-        if (!room.end(userId, endedAt)) {
-            return;
-        }
-
-        Long partnerUserId = room.isQuestioner(userId)
-                ? room.getRecipientUserId()
-                : room.getQuestionerUserId();
-        eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
-                partnerUserId, roomId, endedAt.atOffset(ZoneOffset.UTC)));
+        room.leave(userId, LocalDateTime.now(clock));
     }
 
     @Transactional
@@ -201,19 +191,33 @@ public class AnonymousChatService {
     public AnonymousRoom findParticipatingRoom(Long userId, Long roomId) {
         AnonymousRoom room = anonymousRoomRepository.findById(roomId)
                 .orElseThrow(() -> new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND));
-        if (!room.isParticipant(userId)) {
-            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN);
-        }
+        validateAccessibleRoom(room, userId);
         return room;
+    }
+
+    public void validatePartnerJoined(AnonymousRoom room, Long userId) {
+        if (!room.isPartnerJoined(userId)) {
+            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTNER_LEFT);
+        }
     }
 
     private AnonymousRoom findParticipatingRoomForUpdate(Long userId, Long roomId) {
         AnonymousRoom room = anonymousRoomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_NOT_FOUND));
+        validateAccessibleRoom(room, userId);
+        return room;
+    }
+
+    private void validateAccessibleRoom(AnonymousRoom room, Long userId) {
         if (!room.isParticipant(userId)) {
             throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_FORBIDDEN);
         }
-        return room;
+        if (room.isEnded()) {
+            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_ROOM_ENDED);
+        }
+        if (!room.isJoined(userId)) {
+            throw new BusinessException(AnonymousChatErrorCode.ANONYMOUS_CHAT_PARTICIPANT_LEFT);
+        }
     }
 
     private List<AnonymousRoomListRow> findRooms(
@@ -221,9 +225,9 @@ public class AnonymousChatService {
         LocalDateTime cursorActivityAt = cursor == null ? null : cursor.lastActivityAt();
         Long cursorRoomId = cursor == null ? null : cursor.roomId();
         return switch (role) {
-            case ASKER -> anonymousRoomRepository.findAllAskedByUserId(
+            case ASKER -> anonymousRoomRepository.findAllVisibleAskedByUserId(
                     userId, cursorActivityAt, cursorRoomId, Limit.of(limit));
-            case RESPONDER -> anonymousRoomRepository.findAllReceivedByUserId(
+            case RESPONDER -> anonymousRoomRepository.findAllVisibleReceivedByUserId(
                     userId, cursorActivityAt, cursorRoomId, Limit.of(limit));
         };
     }
