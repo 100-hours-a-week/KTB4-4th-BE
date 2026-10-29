@@ -129,6 +129,13 @@ public class AnonymousChatService {
         friendService.validateFriend(questionerUserId, recipientUserId);
         productService.validateGiftProduct(recipientUserId, productId);
         userService.validateActiveUserForUpdate(recipientUserId);
+        AnonymousRoom existingRoom = anonymousRoomRepository
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdOrderByIdDesc(
+                        productId, questionerUserId, recipientUserId)
+                .orElse(null);
+        if (existingRoom != null) {
+            return AnonymousRoomCreatedResponse.from(existingRoom);
+        }
         Set<String> usedAliases = anonymousRoomRepository
                 .findAllActiveQuestionerAliasesByRecipientUserId(recipientUserId);
         String questionerAlias = anonymousAliasGenerator.generate(usedAliases);

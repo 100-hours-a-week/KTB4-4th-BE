@@ -18,6 +18,9 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
 
     List<AnonymousRoom> findAllByIdInAndRecipientUserId(Collection<Long> ids, Long recipientUserId);
 
+    Optional<AnonymousRoom> findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdOrderByIdDesc(
+            Long productId, Long questionerUserId, Long recipientUserId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select room from AnonymousRoom room where room.id = :roomId")
     Optional<AnonymousRoom> findByIdForUpdate(@Param("roomId") Long roomId);

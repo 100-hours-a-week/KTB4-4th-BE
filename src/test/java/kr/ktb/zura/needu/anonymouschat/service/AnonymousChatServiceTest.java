@@ -218,6 +218,26 @@ class AnonymousChatServiceTest {
     }
 
     @Test
+    void sameParticipantsAndProduct_createRoom_returnsLatestRoomWithoutCreatingOrNotifying() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 23, 1, 0);
+        AnonymousRoom existingRoom = room();
+        ReflectionTestUtils.setField(existingRoom, "createdAt", createdAt);
+        given(anonymousRoomRepository
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdOrderByIdDesc(
+                        PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID))
+                .willReturn(Optional.of(existingRoom));
+
+        AnonymousRoomCreatedResponse response =
+                anonymousChatService.createRoom(QUESTIONER_ID, RECIPIENT_ID, PRODUCT_ID);
+
+        assertThat(response.roomId()).isEqualTo(ROOM_ID);
+        assertThat(response.createdAt()).isEqualTo(OffsetDateTime.parse("2026-10-23T10:00:00+09:00"));
+        verify(userService).validateActiveUserForUpdate(RECIPIENT_ID);
+        verify(anonymousRoomRepository, never()).save(any());
+        verifyNoInteractions(anonymousAliasGenerator, notificationCreationService);
+    }
+
+    @Test
     void questioner_findRoom_returnsRecipientNicknameAndProduct() {
         givenRoom();
         given(productService.findProductSummary(PRODUCT_ID)).willReturn(PRODUCT);

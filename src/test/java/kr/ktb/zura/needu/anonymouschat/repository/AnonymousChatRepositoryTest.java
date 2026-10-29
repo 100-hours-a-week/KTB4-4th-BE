@@ -52,6 +52,16 @@ class AnonymousChatRepositoryTest {
     }
 
     @Test
+    void duplicatedRooms_findLatestRoom_returnsHighestId() {
+        persistRoom(10L, 1L, 2L, "익명의 수달");
+        AnonymousRoom latestRoom = persistRoom(10L, 1L, 2L, "익명의 여우");
+
+        assertThat(anonymousRoomRepository
+                .findFirstByProductIdAndQuestionerUserIdAndRecipientUserIdOrderByIdDesc(10L, 1L, 2L))
+                .contains(latestRoom);
+    }
+
+    @Test
     void messagesInRooms_findSummaries_returnsLastMessageAndRoleBasedUnreadCount() {
         AnonymousRoom room = persistRoom(10L, 1L, 2L, "익명의 수달");
         persistMessage(room, 1L, "내가 보낸 메시지");
