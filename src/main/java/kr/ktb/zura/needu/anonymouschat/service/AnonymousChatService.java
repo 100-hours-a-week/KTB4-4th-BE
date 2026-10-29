@@ -174,17 +174,7 @@ public class AnonymousChatService {
     public void leaveRoom(Long userId, Long roomId) {
         userService.validateActiveUser(userId);
         AnonymousRoom room = findParticipatingRoomForUpdate(userId, roomId);
-        LocalDateTime endedAt = LocalDateTime.now(clock);
-
-        if (!room.end(userId, endedAt)) {
-            return;
-        }
-
-        Long partnerUserId = room.isQuestioner(userId)
-                ? room.getRecipientUserId()
-                : room.getQuestionerUserId();
-        eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
-                partnerUserId, roomId, endedAt.atOffset(ZoneOffset.UTC)));
+        room.leave(userId);
     }
 
     @Transactional

@@ -108,6 +108,21 @@ public class AnonymousRoom {
         return status == AnonymousRoomStatus.ENDED;
     }
 
+    public boolean leave(Long userId) {
+        if (isQuestioner(userId)) {
+            if (questionerStatus == AnonymousRoomParticipantStatus.LEFT) {
+                return false;
+            }
+            questionerStatus = AnonymousRoomParticipantStatus.LEFT;
+            return true;
+        }
+        if (recipientStatus == AnonymousRoomParticipantStatus.LEFT) {
+            return false;
+        }
+        recipientStatus = AnonymousRoomParticipantStatus.LEFT;
+        return true;
+    }
+
     public boolean end(Long endedByUserId, LocalDateTime endedAt) {
         if (isEnded()) {
             return false;

@@ -66,6 +66,20 @@ class AnonymousChatEntityTest {
     }
 
     @Test
+    void questioner_leave_savesOnlyQuestionerStatusAsLeft() {
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+
+        room.leave(1L);
+        entityManager.flush();
+        entityManager.clear();
+
+        AnonymousRoom savedRoom = entityManager.find(AnonymousRoom.class, room.getId());
+        assertThat(savedRoom.getQuestionerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
+        assertThat(savedRoom.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
+        assertThat(savedRoom.getStatus()).isEqualTo(AnonymousRoomStatus.ACTIVE);
+    }
+
+    @Test
     void activeRoom_end_savesEndedStatusAndWhoEndedIt() {
         AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
         LocalDateTime endedAt = LocalDateTime.of(2026, 10, 25, 8, 30);
