@@ -9,6 +9,7 @@ import kr.ktb.zura.needu.auth.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -36,8 +37,9 @@ class UserBlockServiceTest {
     void activeUser_blockFor_blocksAndRevokesSessions() {
         when(userService.blockUntil(USER_ID, NOW, NOW.plusDays(3))).thenReturn(true);
 
-        userBlockService.blockFor(USER_ID, Duration.ofDays(3));
+        boolean blocked = userBlockService.blockFor(USER_ID, Duration.ofDays(3));
 
+        assertThat(blocked).isTrue();
         verify(userService).blockUntil(USER_ID, NOW, NOW.plusDays(3));
         verify(authService).revokeSessionsOfBlockedUser(USER_ID);
     }
@@ -46,8 +48,9 @@ class UserBlockServiceTest {
     void alreadyBlockedUser_blockFor_keepsSessions() {
         when(userService.blockUntil(USER_ID, NOW, NOW.plusDays(3))).thenReturn(false);
 
-        userBlockService.blockFor(USER_ID, Duration.ofDays(3));
+        boolean blocked = userBlockService.blockFor(USER_ID, Duration.ofDays(3));
 
+        assertThat(blocked).isFalse();
         verify(authService, never()).revokeSessionsOfBlockedUser(anyLong());
     }
 }

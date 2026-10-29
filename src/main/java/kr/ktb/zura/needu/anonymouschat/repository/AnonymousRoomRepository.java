@@ -26,6 +26,18 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
     @Query("select room from AnonymousRoom room where room.id = :roomId")
     Optional<AnonymousRoom> findByIdForUpdate(@Param("roomId") Long roomId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select room
+            from AnonymousRoom room
+            where room.status = :status
+              and (room.questionerUserId = :userId or room.recipientUserId = :userId)
+            """)
+    List<AnonymousRoom> findAllParticipatingByUserIdAndStatusForUpdate(
+            @Param("userId") Long userId,
+            @Param("status") AnonymousRoomStatus status
+    );
+
     @Query("""
             select distinct room.questionerAlias
             from AnonymousRoom room

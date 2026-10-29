@@ -19,13 +19,14 @@ public class UserBlockService {
     private final Clock clock;
 
     @Transactional
-    public void blockFor(Long userId, Duration duration) {
+    public boolean blockFor(Long userId, Duration duration) {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime blockedUntil = now.plus(duration);
         if (!userService.blockUntil(userId, now, blockedUntil)) {
-            return;
+            return false;
         }
         authService.revokeSessionsOfBlockedUser(userId);
         log.info("User blocked. userId={}, blockedUntil={}", userId, blockedUntil);
+        return true;
     }
 }
