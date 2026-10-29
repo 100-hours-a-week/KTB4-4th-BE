@@ -20,6 +20,7 @@ import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousMessageRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageEventPublisher;
+import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageService;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousChatErrorEvent;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousChatEventSender;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousMessageRedisEvent;
@@ -84,6 +85,9 @@ class AnonymousChatMessageControllerTest {
 
     @Autowired
     private AnonymousChatMessageController anonymousChatMessageController;
+
+    @Autowired
+    private AnonymousMessageService anonymousMessageService;
 
     @MockitoBean
     private AnonymousMessageEventPublisher anonymousMessageEventPublisher;
@@ -275,6 +279,38 @@ class AnonymousChatMessageControllerTest {
     }
 
     @Test
+    void partnerReadsMessage_readMessages_sendsReadEventOnlyToSender() throws Exception {
+        AnonymousRoom room = saveRoom();
+        ConnectedClient sender = connectAndSubscribe(questionerId);
+        ConnectedClient reader = connectAndSubscribe(recipientId);
+        long messageId = sendAndAwaitReceived(sender, reader, room);
+
+        anonymousMessageService.readMessages(recipientId, room.getId(), messageId);
+
+        JsonNode read = sender.nextEvent();
+        assertThat(read).isNotNull();
+        assertThat(read.get("type").asString()).isEqualTo("ANONYMOUS_CHAT_MESSAGE_READ");
+        assertThat(read.get("data").get("roomId").asLong()).isEqualTo(room.getId());
+        assertThat(read.get("data").get("lastReadMessageId").asLong()).isEqualTo(messageId);
+        assertThat(read.get("data").hasNonNull("readAt")).isTrue();
+        assertThat(reader.eventWithinNoEventWait()).isNull();
+    }
+
+    @Test
+    void sameReadPosition_readMessages_doesNotSendReadEventAgain() throws Exception {
+        AnonymousRoom room = saveRoom();
+        ConnectedClient sender = connectAndSubscribe(questionerId);
+        ConnectedClient reader = connectAndSubscribe(recipientId);
+        long messageId = sendAndAwaitReceived(sender, reader, room);
+        anonymousMessageService.readMessages(recipientId, room.getId(), messageId);
+        assertThat(sender.nextEvent().get("type").asString()).isEqualTo("ANONYMOUS_CHAT_MESSAGE_READ");
+
+        anonymousMessageService.readMessages(recipientId, room.getId(), messageId);
+
+        assertThat(sender.eventWithinNoEventWait()).isNull();
+    }
+
+    @Test
     void tooManyRequests_handleBusinessException_returnsRetryAfterWithMessageIdentity() {
         Message<byte[]> message = MessageBuilder
                 .withPayload("{\"clientMessageId\":\"client-1\",\"content\":\"안녕하세요\"}".getBytes())
@@ -289,6 +325,15 @@ class AnonymousChatMessageControllerTest {
         assertThat(event.data().roomId()).isEqualTo(7L);
         assertThat(event.data().clientMessageId()).isEqualTo("client-1");
         assertThat(event.data().retryAfterSeconds()).isEqualTo(3L);
+    }
+
+    // 보낸 쪽의 SENT와 받은 쪽의 RECEIVED를 모두 비워 두고 저장된 messageId를 돌려준다.
+    private static long sendAndAwaitReceived(ConnectedClient sender, ConnectedClient receiver, AnonymousRoom room)
+            throws InterruptedException {
+        sender.send(room.getId(), messageBody(UUID.randomUUID(), "안녕하세요"));
+        long messageId = sender.nextEvent().get("data").get("messageId").asLong();
+        assertThat(receiver.nextEvent().get("data").get("messageId").asLong()).isEqualTo(messageId);
+        return messageId;
     }
 
     private ConnectedClient connectAndSubscribe(Long userId) throws Exception {
