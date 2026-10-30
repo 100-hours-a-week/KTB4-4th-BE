@@ -24,6 +24,8 @@ import org.springframework.web.util.WebUtils;
 public class SecurityConfig {
 
     private static final String HEALTH_PATH = "/actuator/health";
+    private static final String LIVENESS_PROBE_PATH = "/livez";
+    private static final String READINESS_PROBE_PATH = "/readyz";
     private static final String PROMETHEUS_PATH = "/actuator/prometheus";
     private static final String VAPID_PUBLIC_KEY_PATH = "/api/v1/notifications/web-push/public-key";
 
@@ -41,6 +43,7 @@ public class SecurityConfig {
             if (path.startsWith("/api/v1/auth/kakao/") || path.equals("/api/v1/auth/csrf")
                     || path.equals("/api/v1/auth/refresh") || path.equals("/api/v1/auth/logout")
                     || path.equals("/api/v1/friends/kakao/callback") || path.equals(HEALTH_PATH)
+                    || path.equals(LIVENESS_PROBE_PATH) || path.equals(READINESS_PROBE_PATH)
                     || path.equals(PROMETHEUS_PATH) || path.equals(VAPID_PUBLIC_KEY_PATH)) {
                 return null;
             }
@@ -51,6 +54,7 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, HEALTH_PATH).permitAll()
+                        .requestMatchers(HttpMethod.GET, LIVENESS_PROBE_PATH, READINESS_PROBE_PATH).permitAll()
                         .requestMatchers(HttpMethod.GET, PROMETHEUS_PATH).permitAll()
                         .requestMatchers(HttpMethod.GET, VAPID_PUBLIC_KEY_PATH).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/kakao/authorize", "/api/v1/auth/kakao/callback")
