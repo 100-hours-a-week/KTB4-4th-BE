@@ -1,7 +1,7 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousChatEvent;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousMessageReceivedEvent;
@@ -25,7 +25,7 @@ public class AnonymousMessageSavedEventListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publish(AnonymousMessageSavedEvent event) {
-        OffsetDateTime sentAt = event.sentAt().atOffset(ZoneOffset.UTC);
+        OffsetDateTime sentAt = AnonymousChatTime.toKst(event.sentAt());
         publish(event, event.senderUserId(), AnonymousChatEvent.messageSent(
                 new AnonymousMessageSentEvent(
                         event.roomId(), event.clientMessageId(), event.messageId(), event.content(), sentAt)

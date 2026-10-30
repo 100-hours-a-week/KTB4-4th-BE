@@ -1,6 +1,6 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
-import java.time.ZoneOffset;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousChatEvent;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousMessageReadEvent;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousMessageRedisEvent;
@@ -22,7 +22,7 @@ public class AnonymousReadPositionUpdatedEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publish(AnonymousReadPositionUpdatedEvent event) {
         AnonymousChatEvent chatEvent = AnonymousChatEvent.messageRead(new AnonymousMessageReadEvent(
-                event.roomId(), event.lastReadMessageId(), event.readAt().atOffset(ZoneOffset.UTC)));
+                event.roomId(), event.lastReadMessageId(), AnonymousChatTime.toKst(event.readAt())));
         try {
             anonymousMessageEventPublisher.publish(
                     new AnonymousMessageRedisEvent(event.receiverUserId(), jsonMapper.valueToTree(chatEvent)));

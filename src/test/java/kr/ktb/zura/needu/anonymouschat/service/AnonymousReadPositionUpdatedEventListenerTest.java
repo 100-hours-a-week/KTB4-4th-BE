@@ -29,7 +29,7 @@ class AnonymousReadPositionUpdatedEventListenerTest {
         assertThat(captor.getValue().receiverUserId()).isEqualTo(200L);
         assertThat(captor.getValue().event().toString()).isEqualTo(jsonMapper.readTree("""
                 {"type":"ANONYMOUS_CHAT_MESSAGE_READ",
-                 "data":{"roomId":1,"lastReadMessageId":103,"readAt":"2026-10-28T01:05:00Z"}}
+                 "data":{"roomId":1,"lastReadMessageId":103,"readAt":"2026-10-28T10:05:00+09:00"}}
                 """).toString());
     }
 
