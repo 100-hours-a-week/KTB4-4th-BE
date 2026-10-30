@@ -42,44 +42,124 @@ needu:
         - 설렘을 준비하는
         - 행복을 나누는
         - 미소를 품은
+      # avatar는 FE 아이콘 파일명(icons/{avatar}-{color}.svg)과 같아야 한다
+      # excluded-colors: 털색과 겹쳐 아이콘이 묻히는 배경색
       animals:
-        - 수달
-        - 여우
-        - 토끼
-        - 다람쥐
-        - 사슴
-        - 펭귄
-        - 쿼카
-        - 알파카
-        - 판다
-        - 해달
-        - 고슴도치
-        - 부엉이
-        - 카피바라
-        - 코알라
-        - 라쿤
-        - 햄스터
-        - 돌고래
-        - 참새
-        - 강아지
-        - 고양이
-        - 미어캣
-        - 친칠라
-        - 왈라비
-        - 북극곰
-        - 레서판다
-        - 오리
-        - 병아리
-        - 양
-        - 염소
-        - 라마
-        - 기린
-        - 얼룩말
-        - 코끼리
-        - 하마
-        - 물개
-        - 바다사자
-        - 비버
-        - 두더지
-        - 청설모
-        - 치타
+        - name: 수달
+          avatar: otter
+        - name: 여우
+          avatar: fox
+          excluded-colors: [coral, peach]
+        - name: 토끼
+          avatar: rabbit
+        - name: 다람쥐
+          avatar: chipmunk
+          excluded-colors: [peach, butter]
+        - name: 사슴
+          avatar: deer
+          excluded-colors: [peach]
+        - name: 펭귄
+          avatar: penguin
+        - name: 쿼카
+          avatar: quokka
+          excluded-colors: [peach]
+        - name: 알파카
+          avatar: alpaca
+          excluded-colors: [butter]
+        - name: 판다
+          avatar: panda
+        - name: 해달
+          avatar: sea-otter
+        - name: 고슴도치
+          avatar: hedgehog
+          excluded-colors: [peach]
+        - name: 부엉이
+          avatar: owl
+        - name: 카피바라
+          avatar: capybara
+          excluded-colors: [peach]
+        - name: 코알라
+          avatar: koala
+        - name: 라쿤
+          avatar: raccoon
+        - name: 햄스터
+          avatar: hamster
+          excluded-colors: [coral, peach]
+        - name: 돌고래
+          avatar: dolphin
+          excluded-colors: [aqua, sky, peri]
+        - name: 참새
+          avatar: sparrow
+        - name: 강아지
+          avatar: dog
+          excluded-colors: [peach]
+        - name: 고양이
+          avatar: cat
+          excluded-colors: [peach, butter]
+        - name: 미어캣
+          avatar: meerkat
+          excluded-colors: [peach, butter]
+        - name: 친칠라
+          avatar: chinchilla
+          excluded-colors: [orchid, pink]
+        - name: 왈라비
+          avatar: wallaby
+        - name: 북극곰
+          avatar: polar-bear
+        - name: 레서판다
+          avatar: red-panda
+          excluded-colors: [coral, peach, rose]
+        - name: 오리
+          avatar: duck
+          excluded-colors: [peach]
+        - name: 병아리
+          avatar: chick
+          excluded-colors: [peach, butter, lime]
+        - name: 양
+          avatar: sheep
+          excluded-colors: [peach]
+        - name: 염소
+          avatar: goat
+        - name: 라마
+          avatar: llama
+          excluded-colors: [peach]
+        - name: 기린
+          avatar: giraffe
+          excluded-colors: [peach, butter, lime]
+        - name: 얼룩말
+          avatar: zebra
+        - name: 코끼리
+          avatar: elephant
+          excluded-colors: [sky, peri]
+        - name: 하마
+          avatar: hippo
+          excluded-colors: [peri, lav, orchid]
+        - name: 물개
+          avatar: seal
+          excluded-colors: [peri]
+        - name: 바다사자
+          avatar: sea-lion
+        - name: 비버
+          avatar: beaver
+        - name: 두더지
+          avatar: mole
+          excluded-colors: [coral, orchid, pink, rose]
+        - name: 청설모
+          avatar: red-squirrel
+        - name: 치타
+          avatar: cheetah
+          excluded-colors: [peach, butter]
+      avatar-colors:
+        - coral
+        - peach
+        - butter
+        - lime
+        - sage
+        - mint
+        - aqua
+        - sky
+        - peri
+        - lav
+        - orchid
+        - pink
+        - rose

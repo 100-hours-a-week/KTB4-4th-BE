@@ -7,6 +7,8 @@ public record AnonymousRoomListRow(
         Long productId,
         Long recipientUserId,
         String questionerAlias,
+        String questionerAvatarAnimal,
+        String questionerAvatarColor,
         LocalDateTime lastActivityAt
 ) {
 }

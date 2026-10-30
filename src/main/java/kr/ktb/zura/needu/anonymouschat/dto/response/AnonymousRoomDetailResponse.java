@@ -8,15 +8,22 @@ public record AnonymousRoomDetailResponse(
         Long roomId,
         boolean askedByMe,
         String targetName,
+        AnonymousCounterpartProfileResponse targetProfile,
         AnonymousRoomParticipantStatus partnerStatus,
         ProductSummaryResponse product
 ) {
 
     public static AnonymousRoomDetailResponse of(
-            AnonymousRoom room, boolean askedByMe, String targetName, ProductSummaryResponse product) {
+            AnonymousRoom room,
+            boolean askedByMe,
+            String targetName,
+            AnonymousCounterpartProfileResponse targetProfile,
+            ProductSummaryResponse product
+    ) {
         AnonymousRoomParticipantStatus partnerStatus = askedByMe
                 ? room.getRecipientStatus()
                 : room.getQuestionerStatus();
-        return new AnonymousRoomDetailResponse(room.getId(), askedByMe, targetName, partnerStatus, product);
+        return new AnonymousRoomDetailResponse(
+                room.getId(), askedByMe, targetName, targetProfile, partnerStatus, product);
     }
 }

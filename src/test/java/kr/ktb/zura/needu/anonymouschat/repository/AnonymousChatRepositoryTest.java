@@ -146,7 +146,7 @@ class AnonymousChatRepositoryTest {
 
     private AnonymousRoom persistRoom(Long productId, Long questionerUserId, Long recipientUserId, String alias) {
         return entityManager.persistAndFlush(
-                new AnonymousRoom(productId, questionerUserId, recipientUserId, alias));
+                new AnonymousRoom(productId, questionerUserId, recipientUserId, alias, "otter", "mint"));
     }
 
     private AnonymousMessage persistMessage(AnonymousRoom room, Long senderUserId, String content) {

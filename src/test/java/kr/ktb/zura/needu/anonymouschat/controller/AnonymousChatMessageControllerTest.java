@@ -404,7 +404,7 @@ class AnonymousChatMessageControllerTest {
 
     private AnonymousRoom saveRoom() {
         return anonymousRoomRepository.saveAndFlush(
-                new AnonymousRoom(1L, questionerId, recipientId, "익명의 수달"));
+                new AnonymousRoom(1L, questionerId, recipientId, "익명의 수달", "otter", "mint"));
     }
 
     private User saveUser(Long externalId) {

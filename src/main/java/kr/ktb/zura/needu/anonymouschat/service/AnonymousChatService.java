@@ -13,6 +13,7 @@ import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousCounterpartProfileResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
@@ -22,6 +23,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomLastMessage;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousAlias;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
@@ -114,11 +116,11 @@ public class AnonymousChatService {
                         AnonymousRoomUnreadCount::unreadMessageCount));
         Map<Long, ProductSummaryResponse> products = productService.findAllProductSummaries(
                 pageRooms.stream().map(AnonymousRoomListRow::productId).collect(Collectors.toSet()));
-        Map<Long, String> counterpartNames = findCounterpartNames(condition.role(), pageRooms);
+        Map<Long, UserDetailResponse> recipients = findRecipients(condition.role(), pageRooms);
 
         List<AnonymousChatRoomSummaryResponse> items = pageRooms.stream()
                 .map(room -> toRoomResponse(
-                        userId, condition.role(), room, lastMessages, unreadCounts, products, counterpartNames))
+                        userId, condition.role(), room, lastMessages, unreadCounts, products, recipients))
                 .toList();
         String nextCursor = hasNext ? AnonymousRoomCursor.from(pageRooms.getLast()).encode() : null;
         return new CursorPageResponse<>(items, nextCursor, hasNext);
@@ -139,9 +141,14 @@ public class AnonymousChatService {
         }
         Set<String> usedAliases = anonymousRoomRepository
                 .findAllActiveQuestionerAliasesByRecipientUserId(recipientUserId);
-        String questionerAlias = anonymousAliasGenerator.generate(usedAliases);
-        AnonymousRoom room = anonymousRoomRepository.save(
-                new AnonymousRoom(productId, questionerUserId, recipientUserId, questionerAlias));
+        AnonymousAlias questionerAlias = anonymousAliasGenerator.generate(usedAliases);
+        AnonymousRoom room = anonymousRoomRepository.save(new AnonymousRoom(
+                productId,
+                questionerUserId,
+                recipientUserId,
+                questionerAlias.name(),
+                questionerAlias.avatarAnimal(),
+                questionerAlias.avatarColor()));
         notificationCreationService.createNotifications(
                 Set.of(recipientUserId),
                 NotificationType.CHAT,
@@ -161,11 +168,16 @@ public class AnonymousChatService {
         userService.validateActiveUser(userId);
         AnonymousRoom room = findParticipatingRoom(userId, roomId);
         boolean askedByMe = room.isQuestioner(userId);
+        UserDetailResponse recipient = askedByMe
+                ? userService.findUserById(room.getRecipientUserId()).orElse(null)
+                : null;
 
         return AnonymousRoomDetailResponse.of(
                 room,
                 askedByMe,
-                findTargetName(room, askedByMe),
+                askedByMe ? findNickname(recipient) : room.getQuestionerAlias(),
+                toCounterpartProfile(
+                        askedByMe, recipient, room.getQuestionerAvatarAnimal(), room.getQuestionerAvatarColor()),
                 productService.findProductSummary(room.getProductId())
         );
     }
@@ -232,7 +244,7 @@ public class AnonymousChatService {
         };
     }
 
-    private Map<Long, String> findCounterpartNames(
+    private Map<Long, UserDetailResponse> findRecipients(
             AnonymousChatRole role, List<AnonymousRoomListRow> rooms) {
         if (role == AnonymousChatRole.RESPONDER) {
             return Map.of();
@@ -241,7 +253,7 @@ public class AnonymousChatService {
                 .map(AnonymousRoomListRow::recipientUserId)
                 .collect(Collectors.toSet());
         return userService.findAllActiveUsersByIds(recipientUserIds).stream()
-                .collect(Collectors.toMap(UserDetailResponse::id, UserDetailResponse::nickname));
+                .collect(Collectors.toMap(UserDetailResponse::id, Function.identity()));
     }
 
     private AnonymousChatRoomSummaryResponse toRoomResponse(
@@ -251,16 +263,17 @@ public class AnonymousChatService {
             Map<Long, AnonymousRoomLastMessage> lastMessages,
             Map<Long, Long> unreadCounts,
             Map<Long, ProductSummaryResponse> products,
-            Map<Long, String> counterpartNames
+            Map<Long, UserDetailResponse> recipients
     ) {
         long unreadCount = unreadCounts.getOrDefault(room.roomId(), 0L);
         ProductSummaryResponse product = products.get(room.productId());
-        String counterpartAlias = role == AnonymousChatRole.ASKER
-                ? counterpartNames.get(room.recipientUserId())
-                : room.questionerAlias();
+        boolean askedByMe = role == AnonymousChatRole.ASKER;
+        UserDetailResponse recipient = recipients.get(room.recipientUserId());
         return new AnonymousChatRoomSummaryResponse(
                 room.roomId(),
-                counterpartAlias,
+                askedByMe ? findNickname(recipient) : room.questionerAlias(),
+                toCounterpartProfile(
+                        askedByMe, recipient, room.questionerAvatarAnimal(), room.questionerAvatarColor()),
                 unreadCount > 0,
                 unreadCount,
                 AnonymousChatTime.toKst(room.lastActivityAt()),
@@ -280,6 +293,19 @@ public class AnonymousChatService {
                 message.senderUserId().equals(userId) ? SENDER_ME : SENDER_OTHER,
                 AnonymousChatTime.toKst(message.sentAt())
         );
+    }
+
+    // 내가 질문한 방이면 상대는 실명 사용자, 질문받은 방이면 상대는 익명 질문자다. 목록·상세가 같은 규칙을 쓴다
+    private static AnonymousCounterpartProfileResponse toCounterpartProfile(
+            boolean askedByMe, UserDetailResponse recipient, String avatarAnimal, String avatarColor) {
+        if (!askedByMe) {
+            return AnonymousCounterpartProfileResponse.ofAnonymous(avatarAnimal, avatarColor);
+        }
+        return AnonymousCounterpartProfileResponse.ofUser(recipient == null ? null : recipient.profileImageUrl());
+    }
+
+    private static String findNickname(UserDetailResponse user) {
+        return user == null ? null : user.nickname();
     }
 
     public String findTargetName(AnonymousRoom room, boolean askedByMe) {
