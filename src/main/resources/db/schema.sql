@@ -363,6 +363,8 @@ CREATE TABLE IF NOT EXISTS anonymous_rooms (
     questioner_status  VARCHAR(20) NOT NULL DEFAULT 'JOINED' COMMENT 'JOINED, LEFT',
     recipient_status   VARCHAR(20) NOT NULL DEFAULT 'JOINED' COMMENT 'JOINED, LEFT',
     questioner_alias   VARCHAR(20) NOT NULL COMMENT '질문받은 사용자에게 보여주는 질문자 익명 별칭',
+    questioner_avatar_animal VARCHAR(30) NOT NULL COMMENT '질문자 익명 아바타 동물 키. FE 아이콘 파일명과 같음',
+    questioner_avatar_color  VARCHAR(20) NOT NULL COMMENT '질문자 익명 아바타 배경색 키',
     last_activity_at   DATETIME(6) NOT NULL,
     questioner_last_read_message_id BIGINT NULL COMMENT '질문자가 마지막으로 읽은 메시지 ID',
     recipient_last_read_message_id  BIGINT NULL COMMENT '응답자가 마지막으로 읽은 메시지 ID',
@@ -485,6 +487,86 @@ SET @add_anonymous_room_recipient_status = (
 PREPARE add_anonymous_room_recipient_status_statement FROM @add_anonymous_room_recipient_status;
 EXECUTE add_anonymous_room_recipient_status_statement;
 DEALLOCATE PREPARE add_anonymous_room_recipient_status_statement;
+
+SET @add_anonymous_room_avatar_animal = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN questioner_avatar_animal VARCHAR(30) NULL AFTER questioner_alias',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'questioner_avatar_animal'
+);
+PREPARE add_anonymous_room_avatar_animal_statement FROM @add_anonymous_room_avatar_animal;
+EXECUTE add_anonymous_room_avatar_animal_statement;
+DEALLOCATE PREPARE add_anonymous_room_avatar_animal_statement;
+
+SET @add_anonymous_room_avatar_color = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN questioner_avatar_color VARCHAR(20) NULL AFTER questioner_avatar_animal',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'questioner_avatar_color'
+);
+PREPARE add_anonymous_room_avatar_color_statement FROM @add_anonymous_room_avatar_color;
+EXECUTE add_anonymous_room_avatar_color_statement;
+DEALLOCATE PREPARE add_anonymous_room_avatar_color_statement;
+
+-- 기존 방은 별칭의 동물로 아바타를 채우고, 배경색은 모든 동물에 쓸 수 있는 mint/sage 중에서 고른다
+UPDATE anonymous_rooms
+SET questioner_avatar_animal = COALESCE(
+        CASE SUBSTRING_INDEX(questioner_alias, ' ', -1)
+        WHEN '수달' THEN 'otter'
+        WHEN '여우' THEN 'fox'
+        WHEN '토끼' THEN 'rabbit'
+        WHEN '다람쥐' THEN 'chipmunk'
+        WHEN '사슴' THEN 'deer'
+        WHEN '펭귄' THEN 'penguin'
+        WHEN '쿼카' THEN 'quokka'
+        WHEN '알파카' THEN 'alpaca'
+        WHEN '판다' THEN 'panda'
+        WHEN '해달' THEN 'sea-otter'
+        WHEN '고슴도치' THEN 'hedgehog'
+        WHEN '부엉이' THEN 'owl'
+        WHEN '카피바라' THEN 'capybara'
+        WHEN '코알라' THEN 'koala'
+        WHEN '라쿤' THEN 'raccoon'
+        WHEN '햄스터' THEN 'hamster'
+        WHEN '돌고래' THEN 'dolphin'
+        WHEN '참새' THEN 'sparrow'
+        WHEN '강아지' THEN 'dog'
+        WHEN '고양이' THEN 'cat'
+        WHEN '미어캣' THEN 'meerkat'
+        WHEN '친칠라' THEN 'chinchilla'
+        WHEN '왈라비' THEN 'wallaby'
+        WHEN '북극곰' THEN 'polar-bear'
+        WHEN '레서판다' THEN 'red-panda'
+        WHEN '오리' THEN 'duck'
+        WHEN '병아리' THEN 'chick'
+        WHEN '양' THEN 'sheep'
+        WHEN '염소' THEN 'goat'
+        WHEN '라마' THEN 'llama'
+        WHEN '기린' THEN 'giraffe'
+        WHEN '얼룩말' THEN 'zebra'
+        WHEN '코끼리' THEN 'elephant'
+        WHEN '하마' THEN 'hippo'
+        WHEN '물개' THEN 'seal'
+        WHEN '바다사자' THEN 'sea-lion'
+        WHEN '비버' THEN 'beaver'
+        WHEN '두더지' THEN 'mole'
+        WHEN '청설모' THEN 'red-squirrel'
+        WHEN '치타' THEN 'cheetah'
+        END,
+        'otter'),
+    questioner_avatar_color = IF(MOD(id, 2) = 0, 'mint', 'sage')
+WHERE questioner_avatar_animal IS NULL
+   OR questioner_avatar_color IS NULL;
+
+ALTER TABLE anonymous_rooms
+    MODIFY COLUMN questioner_avatar_animal VARCHAR(30) NOT NULL COMMENT '질문자 익명 아바타 동물 키. FE 아이콘 파일명과 같음',
+    MODIFY COLUMN questioner_avatar_color VARCHAR(20) NOT NULL COMMENT '질문자 익명 아바타 배경색 키';
 
 -- ---------------------------------------------------------------------------
 -- product

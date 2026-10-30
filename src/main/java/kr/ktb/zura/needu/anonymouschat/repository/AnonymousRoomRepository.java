@@ -50,7 +50,8 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
 
     @Query("""
             select new kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow(
-                room.id, room.productId, room.recipientUserId, room.questionerAlias, room.lastActivityAt)
+                room.id, room.productId, room.recipientUserId, room.questionerAlias,
+                room.questionerAvatarAnimal, room.questionerAvatarColor, room.lastActivityAt)
             from AnonymousRoom room
             where room.questionerUserId = :userId
               and (room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.ACTIVE
@@ -70,7 +71,8 @@ public interface AnonymousRoomRepository extends JpaRepository<AnonymousRoom, Lo
 
     @Query("""
             select new kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow(
-                room.id, room.productId, room.recipientUserId, room.questionerAlias, room.lastActivityAt)
+                room.id, room.productId, room.recipientUserId, room.questionerAlias,
+                room.questionerAvatarAnimal, room.questionerAvatarColor, room.lastActivityAt)
             from AnonymousRoom room
             where room.recipientUserId = :userId
               and (room.status = kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus.ACTIVE

@@ -9,6 +9,7 @@ import kr.ktb.zura.needu.anonymouschat.dto.request.CreateAnonymousReportRequest;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatLastMessageResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatProductResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousCounterpartProfileResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageListResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousMessageSummaryResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousReportResponse;
@@ -97,6 +98,7 @@ class AnonymousChatControllerTest {
                 List.of(new AnonymousChatRoomSummaryResponse(
                         3L,
                         "익명의 수달",
+                        AnonymousCounterpartProfileResponse.ofAnonymous("otter", "mint"),
                         true,
                         3L,
                         OffsetDateTime.parse("2026-10-24T15:30:00+09:00"),
@@ -117,6 +119,9 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.message").value("익명대화방 목록을 조회했습니다."))
                 .andExpect(jsonPath("$.data.items[0].roomId").value(3))
                 .andExpect(jsonPath("$.data.items[0].counterpartAlias").value("익명의 수달"))
+                .andExpect(jsonPath("$.data.items[0].counterpartProfile.type").value("ANONYMOUS"))
+                .andExpect(jsonPath("$.data.items[0].counterpartProfile.avatar.animal").value("otter"))
+                .andExpect(jsonPath("$.data.items[0].counterpartProfile.avatar.color").value("mint"))
                 .andExpect(jsonPath("$.data.items[0].unreadMessageCount").value(3))
                 .andExpect(jsonPath("$.data.items[0].lastActiveAt").value("2026-10-24T15:30:00+09:00"))
                 .andExpect(jsonPath("$.data.items[0].lastMessage.sender").value("OTHER"))
@@ -192,7 +197,9 @@ class AnonymousChatControllerTest {
         given(anonymousChatService.findRoom(USER_ID, ROOM_ID)).willReturn(new AnonymousRoomDetailResponse(
                 ROOM_ID,
                 true,
+                200L,
                 "지호",
+                AnonymousCounterpartProfileResponse.ofUser("https://example.com/profile.png"),
                 AnonymousRoomParticipantStatus.LEFT,
                 new ProductSummaryResponse(10L, "무선 헤드폰", 129000L, ProductCategory.DIGITAL,
                         "https://example.com/product.png")
@@ -203,7 +210,10 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.message").value("익명대화방 정보를 조회했습니다."))
                 .andExpect(jsonPath("$.data.roomId").value(ROOM_ID))
                 .andExpect(jsonPath("$.data.askedByMe").value(true))
+                .andExpect(jsonPath("$.data.targetUserId").value(200))
                 .andExpect(jsonPath("$.data.targetName").value("지호"))
+                .andExpect(jsonPath("$.data.targetProfile.type").value("USER"))
+                .andExpect(jsonPath("$.data.targetProfile.profileImageUrl").value("https://example.com/profile.png"))
                 .andExpect(jsonPath("$.data.partnerStatus").value("LEFT"))
                 .andExpect(jsonPath("$.data.product.productId").value(10))
                 .andExpect(jsonPath("$.data.product.name").value("무선 헤드폰"))

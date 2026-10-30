@@ -60,6 +60,13 @@ public class AnonymousRoom {
     @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
     private String questionerAlias;
 
+    // 질문받은 사용자에게 보여주는 질문자 익명 아바타. FE 아이콘 파일명과 같은 키
+    @Column(nullable = false, length = 30)
+    private String questionerAvatarAnimal;
+
+    @Column(nullable = false, length = 20)
+    private String questionerAvatarColor;
+
     private Long questionerLastReadMessageId;
 
     private Long recipientLastReadMessageId;
@@ -85,11 +92,20 @@ public class AnonymousRoom {
 
     private Long endedByUserId;
 
-    public AnonymousRoom(Long productId, Long questionerUserId, Long recipientUserId, String questionerAlias) {
+    public AnonymousRoom(
+            Long productId,
+            Long questionerUserId,
+            Long recipientUserId,
+            String questionerAlias,
+            String questionerAvatarAnimal,
+            String questionerAvatarColor
+    ) {
         this.productId = productId;
         this.questionerUserId = questionerUserId;
         this.recipientUserId = recipientUserId;
         this.questionerAlias = questionerAlias;
+        this.questionerAvatarAnimal = questionerAvatarAnimal;
+        this.questionerAvatarColor = questionerAvatarColor;
     }
 
     public boolean isQuestioner(Long userId) {

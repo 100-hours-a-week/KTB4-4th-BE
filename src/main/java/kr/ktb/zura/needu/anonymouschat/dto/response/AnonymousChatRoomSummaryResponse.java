@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 public record AnonymousChatRoomSummaryResponse(
         Long roomId,
         String counterpartAlias,
+        AnonymousCounterpartProfileResponse counterpartProfile,
         boolean hasUnreadMessage,
         long unreadMessageCount,
         OffsetDateTime lastActiveAt,

@@ -60,8 +60,8 @@ class AnonymousRoomRepositoryTest {
 
     @Test
     void activeRooms_findAllActiveQuestionerAliases_returnsOnlyActiveAliases() {
-        entityManager.persist(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
-        AnonymousRoom expiredRoom = new AnonymousRoom(20L, 3L, 2L, "익명의 여우");
+        entityManager.persist(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
+        AnonymousRoom expiredRoom = new AnonymousRoom(20L, 3L, 2L, "익명의 여우", "fox", "mint");
         ReflectionTestUtils.setField(expiredRoom, "expiresAt", LocalDateTime.now());
         entityManager.persistAndFlush(expiredRoom);
 
@@ -73,9 +73,9 @@ class AnonymousRoomRepositoryTest {
     @Test
     void mixedRecipients_findAllByIdInAndRecipientUserId_returnsOnlyOwnedRooms() {
         AnonymousRoom own = entityManager.persistAndFlush(
-                new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+                new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
         AnonymousRoom others = entityManager.persistAndFlush(
-                new AnonymousRoom(20L, 3L, 4L, "익명의 여우"));
+                new AnonymousRoom(20L, 3L, 4L, "익명의 여우", "fox", "mint"));
 
         List<AnonymousRoom> rooms = anonymousRoomRepository.findAllByIdInAndRecipientUserId(
                 List.of(own.getId(), others.getId()), 2L);
@@ -85,12 +85,12 @@ class AnonymousRoomRepositoryTest {
 
     @Test
     void mixedRooms_findAllParticipatingByUserIdAndStatusForUpdate_returnsOnlyActiveParticipatingRooms() {
-        AnonymousRoom askedRoom = entityManager.persist(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
-        AnonymousRoom receivedRoom = entityManager.persist(new AnonymousRoom(20L, 3L, 1L, "익명의 여우"));
-        AnonymousRoom endedRoom = new AnonymousRoom(30L, 1L, 4L, "익명의 토끼");
+        AnonymousRoom askedRoom = entityManager.persist(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
+        AnonymousRoom receivedRoom = entityManager.persist(new AnonymousRoom(20L, 3L, 1L, "익명의 여우", "fox", "mint"));
+        AnonymousRoom endedRoom = new AnonymousRoom(30L, 1L, 4L, "익명의 토끼", "rabbit", "mint");
         endedRoom.end(1L, LocalDateTime.of(2026, 10, 28, 1, 0));
         entityManager.persist(endedRoom);
-        entityManager.persistAndFlush(new AnonymousRoom(40L, 5L, 6L, "익명의 고양이"));
+        entityManager.persistAndFlush(new AnonymousRoom(40L, 5L, 6L, "익명의 고양이", "cat", "mint"));
 
         List<AnonymousRoom> rooms = anonymousRoomRepository.findAllParticipatingByUserIdAndStatusForUpdate(
                 1L, AnonymousRoomStatus.ACTIVE);
@@ -100,7 +100,7 @@ class AnonymousRoomRepositoryTest {
     }
 
     private AnonymousRoom persistRoom() {
-        return entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        return entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
     }
 
     private AnonymousRoom reload(AnonymousRoom room) {

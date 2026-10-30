@@ -43,7 +43,7 @@ class AnonymousRoomNotificationPreviewProviderTest {
 
     @Test
     void receivedRoom_findAllPreviews_returnsProduct() {
-        AnonymousRoom room = new AnonymousRoom(PRODUCT_ID, 15L, RECEIVER_USER_ID, "익명의 수달");
+        AnonymousRoom room = new AnonymousRoom(PRODUCT_ID, 15L, RECEIVER_USER_ID, "익명의 수달", "otter", "mint");
         ReflectionTestUtils.setField(room, "id", ROOM_ID);
         ProductSummaryResponse product = new ProductSummaryResponse(
                 PRODUCT_ID, "무선 헤드폰", 129000L, ProductCategory.DIGITAL,

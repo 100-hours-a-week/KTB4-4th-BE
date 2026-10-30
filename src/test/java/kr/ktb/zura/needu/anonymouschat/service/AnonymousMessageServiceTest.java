@@ -515,7 +515,7 @@ class AnonymousMessageServiceTest {
     }
 
     private AnonymousRoom givenParticipatingRoom(Long userId) {
-        AnonymousRoom room = new AnonymousRoom(10L, QUESTIONER_ID, RECIPIENT_ID, "익명의 수달");
+        AnonymousRoom room = new AnonymousRoom(10L, QUESTIONER_ID, RECIPIENT_ID, "익명의 수달", "otter", "mint");
         ReflectionTestUtils.setField(room, "id", ROOM_ID);
         given(anonymousChatService.findParticipatingRoom(userId, ROOM_ID)).willReturn(room);
         return room;
