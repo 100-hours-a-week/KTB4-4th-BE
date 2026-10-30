@@ -27,6 +27,7 @@ import kr.ktb.zura.needu.anonymouschat.support.AnonymousAlias;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
@@ -191,8 +192,9 @@ public class AnonymousChatService {
         boolean partnerJoined = room.isPartnerJoined(userId);
         room.leave(userId, leftAt);
         if (partnerJoined) {
-            eventPublisher.publishEvent(new AnonymousRoomLeftEvent(
-                    room.getPartnerUserId(userId), room.getId(), room.getStatus(), AnonymousChatTime.toKst(leftAt)));
+            eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
+                    room.getPartnerUserId(userId), room.getId(), room.getStatus(),
+                    AnonymousRoomEndedReason.PARTNER_LEFT, AnonymousChatTime.toKst(leftAt)));
         }
     }
 
@@ -203,7 +205,8 @@ public class AnonymousChatService {
                 .forEach(room -> {
                     room.end(userId, endedAt);
                     eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
-                            room.getPartnerUserId(userId), room.getId(), AnonymousChatTime.toKst(endedAt)));
+                            room.getPartnerUserId(userId), room.getId(), room.getStatus(),
+                            AnonymousRoomEndedReason.USER_BLOCKED, AnonymousChatTime.toKst(endedAt)));
                 });
     }
 

@@ -27,6 +27,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAlias;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -375,8 +376,9 @@ class AnonymousChatServiceTest {
         assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
         assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
         assertThat(room.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
-        verify(eventPublisher).publishEvent(new AnonymousRoomLeftEvent(
-                RECIPIENT_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, OffsetDateTime.parse("2026-10-29T15:30:00+09:00")));
+        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
+                RECIPIENT_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, AnonymousRoomEndedReason.PARTNER_LEFT,
+                OffsetDateTime.parse("2026-10-29T15:30:00+09:00")));
     }
 
     @Test
@@ -392,8 +394,9 @@ class AnonymousChatServiceTest {
         assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
         assertThat(room.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
-        verify(eventPublisher).publishEvent(new AnonymousRoomLeftEvent(
-                QUESTIONER_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, OffsetDateTime.parse("2026-10-29T15:30:00+09:00")));
+        verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
+                QUESTIONER_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, AnonymousRoomEndedReason.PARTNER_LEFT,
+                OffsetDateTime.parse("2026-10-29T15:30:00+09:00")));
     }
 
     @Test
@@ -462,9 +465,9 @@ class AnonymousChatServiceTest {
         assertThat(receivedRoom.getEndedByUserId()).isEqualTo(QUESTIONER_ID);
         assertThat(receivedRoom.getEndedAt()).isEqualTo(endedAt);
         verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
-                RECIPIENT_ID, ROOM_ID, eventEndedAt));
+                RECIPIENT_ID, ROOM_ID, AnonymousRoomStatus.ENDED, AnonymousRoomEndedReason.USER_BLOCKED, eventEndedAt));
         verify(eventPublisher).publishEvent(new AnonymousRoomEndedEvent(
-                OUTSIDER_ID, 2L, eventEndedAt));
+                OUTSIDER_ID, 2L, AnonymousRoomStatus.ENDED, AnonymousRoomEndedReason.USER_BLOCKED, eventEndedAt));
     }
 
     private AnonymousRoom givenRoom() {

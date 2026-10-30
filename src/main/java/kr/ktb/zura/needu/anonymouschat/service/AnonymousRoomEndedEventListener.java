@@ -30,8 +30,8 @@ public class AnonymousRoomEndedEventListener {
                             EVENT_TYPE,
                             new RoomEndedData(
                                     event.roomId(),
-                                    AnonymousRoomStatus.ENDED,
-                                    AnonymousRoomEndedReason.PARTNER_LEFT,
+                                    event.roomStatus(),
+                                    event.endedReason(),
                                     event.endedAt()
                             )
                     ))
