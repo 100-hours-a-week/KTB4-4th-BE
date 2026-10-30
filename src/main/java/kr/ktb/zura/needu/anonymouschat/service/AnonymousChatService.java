@@ -174,7 +174,14 @@ public class AnonymousChatService {
     public void leaveRoom(Long userId, Long roomId) {
         userService.validateActiveUser(userId);
         AnonymousRoom room = findParticipatingRoomForUpdate(userId, roomId);
-        room.leave(userId, LocalDateTime.now(clock));
+        LocalDateTime leftAt = LocalDateTime.now(clock);
+        // 상대가 이미 나간 방이면 알릴 대상이 없다
+        boolean partnerJoined = room.isPartnerJoined(userId);
+        room.leave(userId, leftAt);
+        if (partnerJoined) {
+            eventPublisher.publishEvent(new AnonymousRoomLeftEvent(
+                    room.getPartnerUserId(userId), room.getId(), room.getStatus(), AnonymousChatTime.toKst(leftAt)));
+        }
     }
 
     @Transactional
