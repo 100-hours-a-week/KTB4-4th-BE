@@ -492,7 +492,7 @@ DEALLOCATE PREPARE add_anonymous_room_recipient_status_statement;
 
 CREATE TABLE IF NOT EXISTS products (
     id            BIGINT         NOT NULL AUTO_INCREMENT,
-    platform_type VARCHAR(20)    NOT NULL COMMENT 'COUPANG, KAKAO, ELEVEN_STREET, HOMEPLUS',
+    platform_type VARCHAR(20)    NOT NULL COMMENT 'COUPANG, KAKAO, ELEVEN_STREET, HOMEPLUS, KREAM',
     external_id   VARCHAR(255)   NOT NULL COMMENT '플랫폼의 상품 ID',
     name          VARCHAR(300)   NOT NULL,
     category      VARCHAR(100)   NULL COMMENT 'ProductCategory 코드(VOUCHER, LIVING, BEAUTY 등). 분류 없으면 NULL. 한글 분류명은 db/manual/product-category-codes.sql로 변환',
