@@ -21,7 +21,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void persistsRoomAndMessages() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
         UUID clientMessageId = UUID.randomUUID();
         AnonymousMessage question = entityManager.persistAndFlush(
                 new AnonymousMessage(room, 1L, clientMessageId, "이 선물 어때?"));
@@ -54,7 +54,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void newRoom_persist_startsActiveWithoutEndInfo() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
         entityManager.clear();
 
         AnonymousRoom savedRoom = entityManager.find(AnonymousRoom.class, room.getId());
@@ -67,7 +67,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void questioner_leave_savesOnlyQuestionerStatusAsLeft() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
 
         LocalDateTime expiresAt = LocalDateTime.of(2026, 10, 29, 10, 0);
         room.leave(1L, expiresAt);
@@ -83,7 +83,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void activeRoom_end_savesEndedStatusAndWhoEndedIt() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
         LocalDateTime endedAt = LocalDateTime.of(2026, 10, 25, 8, 30);
 
         boolean ended = room.end(2L, endedAt);
@@ -99,7 +99,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void endedRoom_end_keepsFirstEndInfo() {
-        AnonymousRoom room = new AnonymousRoom(10L, 1L, 2L, "익명의 수달");
+        AnonymousRoom room = new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint");
         LocalDateTime firstEndedAt = LocalDateTime.of(2026, 10, 25, 8, 30);
         room.end(2L, firstEndedAt);
 
@@ -112,7 +112,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void rejectsDuplicateClientMessageForSameRoomAndSender() {
-        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        AnonymousRoom room = entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
         UUID clientMessageId = UUID.randomUUID();
         entityManager.persistAndFlush(new AnonymousMessage(room, 1L, clientMessageId, "이 선물 어때?"));
 
@@ -123,7 +123,7 @@ class AnonymousChatEntityTest {
 
     @Test
     void rejectsRoomWithSameQuestionerAndRecipient() {
-        assertThatThrownBy(() -> entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 1L, "익명의 수달")))
+        assertThatThrownBy(() -> entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 1L, "익명의 수달", "otter", "mint")))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 }

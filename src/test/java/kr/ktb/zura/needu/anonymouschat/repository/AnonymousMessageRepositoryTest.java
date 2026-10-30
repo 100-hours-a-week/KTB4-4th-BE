@@ -75,6 +75,6 @@ class AnonymousMessageRepositoryTest {
     }
 
     private AnonymousRoom persistRoom() {
-        return entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달"));
+        return entityManager.persistAndFlush(new AnonymousRoom(10L, 1L, 2L, "익명의 수달", "otter", "mint"));
     }
 }

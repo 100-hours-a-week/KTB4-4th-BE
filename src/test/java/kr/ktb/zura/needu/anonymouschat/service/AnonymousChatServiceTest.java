@@ -14,6 +14,7 @@ import java.util.Set;
 
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousRoomSearchCondition;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousChatRoomSummaryResponse;
+import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousCounterpartProfileResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomCreatedResponse;
 import kr.ktb.zura.needu.anonymouschat.dto.response.AnonymousRoomDetailResponse;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
@@ -23,6 +24,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomLastMessage;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousAlias;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
@@ -133,6 +135,8 @@ class AnonymousChatServiceTest {
                 .isEqualTo(AnonymousRoomCursor.from(second));
         assertThat(response.items()).hasSize(2);
         assertThat(response.items().getFirst().counterpartAlias()).isEqualTo("수달");
+        assertThat(response.items().getFirst().counterpartProfile())
+                .isEqualTo(AnonymousCounterpartProfileResponse.ofUser("https://image.test/300.png"));
         assertThat(response.items().getFirst().hasUnreadMessage()).isTrue();
         assertThat(response.items().getFirst().unreadMessageCount()).isEqualTo(3L);
         assertThat(response.items().getFirst().lastActiveAt())
@@ -161,6 +165,8 @@ class AnonymousChatServiceTest {
         assertThat(response.hasNext()).isFalse();
         assertThat(response.nextCursor()).isNull();
         assertThat(response.items().getFirst().counterpartAlias()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(response.items().getFirst().counterpartProfile())
+                .isEqualTo(AnonymousCounterpartProfileResponse.ofAnonymous("otter", "mint"));
         assertThat(response.items().getFirst().hasUnreadMessage()).isFalse();
         verify(userService, never()).findAllActiveUsersByIds(anyCollection());
     }
@@ -183,7 +189,8 @@ class AnonymousChatServiceTest {
         LocalDateTime createdAt = LocalDateTime.of(2026, 10, 24, 1, 0);
         given(anonymousRoomRepository.findAllActiveQuestionerAliasesByRecipientUserId(RECIPIENT_ID))
                 .willReturn(usedAliases);
-        given(anonymousAliasGenerator.generate(usedAliases)).willReturn(QUESTIONER_ALIAS);
+        given(anonymousAliasGenerator.generate(usedAliases))
+                .willReturn(new AnonymousAlias(QUESTIONER_ALIAS, "otter", "mint"));
         given(anonymousRoomRepository.save(any(AnonymousRoom.class))).willAnswer(invocation -> {
             AnonymousRoom room = invocation.getArgument(0);
             ReflectionTestUtils.setField(room, "id", ROOM_ID);
@@ -216,6 +223,8 @@ class AnonymousChatServiceTest {
         assertThat(savedRoom.getQuestionerUserId()).isEqualTo(QUESTIONER_ID);
         assertThat(savedRoom.getRecipientUserId()).isEqualTo(RECIPIENT_ID);
         assertThat(savedRoom.getQuestionerAlias()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(savedRoom.getQuestionerAvatarAnimal()).isEqualTo("otter");
+        assertThat(savedRoom.getQuestionerAvatarColor()).isEqualTo("mint");
         assertThat(response.roomId()).isEqualTo(ROOM_ID);
         assertThat(response.createdAt()).isEqualTo(OffsetDateTime.parse("2026-10-24T10:00:00+09:00"));
     }
@@ -254,6 +263,8 @@ class AnonymousChatServiceTest {
         assertThat(response.askedByMe()).isTrue();
         assertThat(response.targetUserId()).isEqualTo(RECIPIENT_ID);
         assertThat(response.targetName()).isEqualTo("지호");
+        assertThat(response.targetProfile())
+                .isEqualTo(AnonymousCounterpartProfileResponse.ofUser("https://image.test/profile.png"));
         assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(response.product()).isEqualTo(PRODUCT);
     }
@@ -269,6 +280,8 @@ class AnonymousChatServiceTest {
         assertThat(response.askedByMe()).isFalse();
         assertThat(response.targetUserId()).isNull();
         assertThat(response.targetName()).isEqualTo(QUESTIONER_ALIAS);
+        assertThat(response.targetProfile())
+                .isEqualTo(AnonymousCounterpartProfileResponse.ofAnonymous("otter", "mint"));
         assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         verify(userService, never()).findUserById(anyLong());
     }
@@ -282,6 +295,7 @@ class AnonymousChatServiceTest {
         AnonymousRoomDetailResponse response = anonymousChatService.findRoom(QUESTIONER_ID, ROOM_ID);
 
         assertThat(response.targetName()).isNull();
+        assertThat(response.targetProfile()).isEqualTo(AnonymousCounterpartProfileResponse.ofUser(null));
     }
 
     @Test
@@ -426,7 +440,7 @@ class AnonymousChatServiceTest {
     @Test
     void blockedUser_endAllActiveRooms_endsRoomsAndPublishesPartnerEvents() {
         AnonymousRoom askedRoom = room();
-        AnonymousRoom receivedRoom = new AnonymousRoom(20L, OUTSIDER_ID, QUESTIONER_ID, "익명의 여우");
+        AnonymousRoom receivedRoom = new AnonymousRoom(20L, OUTSIDER_ID, QUESTIONER_ID, "익명의 여우", "fox", "mint");
         ReflectionTestUtils.setField(receivedRoom, "id", 2L);
         given(anonymousRoomRepository.findAllParticipatingByUserIdAndStatusForUpdate(
                 QUESTIONER_ID, AnonymousRoomStatus.ACTIVE)).willReturn(List.of(askedRoom, receivedRoom));
@@ -463,7 +477,7 @@ class AnonymousChatServiceTest {
     }
 
     private AnonymousRoom room() {
-        AnonymousRoom room = new AnonymousRoom(PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID, QUESTIONER_ALIAS);
+        AnonymousRoom room = new AnonymousRoom(PRODUCT_ID, QUESTIONER_ID, RECIPIENT_ID, QUESTIONER_ALIAS, "otter", "mint");
         ReflectionTestUtils.setField(room, "id", ROOM_ID);
         return room;
     }
@@ -475,7 +489,7 @@ class AnonymousChatServiceTest {
 
     private AnonymousRoomListRow roomRow(
             Long roomId, Long productId, Long recipientUserId, String alias, LocalDateTime lastActivityAt) {
-        return new AnonymousRoomListRow(roomId, productId, recipientUserId, alias, lastActivityAt);
+        return new AnonymousRoomListRow(roomId, productId, recipientUserId, alias, "otter", "mint", lastActivityAt);
     }
 
     private ProductSummaryResponse product(Long productId, String name) {
@@ -483,6 +497,7 @@ class AnonymousChatServiceTest {
     }
 
     private UserDetailResponse user(Long userId, String nickname) {
-        return new UserDetailResponse(userId, nickname, null, true, LocalDate.of(2000, 1, 1));
+        return new UserDetailResponse(
+                userId, nickname, "https://image.test/" + userId + ".png", true, LocalDate.of(2000, 1, 1));
     }
 }
