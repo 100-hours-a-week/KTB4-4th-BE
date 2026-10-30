@@ -192,6 +192,7 @@ class AnonymousChatControllerTest {
         given(anonymousChatService.findRoom(USER_ID, ROOM_ID)).willReturn(new AnonymousRoomDetailResponse(
                 ROOM_ID,
                 true,
+                200L,
                 "지호",
                 AnonymousRoomParticipantStatus.LEFT,
                 new ProductSummaryResponse(10L, "무선 헤드폰", 129000L, ProductCategory.DIGITAL,
@@ -203,6 +204,7 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.message").value("익명대화방 정보를 조회했습니다."))
                 .andExpect(jsonPath("$.data.roomId").value(ROOM_ID))
                 .andExpect(jsonPath("$.data.askedByMe").value(true))
+                .andExpect(jsonPath("$.data.targetUserId").value(200))
                 .andExpect(jsonPath("$.data.targetName").value("지호"))
                 .andExpect(jsonPath("$.data.partnerStatus").value("LEFT"))
                 .andExpect(jsonPath("$.data.product.productId").value(10))

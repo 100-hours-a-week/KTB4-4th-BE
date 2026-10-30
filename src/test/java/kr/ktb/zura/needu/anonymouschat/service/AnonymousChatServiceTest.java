@@ -252,6 +252,7 @@ class AnonymousChatServiceTest {
         verify(userService).validateActiveUser(QUESTIONER_ID);
         assertThat(response.roomId()).isEqualTo(ROOM_ID);
         assertThat(response.askedByMe()).isTrue();
+        assertThat(response.targetUserId()).isEqualTo(RECIPIENT_ID);
         assertThat(response.targetName()).isEqualTo("지호");
         assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(response.product()).isEqualTo(PRODUCT);
@@ -266,6 +267,7 @@ class AnonymousChatServiceTest {
         AnonymousRoomDetailResponse response = anonymousChatService.findRoom(RECIPIENT_ID, ROOM_ID);
 
         assertThat(response.askedByMe()).isFalse();
+        assertThat(response.targetUserId()).isNull();
         assertThat(response.targetName()).isEqualTo(QUESTIONER_ALIAS);
         assertThat(response.partnerStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         verify(userService, never()).findUserById(anyLong());
