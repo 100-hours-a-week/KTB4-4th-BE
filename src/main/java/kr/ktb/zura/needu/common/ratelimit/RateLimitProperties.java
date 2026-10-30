@@ -13,15 +13,25 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "needu.rate-limit")
-public record RateLimitProperties(@Valid Map<String, Policy> policies) {
+public record RateLimitProperties(
+        @Valid Map<String, Policy> policies,
+        @Valid Map<String, EventPolicy> events
+) {
 
     public RateLimitProperties {
         policies = policies == null ? Map.of() : Map.copyOf(policies);
+        events = events == null ? Map.of() : Map.copyOf(events);
     }
 
     public record Policy(
             @NotNull HttpMethod method,
             @NotBlank String pathPattern,
+            @Positive long limit,
+            @NotNull Duration window
+    ) {
+    }
+
+    public record EventPolicy(
             @Positive long limit,
             @NotNull Duration window
     ) {

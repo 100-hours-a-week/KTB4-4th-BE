@@ -21,7 +21,7 @@ class CommonErrorResponseCustomizerTest {
 
     private final CommonErrorResponseCustomizer customizer = new CommonErrorResponseCustomizer(
             new RateLimitProperties(Map.of("friend-detail",
-                    new RateLimitProperties.Policy(HttpMethod.GET, LIMITED_PATH, 120, Duration.ofMinutes(1)))));
+                    new RateLimitProperties.Policy(HttpMethod.GET, LIMITED_PATH, 120, Duration.ofMinutes(1))), Map.of()));
 
     @Test
     void authenticatedRateLimitedGet_addsUnauthorizedRateLimitAndServerErrors() {
