@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
+import kr.ktb.zura.needu.common.ratelimit.EventRateLimiter;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +33,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class AnonymousMessageService {
 
     private static final long DUPLICATE_RETRY_AFTER_SECONDS = 1;
+    private static final String SEND_MESSAGE_RATE_LIMIT_EVENT = "anonymous-chat-message-send";
 
     private final AnonymousChatService anonymousChatService;
     private final AnonymousRoomRepository anonymousRoomRepository;
     private final AnonymousMessageRepository anonymousMessageRepository;
     private final UserService userService;
+    private final EventRateLimiter eventRateLimiter;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
@@ -56,6 +59,7 @@ public class AnonymousMessageService {
 
     @Transactional
     public void sendMessage(Long userId, Long roomId, SendAnonymousMessageRequest request) {
+        eventRateLimiter.validateWithinLimit(SEND_MESSAGE_RATE_LIMIT_EVENT, userId);
         userService.validateActiveUser(userId);
         AnonymousRoom room = anonymousChatService.findParticipatingRoom(userId, roomId);
 

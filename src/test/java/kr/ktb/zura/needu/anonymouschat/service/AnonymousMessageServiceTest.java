@@ -23,7 +23,9 @@ import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
+import kr.ktb.zura.needu.common.ratelimit.EventRateLimiter;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import kr.ktb.zura.needu.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,7 @@ class AnonymousMessageServiceTest {
     private static final Long QUESTIONER_ID = 100L;
     private static final Long RECIPIENT_ID = 200L;
     private static final Long MESSAGE_ID = 501L;
+    private static final String SEND_MESSAGE_RATE_LIMIT_EVENT = "anonymous-chat-message-send";
 
     @Mock
     private AnonymousChatService anonymousChatService;
@@ -66,6 +69,9 @@ class AnonymousMessageServiceTest {
 
     @Mock
     private UserService userService;
+
+    @Mock
+    private EventRateLimiter eventRateLimiter;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -91,6 +97,7 @@ class AnonymousMessageServiceTest {
 
         anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, request);
 
+        verify(eventRateLimiter).validateWithinLimit(SEND_MESSAGE_RATE_LIMIT_EVENT, QUESTIONER_ID);
         verify(anonymousRoomRepository).updateLastActivityAt(ROOM_ID, LocalDateTime.of(2026, 10, 28, 1, 0));
         AnonymousMessageSavedEvent event = capturePublishedEvent();
         assertThat(event.roomId()).isEqualTo(room.getId());
@@ -189,6 +196,30 @@ class AnonymousMessageServiceTest {
                 .isInstanceOf(TooManyRequestsException.class);
         verify(anonymousRoomRepository, never()).updateLastActivityAt(anyLong(), any());
         verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void sendLimitExceeded_sendMessage_throwsTooManyRequestsWithoutQueryingRoom() {
+        willThrow(new TooManyRequestsException(1))
+                .given(eventRateLimiter).validateWithinLimit(SEND_MESSAGE_RATE_LIMIT_EVENT, QUESTIONER_ID);
+
+        assertThatThrownBy(() -> anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, sendRequest()))
+                .isInstanceOfSatisfying(TooManyRequestsException.class, exception ->
+                        assertThat(exception.getData()).isEqualTo(new RetryAfterResponse(1)));
+        verifyNoInteractions(userService, anonymousChatService, anonymousMessageRepository, eventPublisher);
+    }
+
+    @Test
+    void sentClientMessageId_sendMessage_countsResendTowardLimit() {
+        AnonymousRoom room = givenParticipatingRoom(QUESTIONER_ID);
+        SendAnonymousMessageRequest request = sendRequest();
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                ROOM_ID, QUESTIONER_ID, request.clientMessageId()))
+                .willReturn(Optional.of(message(room, MESSAGE_ID, QUESTIONER_ID)));
+
+        anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, request);
+
+        verify(eventRateLimiter).validateWithinLimit(SEND_MESSAGE_RATE_LIMIT_EVENT, QUESTIONER_ID);
     }
 
     @Test

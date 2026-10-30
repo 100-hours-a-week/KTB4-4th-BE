@@ -1,12 +1,14 @@
 package kr.ktb.zura.needu.common.config;
 
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
+import kr.ktb.zura.needu.common.ratelimit.EventRateLimiter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitCounter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitFilter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitProperties;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitRedisRepository;
 import kr.ktb.zura.needu.common.ratelimit.RedisRateLimitCounter;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -25,6 +27,15 @@ public class RateLimitConfig {
             RedisKeyGenerator keyGenerator
     ) {
         return new RedisRateLimitCounter(properties, repository, keyGenerator);
+    }
+
+    @Bean
+    public EventRateLimiter eventRateLimiter(
+            RateLimitProperties properties,
+            RateLimitCounter rateLimitCounter,
+            @Value("${needu.rate-limit.enabled:true}") boolean isEnabled
+    ) {
+        return new EventRateLimiter(properties, rateLimitCounter, isEnabled);
     }
 
     // 인증 사용자 기준으로 제한하려면 SecurityContext가 채워진 뒤여야 하므로 Spring Security 필터 체인보다 뒤에 등록한다.
