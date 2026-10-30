@@ -1,9 +1,12 @@
 package kr.ktb.zura.needu.anonymouschat.service;
 
 import java.time.OffsetDateTime;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.anonymouschat.ws.AnonymousMessageRedisEvent;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,19 +27,27 @@ class AnonymousRoomEndedEventListenerTest {
             eventPublisher, JsonMapper.builder().build());
 
     @Test
-    void roomEnded_publish_sendsPartnerLeftEvent() {
-        listener.publish(new AnonymousRoomEndedEvent(RECEIVER_USER_ID, ROOM_ID, ENDED_AT));
+    void partnerLeft_publish_sendsRoomEndedEventWithPartnerLeftReason() {
+        listener.publish(new AnonymousRoomEndedEvent(
+                RECEIVER_USER_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, AnonymousRoomEndedReason.PARTNER_LEFT, ENDED_AT));
 
-        ArgumentCaptor<AnonymousMessageRedisEvent> eventCaptor =
-                ArgumentCaptor.forClass(AnonymousMessageRedisEvent.class);
-        verify(eventPublisher).publish(eventCaptor.capture());
-        AnonymousMessageRedisEvent event = eventCaptor.getValue();
-        assertThat(event.receiverUserId()).isEqualTo(RECEIVER_USER_ID);
-        assertThat(event.event().get("type").asString()).isEqualTo("ANONYMOUS_CHAT_ROOM_ENDED");
-        assertThat(event.event().get("data").get("roomId").asLong()).isEqualTo(ROOM_ID);
-        assertThat(event.event().get("data").get("roomStatus").asString()).isEqualTo("ENDED");
-        assertThat(event.event().get("data").get("endedReason").asString()).isEqualTo("PARTNER_LEFT");
-        assertThat(event.event().get("data").get("endedAt").asString()).isEqualTo("2026-10-28T15:30:00+09:00");
+        JsonNode event = capturePublishedEvent();
+        assertThat(event.get("type").asString()).isEqualTo("ANONYMOUS_CHAT_ROOM_ENDED");
+        assertThat(event.get("data").get("roomId").asLong()).isEqualTo(ROOM_ID);
+        assertThat(event.get("data").get("roomStatus").asString()).isEqualTo("EXPIRED");
+        assertThat(event.get("data").get("endedReason").asString()).isEqualTo("PARTNER_LEFT");
+        assertThat(event.get("data").get("endedAt").asString()).isEqualTo("2026-10-28T15:30:00+09:00");
+    }
+
+    @Test
+    void userBlocked_publish_sendsRoomEndedEventWithUserBlockedReason() {
+        listener.publish(new AnonymousRoomEndedEvent(
+                RECEIVER_USER_ID, ROOM_ID, AnonymousRoomStatus.ENDED, AnonymousRoomEndedReason.USER_BLOCKED, ENDED_AT));
+
+        JsonNode event = capturePublishedEvent();
+        assertThat(event.get("type").asString()).isEqualTo("ANONYMOUS_CHAT_ROOM_ENDED");
+        assertThat(event.get("data").get("roomStatus").asString()).isEqualTo("ENDED");
+        assertThat(event.get("data").get("endedReason").asString()).isEqualTo("USER_BLOCKED");
     }
 
     @Test
@@ -44,8 +55,16 @@ class AnonymousRoomEndedEventListenerTest {
         willThrow(new IllegalStateException("Redis unavailable"))
                 .given(eventPublisher).publish(any(AnonymousMessageRedisEvent.class));
 
-        assertThatCode(() -> listener.publish(
-                new AnonymousRoomEndedEvent(RECEIVER_USER_ID, ROOM_ID, ENDED_AT)))
+        assertThatCode(() -> listener.publish(new AnonymousRoomEndedEvent(
+                RECEIVER_USER_ID, ROOM_ID, AnonymousRoomStatus.ENDED, AnonymousRoomEndedReason.USER_BLOCKED, ENDED_AT)))
                 .doesNotThrowAnyException();
+    }
+
+    private JsonNode capturePublishedEvent() {
+        ArgumentCaptor<AnonymousMessageRedisEvent> eventCaptor =
+                ArgumentCaptor.forClass(AnonymousMessageRedisEvent.class);
+        verify(eventPublisher).publish(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().receiverUserId()).isEqualTo(RECEIVER_USER_ID);
+        return eventCaptor.getValue().event();
     }
 }
