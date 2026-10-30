@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 public record AnonymousRoomDetailResponse(
         Long roomId,
         boolean askedByMe,
+        Long targetUserId,
         String targetName,
         AnonymousCounterpartProfileResponse targetProfile,
         AnonymousRoomParticipantStatus partnerStatus,
@@ -20,10 +21,11 @@ public record AnonymousRoomDetailResponse(
             AnonymousCounterpartProfileResponse targetProfile,
             ProductSummaryResponse product
     ) {
+        Long targetUserId = askedByMe ? room.getRecipientUserId() : null;
         AnonymousRoomParticipantStatus partnerStatus = askedByMe
                 ? room.getRecipientStatus()
                 : room.getQuestionerStatus();
         return new AnonymousRoomDetailResponse(
-                room.getId(), askedByMe, targetName, targetProfile, partnerStatus, product);
+                room.getId(), askedByMe, targetUserId, targetName, targetProfile, partnerStatus, product);
     }
 }
