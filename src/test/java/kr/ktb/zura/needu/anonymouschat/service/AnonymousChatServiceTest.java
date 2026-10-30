@@ -362,7 +362,7 @@ class AnonymousChatServiceTest {
     }
 
     @Test
-    void questioner_leaveRoom_expiresRoomAndUpdatesOnlyQuestionerStatus() {
+    void questioner_leaveRoom_expiresRoomAndNotifiesRecipient() {
         AnonymousRoom room = givenRoomForUpdate();
         Instant now = Instant.parse("2026-10-29T06:30:00Z");
         given(clock.instant()).willReturn(now);
@@ -375,11 +375,12 @@ class AnonymousChatServiceTest {
         assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.JOINED);
         assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
         assertThat(room.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new AnonymousRoomLeftEvent(
+                RECIPIENT_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, OffsetDateTime.parse("2026-10-29T15:30:00+09:00")));
     }
 
     @Test
-    void recipient_leaveRoom_expiresRoomAndUpdatesOnlyRecipientStatus() {
+    void recipient_leaveRoom_expiresRoomAndNotifiesQuestioner() {
         AnonymousRoom room = givenRoomForUpdate();
         Instant now = Instant.parse("2026-10-29T06:30:00Z");
         given(clock.instant()).willReturn(now);
@@ -391,11 +392,12 @@ class AnonymousChatServiceTest {
         assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
         assertThat(room.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(now, ZoneOffset.UTC));
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new AnonymousRoomLeftEvent(
+                QUESTIONER_ID, ROOM_ID, AnonymousRoomStatus.EXPIRED, OffsetDateTime.parse("2026-10-29T15:30:00+09:00")));
     }
 
     @Test
-    void remainingParticipant_leaveExpiredRoom_updatesRemainingParticipantStatus() {
+    void remainingParticipant_leaveExpiredRoom_updatesStatusWithoutPublishingEvent() {
         AnonymousRoom room = givenRoomForUpdate();
         LocalDateTime firstExpiresAt = LocalDateTime.of(2026, 10, 29, 6, 0);
         room.leave(QUESTIONER_ID, firstExpiresAt);
@@ -408,6 +410,7 @@ class AnonymousChatServiceTest {
         assertThat(room.getRecipientStatus()).isEqualTo(AnonymousRoomParticipantStatus.LEFT);
         assertThat(room.getStatus()).isEqualTo(AnonymousRoomStatus.EXPIRED);
         assertThat(room.getExpiresAt()).isEqualTo(firstExpiresAt);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
