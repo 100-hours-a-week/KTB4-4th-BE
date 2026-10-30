@@ -17,7 +17,7 @@ class AnonymousRoomEndedEventListenerTest {
 
     private static final Long RECEIVER_USER_ID = 200L;
     private static final Long ROOM_ID = 1L;
-    private static final OffsetDateTime ENDED_AT = OffsetDateTime.parse("2026-10-28T06:30:00Z");
+    private static final OffsetDateTime ENDED_AT = OffsetDateTime.parse("2026-10-28T15:30:00+09:00");
 
     private final AnonymousMessageEventPublisher eventPublisher = mock(AnonymousMessageEventPublisher.class);
     private final AnonymousRoomEndedEventListener listener = new AnonymousRoomEndedEventListener(
@@ -36,7 +36,7 @@ class AnonymousRoomEndedEventListenerTest {
         assertThat(event.event().get("data").get("roomId").asLong()).isEqualTo(ROOM_ID);
         assertThat(event.event().get("data").get("roomStatus").asString()).isEqualTo("ENDED");
         assertThat(event.event().get("data").get("endedReason").asString()).isEqualTo("PARTNER_LEFT");
-        assertThat(event.event().get("data").get("endedAt").asString()).isEqualTo("2026-10-28T06:30:00Z");
+        assertThat(event.event().get("data").get("endedAt").asString()).isEqualTo("2026-10-28T15:30:00+09:00");
     }
 
     @Test

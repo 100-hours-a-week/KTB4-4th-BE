@@ -135,10 +135,11 @@ class AnonymousChatServiceTest {
         assertThat(response.items().getFirst().counterpartAlias()).isEqualTo("수달");
         assertThat(response.items().getFirst().hasUnreadMessage()).isTrue();
         assertThat(response.items().getFirst().unreadMessageCount()).isEqualTo(3L);
-        assertThat(response.items().getFirst().lastActiveAt()).isEqualTo(latestAt);
+        assertThat(response.items().getFirst().lastActiveAt())
+                .isEqualTo(OffsetDateTime.parse("2026-10-25T00:30:00+09:00"));
         assertThat(response.items().getFirst().lastMessage().sender()).isEqualTo("OTHER");
         assertThat(response.items().getFirst().lastMessage().sentAt())
-                .isEqualTo(latestAt.atOffset(ZoneOffset.UTC));
+                .isEqualTo(OffsetDateTime.parse("2026-10-25T00:30:00+09:00"));
         assertThat(response.items().getFirst().product().name()).isEqualTo("무선 헤드폰");
         assertThat(response.items().get(1).lastMessage()).isNull();
     }
@@ -434,7 +435,7 @@ class AnonymousChatServiceTest {
         anonymousChatService.endAllActiveRoomsByBlockedUser(QUESTIONER_ID);
 
         LocalDateTime endedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
-        OffsetDateTime eventEndedAt = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
+        OffsetDateTime eventEndedAt = OffsetDateTime.ofInstant(now, ZoneOffset.ofHours(9));
         assertThat(askedRoom.isEnded()).isTrue();
         assertThat(askedRoom.getEndedByUserId()).isEqualTo(QUESTIONER_ID);
         assertThat(askedRoom.getEndedAt()).isEqualTo(endedAt);

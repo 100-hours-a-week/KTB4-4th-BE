@@ -1,8 +1,8 @@
 package kr.ktb.zura.needu.anonymouschat.dto.response;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousMessage;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
 
 public record AnonymousMessageSummaryResponse(
@@ -23,7 +23,7 @@ public record AnonymousMessageSummaryResponse(
                 sender,
                 message.getContent(),
                 unreadByPartner ? 1 : 0,
-                message.getCreatedAt().atOffset(ZoneOffset.UTC)
+                AnonymousChatTime.toKst(message.getCreatedAt())
         );
     }
 }

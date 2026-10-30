@@ -478,7 +478,7 @@ class AnonymousMessageServiceTest {
 
         assertThat(response.roomStatus()).isEqualTo(AnonymousRoomStatus.ENDED);
         assertThat(response.endedReason()).isEqualTo(AnonymousRoomEndedReason.ME_LEFT);
-        assertThat(response.endedAt()).isEqualTo(OffsetDateTime.parse("2026-10-25T08:30:00Z"));
+        assertThat(response.endedAt()).isEqualTo(OffsetDateTime.parse("2026-10-25T17:30:00+09:00"));
     }
 
     @Test

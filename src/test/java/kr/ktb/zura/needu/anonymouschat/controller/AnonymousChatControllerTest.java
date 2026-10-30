@@ -1,8 +1,6 @@
 package kr.ktb.zura.needu.anonymouschat.controller;
 
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import kr.ktb.zura.needu.anonymouschat.dto.request.AnonymousMessageSearchCondition;
@@ -101,10 +99,10 @@ class AnonymousChatControllerTest {
                         "익명의 수달",
                         true,
                         3L,
-                        LocalDateTime.parse("2026-10-24T15:30:00"),
+                        OffsetDateTime.parse("2026-10-24T15:30:00+09:00"),
                         new AnonymousChatLastMessageResponse(
                                 305L, "이 상품 선물로 괜찮을까요?", "OTHER",
-                                OffsetDateTime.parse("2026-10-24T06:30:00Z")),
+                                OffsetDateTime.parse("2026-10-24T15:30:00+09:00")),
                         new AnonymousChatProductResponse(30L, "무선 헤드폰")
                 )),
                 "next-cursor",
@@ -120,7 +118,7 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.data.items[0].roomId").value(3))
                 .andExpect(jsonPath("$.data.items[0].counterpartAlias").value("익명의 수달"))
                 .andExpect(jsonPath("$.data.items[0].unreadMessageCount").value(3))
-                .andExpect(jsonPath("$.data.items[0].lastActiveAt").value("2026-10-24T15:30:00"))
+                .andExpect(jsonPath("$.data.items[0].lastActiveAt").value("2026-10-24T15:30:00+09:00"))
                 .andExpect(jsonPath("$.data.items[0].lastMessage.sender").value("OTHER"))
                 .andExpect(jsonPath("$.data.items[0].product.name").value("무선 헤드폰"))
                 .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
@@ -250,12 +248,12 @@ class AnonymousChatControllerTest {
         AnonymousMessageSearchCondition condition = new AnonymousMessageSearchCondition("cursor", 2);
         given(anonymousMessageService.findAllMessages(USER_ID, ROOM_ID, condition)).willReturn(
                 new AnonymousMessageListResponse("익명의 수달", AnonymousRoomStatus.ENDED,
-                        AnonymousRoomEndedReason.PARTNER_LEFT, OffsetDateTime.parse("2026-10-25T08:30:00Z"),
+                        AnonymousRoomEndedReason.PARTNER_LEFT, OffsetDateTime.parse("2026-10-25T17:30:00+09:00"),
                         new CursorPageResponse<>(List.of(
                         new AnonymousMessageSummaryResponse(101L, AnonymousMessageSender.ME, "안녕하세요", 1,
-                                OffsetDateTime.parse("2026-10-24T01:00:00Z")),
+                                OffsetDateTime.parse("2026-10-24T10:00:00+09:00")),
                         new AnonymousMessageSummaryResponse(100L, AnonymousMessageSender.OTHER, "반가워요", 0,
-                                OffsetDateTime.parse("2026-10-24T00:59:00Z"))
+                                OffsetDateTime.parse("2026-10-24T09:59:00+09:00"))
                 ), "next-cursor", true)));
 
         mockMvc.perform(get(MESSAGES_URL, ROOM_ID)
@@ -267,12 +265,12 @@ class AnonymousChatControllerTest {
                 .andExpect(jsonPath("$.data.targetName").value("익명의 수달"))
                 .andExpect(jsonPath("$.data.roomStatus").value("ENDED"))
                 .andExpect(jsonPath("$.data.endedReason").value("PARTNER_LEFT"))
-                .andExpect(jsonPath("$.data.endedAt").value("2026-10-25T08:30:00Z"))
+                .andExpect(jsonPath("$.data.endedAt").value("2026-10-25T17:30:00+09:00"))
                 .andExpect(jsonPath("$.data.items[0].messageId").value(101))
                 .andExpect(jsonPath("$.data.items[0].sender").value("ME"))
                 .andExpect(jsonPath("$.data.items[0].content").value("안녕하세요"))
                 .andExpect(jsonPath("$.data.items[0].unreadCount").value(1))
-                .andExpect(jsonPath("$.data.items[0].sentAt").value("2026-10-24T01:00:00Z"))
+                .andExpect(jsonPath("$.data.items[0].sentAt").value("2026-10-24T10:00:00+09:00"))
                 .andExpect(jsonPath("$.data.items[1].sender").value("OTHER"))
                 .andExpect(jsonPath("$.data.items[1].unreadCount").value(0))
                 .andExpect(jsonPath("$.nextCursor").value("next-cursor"))
@@ -382,13 +380,13 @@ class AnonymousChatControllerTest {
     @Test
     void validRequest_reportChat_returnsCreated() throws Exception {
         given(anonymousReportService.reportRoom(USER_ID, ROOM_ID, REPORT_REQUEST)).willReturn(
-                new AnonymousReportResponse(31L, OffsetDateTime.of(2026, 10, 27, 1, 5, 0, 0, ZoneOffset.UTC)));
+                new AnonymousReportResponse(31L, OffsetDateTime.parse("2026-10-27T10:05:00+09:00")));
 
         mockMvc.perform(postReport(REPORT_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("익명대화를 신고했습니다."))
                 .andExpect(jsonPath("$.data.reportId").value(31))
-                .andExpect(jsonPath("$.data.createdAt").value("2026-10-27T01:05:00Z"));
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-27T10:05:00+09:00"));
     }
 
     @Test

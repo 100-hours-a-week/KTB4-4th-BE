@@ -1,8 +1,8 @@
 package kr.ktb.zura.needu.anonymouschat.dto.response;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
@@ -28,7 +28,7 @@ public record AnonymousMessageListResponse(
                 targetName,
                 room.getStatus(),
                 AnonymousRoomEndedReason.of(room.getEndedByUserId(), viewerUserId),
-                room.getEndedAt().atOffset(ZoneOffset.UTC),
+                AnonymousChatTime.toKst(room.getEndedAt()),
                 page
         );
     }

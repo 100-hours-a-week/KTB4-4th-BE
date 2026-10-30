@@ -39,7 +39,7 @@ class AnonymousMessageSavedEventListenerTest {
         assertThat(sent.event().toString()).isEqualTo(jsonMapper.readTree("""
                 {"type":"ANONYMOUS_CHAT_MESSAGE_SENT",
                  "data":{"roomId":1,"clientMessageId":"7f6c1f0e-0000-4000-8000-000000000001",
-                         "messageId":501,"content":"안녕하세요","sentAt":"2026-10-28T01:00:00Z"}}
+                         "messageId":501,"content":"안녕하세요","sentAt":"2026-10-28T10:00:00+09:00"}}
                 """).toString());
 
         AnonymousMessageRedisEvent received = events.get(1);
@@ -47,7 +47,7 @@ class AnonymousMessageSavedEventListenerTest {
         assertThat(received.event().toString()).isEqualTo(jsonMapper.readTree("""
                 {"type":"ANONYMOUS_CHAT_MESSAGE_RECEIVED",
                  "data":{"roomId":1,"messageId":501,"sender":"OTHER","content":"안녕하세요",
-                         "sentAt":"2026-10-28T01:00:00Z"}}
+                         "sentAt":"2026-10-28T10:00:00+09:00"}}
                 """).toString());
     }
 

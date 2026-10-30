@@ -3,7 +3,6 @@ package kr.ktb.zura.needu.anonymouschat.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +23,7 @@ import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomListRow;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomUnreadCount;
 import kr.ktb.zura.needu.anonymouschat.support.AnonymousAliasGenerator;
+import kr.ktb.zura.needu.anonymouschat.support.AnonymousChatTime;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousChatRole;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -184,7 +184,7 @@ public class AnonymousChatService {
                 .forEach(room -> {
                     room.end(userId, endedAt);
                     eventPublisher.publishEvent(new AnonymousRoomEndedEvent(
-                            room.getPartnerUserId(userId), room.getId(), endedAt.atOffset(ZoneOffset.UTC)));
+                            room.getPartnerUserId(userId), room.getId(), AnonymousChatTime.toKst(endedAt)));
                 });
     }
 
@@ -263,7 +263,7 @@ public class AnonymousChatService {
                 counterpartAlias,
                 unreadCount > 0,
                 unreadCount,
-                room.lastActivityAt(),
+                AnonymousChatTime.toKst(room.lastActivityAt()),
                 toLastMessageResponse(userId, lastMessages.get(room.roomId())),
                 new AnonymousChatProductResponse(product.productId(), product.name())
         );
@@ -278,7 +278,7 @@ public class AnonymousChatService {
                 message.messageId(),
                 message.content(),
                 message.senderUserId().equals(userId) ? SENDER_ME : SENDER_OTHER,
-                message.sentAt().atOffset(ZoneOffset.UTC)
+                AnonymousChatTime.toKst(message.sentAt())
         );
     }
 

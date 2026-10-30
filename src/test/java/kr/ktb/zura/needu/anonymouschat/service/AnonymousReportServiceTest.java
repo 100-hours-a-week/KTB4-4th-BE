@@ -79,7 +79,7 @@ class AnonymousReportServiceTest {
         AnonymousReportResponse response = anonymousReportService.reportRoom(RECIPIENT_ID, ROOM_ID, REQUEST);
 
         assertThat(response).isEqualTo(new AnonymousReportResponse(
-                REPORT_ID, OffsetDateTime.of(CREATED_AT, ZoneOffset.UTC)));
+                REPORT_ID, OffsetDateTime.of(CREATED_AT.plusHours(9), ZoneOffset.ofHours(9))));
         ArgumentCaptor<AnonymousReport> captor = ArgumentCaptor.forClass(AnonymousReport.class);
         verify(anonymousReportRepository).saveAndFlush(captor.capture());
         AnonymousReport saved = captor.getValue();
