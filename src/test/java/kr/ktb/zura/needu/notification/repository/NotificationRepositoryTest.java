@@ -144,6 +144,53 @@ class NotificationRepositoryTest {
         assertThat(notificationRepository.countUnreadByReceiverUserId(USER_ID)).isZero();
     }
 
+    @Test
+    void receiversGiven_insertAll_savesNotificationsAndReturnsIdsInReceiverOrder() {
+        NotificationEvent event = createEvent("insert-all");
+        LocalDateTime createdAt = LocalDateTime.of(2026, 11, 2, 0, 0);
+        LocalDateTime expiresAt = createdAt.plusDays(7);
+        List<Long> receiverUserIds = List.of(30L, 10L, 20L);
+
+        List<Long> ids = notificationRepository.insertAll(event.getId(), receiverUserIds, createdAt, expiresAt);
+        entityManager.clear();
+
+        assertThat(ids).hasSize(3).doesNotHaveDuplicates();
+        assertThat(ids).extracting(id -> notificationRepository.findOneById(id).orElseThrow())
+                .allSatisfy(notification -> {
+                    assertThat(notification.getEvent().getId()).isEqualTo(event.getId());
+                    assertThat(notification.getCreatedAt()).isEqualTo(createdAt);
+                    assertThat(notification.getUpdatedAt()).isEqualTo(createdAt);
+                    assertThat(notification.getExpiresAt()).isEqualTo(expiresAt);
+                    assertThat(notification.getReadAt()).isNull();
+                    assertThat(notification.getDeletedAt()).isNull();
+                })
+                .extracting(Notification::getReceiverUserId)
+                .containsExactly(30L, 10L, 20L);
+    }
+
+    @Test
+    void receiversMissing_insertAll_returnsEmptyWithoutSaving() {
+        NotificationEvent event = createEvent("insert-all-empty");
+
+        List<Long> ids = notificationRepository.insertAll(
+                event.getId(), List.of(), LocalDateTime.now(), LocalDateTime.now().plusDays(1));
+
+        assertThat(ids).isEmpty();
+        assertThat(notificationRepository.count()).isZero();
+    }
+
+    private NotificationEvent createEvent(String dedupKey) {
+        return notificationEventRepository.saveAndFlush(NotificationEvent.create(
+                NotificationType.FRIEND_BIRTHDAY,
+                null,
+                "알림 제목",
+                "알림 내용",
+                NotificationResourceType.USER,
+                10L,
+                dedupKey
+        ));
+    }
+
     private Notification createNotification(Long receiverUserId, String dedupKey, LocalDateTime expiresAt) {
         return createNotification(receiverUserId, dedupKey, expiresAt, NotificationType.POKE);
     }
