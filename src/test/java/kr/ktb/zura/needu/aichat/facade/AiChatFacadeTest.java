@@ -1096,6 +1096,51 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void feedbackRejected_confirmAnalysis_retriesOnceWithoutFeedbackAndSaves() {
+        AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of(), List.of("캠핑"));
+        given(productActivityService.findAllRecentActivities(USER_ID)).willReturn(List.of(dislikeActivity()));
+        given(aiChatClient.confirmAnalysis(eq(USER_ID), eq(ROOM_ID), any(AiServerFeedbackRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_FEEDBACK_REJECTED));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null)).willReturn(closeResponse);
+
+        ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID);
+
+        assertThat(response.isRecommendationCompleted()).isTrue();
+        verify(aiChatClient).confirmAnalysis(USER_ID, ROOM_ID, null);
+        verify(aiAnalysisConfirmService).saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
+        verify(aiChatRoomService, never()).expireRoom(anyLong());
+    }
+
+    // 피드백과 상관없는 실패는 피드백을 빼고 보내도 같다 => 다시 닫지 않는다
+    @Test
+    void aiServerUnavailableWithFeedback_confirmAnalysis_doesNotRetry() {
+        given(productActivityService.findAllRecentActivities(USER_ID)).willReturn(List.of(dislikeActivity()));
+        given(aiChatClient.confirmAnalysis(eq(USER_ID), eq(ROOM_ID), any(AiServerFeedbackRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        verify(aiChatClient, times(1)).confirmAnalysis(any(), any(), any());
+        verifyNoInteractions(aiAnalysisConfirmService);
+    }
+
+    @Test
+    void retryWithoutFeedbackFails_confirmAnalysis_throwsWithoutSaving() {
+        given(productActivityService.findAllRecentActivities(USER_ID)).willReturn(List.of(dislikeActivity()));
+        given(aiChatClient.confirmAnalysis(eq(USER_ID), eq(ROOM_ID), any(AiServerFeedbackRequest.class)))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_FEEDBACK_REJECTED));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_REJECTED));
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_REQUEST_REJECTED);
+        verify(aiChatClient, times(2)).confirmAnalysis(any(), any(), any());
+        verifyNoInteractions(aiAnalysisConfirmService);
+    }
+
+    @Test
     void activityLookupFails_confirmAnalysis_doesNotStartAnalysis() {
         given(productActivityService.findAllRecentActivities(USER_ID))
                 .willThrow(new RuntimeException("db down"));
@@ -1172,6 +1217,11 @@ class AiChatFacadeTest {
 
         verify(aiChatRoomService, never()).startAnalysis(anyLong());
         verifyNoInteractions(aiChatClient, aiAnalysisConfirmService);
+    }
+
+    private static ProductActivityResponse dislikeActivity() {
+        return new ProductActivityResponse(PlatformType.COUPANG, "8812345", ProductActivityType.DISLIKE,
+                ProductContext.PERSONAL, LocalDateTime.of(2026, 10, 30, 12, 0));
     }
 
     private static AiServerCloseSessionResponse closeSessionResponse(List<String> tastes, List<String> interests) {

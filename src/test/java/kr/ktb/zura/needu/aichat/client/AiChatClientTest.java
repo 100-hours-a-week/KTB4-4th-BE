@@ -489,6 +489,33 @@ class AiChatClientTest {
         server.verify();
     }
 
+    // 피드백을 모르는 AI 서버 버전은 모르는 필드를 400 INVALID_REQUEST로 거절한다
+    @Test
+    void invalidRequest_confirmAnalysisWithFeedback_throwsFeedbackRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "INVALID_REQUEST", "message": "요청 형식이 올바르지 않습니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.confirmAnalysis(10293L, 101L, new AiServerFeedbackRequest(List.of())));
+
+        assertEquals(AiChatErrorCode.AICHAT_FEEDBACK_REJECTED, exception.getErrorCode());
+    }
+
+    @Test
+    void invalidRequest_confirmAnalysisWithoutFeedback_throwsRequestRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "INVALID_REQUEST", "message": "요청 형식이 올바르지 않습니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.confirmAnalysis(10293L, 101L, null));
+
+        assertEquals(AiChatErrorCode.AICHAT_REQUEST_REJECTED, exception.getErrorCode());
+    }
+
     @Test
     void confirmAnalysis_closesSession() {
         server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))

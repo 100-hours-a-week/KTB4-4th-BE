@@ -472,7 +472,7 @@ public class AiChatFacade {
         aiChatRoomService.startAnalysis(conversationId);
         AiServerCloseSessionResponse response;
         try {
-            response = aiChatClient.confirmAnalysis(userId, conversationId, feedback);
+            response = requestCloseSession(userId, conversationId, feedback);
         } catch (BusinessException e) {
             expireRoomIfSessionGone(userId, conversationId, e);
             throw e;
@@ -485,6 +485,23 @@ public class AiChatFacade {
             throw e;
         }
         return ProductRecommendationStatusResponse.success();
+    }
+
+    private AiServerCloseSessionResponse requestCloseSession(Long userId, Long conversationId,
+                                                             AiServerFeedbackRequest feedback) {
+        if (feedback == null) {
+            return aiChatClient.confirmAnalysis(userId, conversationId, null);
+        }
+        try {
+            return aiChatClient.confirmAnalysis(userId, conversationId, feedback);
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != AiChatErrorCode.AICHAT_FEEDBACK_REJECTED) {
+                throw e;
+            }
+            log.warn("AI feedback rejected. Retrying without feedback. userId={}, conversationId={}",
+                    userId, conversationId);
+            return aiChatClient.confirmAnalysis(userId, conversationId, null);
+        }
     }
 
     private AiServerFeedbackRequest findFeedback(Long userId) {
