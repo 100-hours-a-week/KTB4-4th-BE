@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -347,7 +348,7 @@ public class AiChatFacade {
         try {
             AiServerUserProfileRequest userProfile =
                     AiServerUserProfileRequest.from(userService.findUserAiProfile(userId));
-            AiServerStartSessionResponse session = aiChatClient.startSession(userId, roomId, userProfile);
+            AiServerStartSessionResponse session = requestStartSession(userId, roomId, userProfile);
             validateStartSession(roomId, session);
             AiChatRoom room = aiChatRoomService.activateRoom(
                     roomId, session.greeting(), toPurgeAt(session.expirationAt()));
@@ -357,6 +358,24 @@ public class AiChatFacade {
             // 실패한 방이 PENDING으로 남으면 재시도가 막히므로 즉시 정리
             aiChatRoomService.discardRoom(roomId);
             throw e;
+        }
+    }
+
+    private AiServerStartSessionResponse requestStartSession(Long userId, Long roomId,
+                                                             AiServerUserProfileRequest userProfile) {
+        Map<String, Object> memory = userService.findAiMemory(userId);
+        if (memory.isEmpty()) {
+            return aiChatClient.startSession(userId, roomId, userProfile, null);
+        }
+        try {
+            return aiChatClient.startSession(userId, roomId, userProfile, memory);
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != AiChatErrorCode.AICHAT_MEMORY_REJECTED) {
+                throw e;
+            }
+            // 기억이 깨져도 대화는 시작할 수 있어야 한다 => 기억 없이 한 번만 다시 요청, 원인은 AI 서버 로그로 확인
+            log.warn("AI memory rejected. Retrying without memory. userId={}, conversationId={}", userId, roomId);
+            return aiChatClient.startSession(userId, roomId, userProfile, null);
         }
     }
 

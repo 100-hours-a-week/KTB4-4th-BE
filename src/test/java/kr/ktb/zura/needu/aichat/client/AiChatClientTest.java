@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -47,6 +49,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class AiChatClientTest {
+
+    private static final AiServerUserProfileRequest USER_PROFILE = new AiServerUserProfileRequest(
+            "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE, List.of("COFFEE_TEA"), List.of(), List.of());
 
     private MockRestServiceServer server;
     private MockRestServiceServer messageServer;
@@ -109,13 +114,74 @@ class AiChatClientTest {
 
         AiServerStartSessionResponse response = client.startSession(1L, 101L, new AiServerUserProfileRequest(
                 "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE,
-                List.of("COFFEE_TEA", "TRAVEL"), List.of("PEANUT"), List.of("ALCOHOL")));
+                List.of("COFFEE_TEA", "TRAVEL"), List.of("PEANUT"), List.of("ALCOHOL")), null);
 
         assertEquals(new AiServerStartSessionResponse(
                 101L, "안녕하세요",
                 OffsetDateTime.parse("2026-09-23T05:18:00+00:00"),
                 OffsetDateTime.parse("2026-09-23T05:48:00+00:00"), 20), response);
         server.verify();
+    }
+
+    @Test
+    void storedMemory_startSession_sendsMemoryAsIs() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {
+                          "userId": 1,
+                          "conversationRoomId": 101,
+                          "memory": {
+                            "schemaVersion": "1.0",
+                            "userId": 1,
+                            "signals": [{"field": "hobbies", "value": "캠핑", "confidence": 0.92}]
+                          }
+                        }
+                        """))
+                .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON).body("""
+                        {
+                          "conversationRoomId": 101,
+                          "greeting": "지난번에 캠핑 이야기했죠",
+                          "createdAt": "2026-09-23T05:18:00+00:00",
+                          "expirationAt": "2026-09-23T05:48:00+00:00",
+                          "maxTurns": 20
+                        }
+                        """));
+
+        client.startSession(1L, 101L, USER_PROFILE, Map.of(
+                "schemaVersion", "1.0",
+                "userId", 1,
+                "signals", List.of(Map.of("field", "hobbies", "value", "캠핑", "confidence", 0.92))));
+
+        server.verify();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"MEMORY_USER_MISMATCH", "INVALID_REQUEST"})
+    void memoryRejected_startSessionWithMemory_throwsMemoryRejected(String code) {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "%s", "message": "기억을 받을 수 없습니다.", "retryable": false}
+                        """.formatted(code)));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.startSession(1L, 101L, USER_PROFILE, Map.of("schemaVersion", "0.9")));
+
+        assertEquals(AiChatErrorCode.AICHAT_MEMORY_REJECTED, exception.getErrorCode());
+    }
+
+    // 기억을 보내지 않았는데 거절됐다면 다시 보내도 같다 => 재시도 대상이 아니다
+    @Test
+    void invalidRequest_startSessionWithoutMemory_throwsRequestRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "INVALID_REQUEST", "message": "잘못된 요청입니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.startSession(1L, 101L, USER_PROFILE, null));
+
+        assertEquals(AiChatErrorCode.AICHAT_REQUEST_REJECTED, exception.getErrorCode());
     }
 
     @Test
@@ -411,6 +477,12 @@ class AiChatClientTest {
                                 "reason": "선물 추천"
                               }]
                             }
+                          },
+                          "memory": {
+                            "schemaVersion": "1.0",
+                            "userId": 10293,
+                            "sessionCount": 2,
+                            "futureField": "아직 Backend가 모르는 필드"
                           }
                         }
                         """, MediaType.APPLICATION_JSON));
@@ -425,6 +497,8 @@ class AiChatClientTest {
         assertEquals("88214", response.recommendations().gift().items().getFirst().externalId());
         assertEquals(new AiServerAnalysisKeywordResponse("실용성", 0.8),
                 response.keywords().taste().getFirst());
+        assertEquals("1.0", response.memory().get("schemaVersion"));
+        assertEquals("아직 Backend가 모르는 필드", response.memory().get("futureField"));
         server.verify();
     }
 

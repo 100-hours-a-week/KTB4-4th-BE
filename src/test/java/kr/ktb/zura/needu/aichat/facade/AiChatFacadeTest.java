@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -114,6 +115,7 @@ class AiChatFacadeTest {
             "니듀", LocalDate.of(2000, 1, 1), Gender.FEMALE, List.of("COFFEE_TEA"), List.of("PEANUT"), List.of());
     private static final AiServerUserProfileRequest USER_PROFILE_REQUEST =
             AiServerUserProfileRequest.from(USER_AI_PROFILE);
+    private static final Map<String, Object> MEMORY = Map.of("schemaVersion", "1.0", "userId", USER_ID);
     private static final AiConversationLock.Handle LOCK_HANDLE =
             new AiConversationLock.Handle(ROOM_ID, "lock-owner-token");
 
@@ -175,7 +177,7 @@ class AiChatFacadeTest {
     void noRoom_startOrResumeConversation_startsSessionAndReturnsCreated() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(ROOM_ID));
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null)).willReturn(startSessionResponse(ROOM_ID));
         given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
@@ -189,6 +191,76 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void storedMemory_startOrResumeConversation_sendsMemoryToAiServer() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(userService.findAiMemory(USER_ID)).willReturn(MEMORY);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, MEMORY))
+                .willReturn(startSessionResponse(ROOM_ID));
+        given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
+                        LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
+
+        AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
+
+        assertThat(result.isCreated()).isTrue();
+        verify(aiChatClient, times(1)).startSession(any(), any(), any(), any());
+    }
+
+    @Test
+    void memoryRejected_startOrResumeConversation_retriesOnceWithoutMemory() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(userService.findAiMemory(USER_ID)).willReturn(MEMORY);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, MEMORY))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_MEMORY_REJECTED));
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null))
+                .willReturn(startSessionResponse(ROOM_ID));
+        given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
+                .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE,
+                        LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
+
+        AiConversationStartResult result = aiChatFacade.startOrResumeConversation(USER_ID);
+
+        assertThat(result.isCreated()).isTrue();
+        verify(aiChatClient).startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null);
+        verify(aiChatRoomService, never()).discardRoom(anyLong());
+    }
+
+    @Test
+    void retryWithoutMemoryFails_startOrResumeConversation_discardsRoom() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(userService.findAiMemory(USER_ID)).willReturn(MEMORY);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, MEMORY))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_MEMORY_REJECTED));
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_REJECTED));
+
+        assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_REQUEST_REJECTED);
+        verify(aiChatClient, times(2)).startSession(any(), any(), any(), any());
+        verify(aiChatRoomService).discardRoom(ROOM_ID);
+    }
+
+    // 기억과 상관없는 실패는 기억을 빼고 보내도 같다 => 재시도하지 않는다
+    @Test
+    void aiServerUnavailableWithMemory_startOrResumeConversation_doesNotRetry() {
+        given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
+        given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
+        given(userService.findAiMemory(USER_ID)).willReturn(MEMORY);
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, MEMORY))
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        verify(aiChatClient, times(1)).startSession(any(), any(), any(), any());
+        verify(aiChatRoomService).discardRoom(ROOM_ID);
+    }
+
+    @Test
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
@@ -199,7 +271,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.findOrReserveRoomWithoutDailyLimit(USER_ID, SHORT_COMPLETION_COOLDOWN))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(ROOM_ID));
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null)).willReturn(startSessionResponse(ROOM_ID));
         given(aiChatRoomService.activateRoom(ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT));
 
@@ -232,7 +304,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.reserveRoom(USER_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(NEW_ROOM_ID));
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST, null)).willReturn(startSessionResponse(NEW_ROOM_ID));
         given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
@@ -253,7 +325,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.reserveRoom(USER_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST)).willReturn(startSessionResponse(NEW_ROOM_ID));
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST, null)).willReturn(startSessionResponse(NEW_ROOM_ID));
         given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE,
                         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29)));
@@ -295,7 +367,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.reserveRoomWithoutDailyLimit(USER_ID))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST))
+        given(aiChatClient.startSession(USER_ID, NEW_ROOM_ID, USER_PROFILE_REQUEST, null))
                 .willReturn(startSessionResponse(NEW_ROOM_ID));
         given(aiChatRoomService.activateRoom(NEW_ROOM_ID, GREETING, PURGE_AT))
                 .willReturn(room(NEW_ROOM_ID, AiChatRoomStatus.ACTIVE, PURGE_AT));
@@ -360,7 +432,7 @@ class AiChatFacadeTest {
     void aiServerUnavailableWhileStarting_startOrResumeConversation_discardsReservedRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST))
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_REQUEST_TIMEOUT));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
@@ -387,7 +459,7 @@ class AiChatFacadeTest {
     void aiResponseWithoutGreeting_startOrResumeConversation_throwsInvalidResponseAndDiscardsRoom() {
         given(aiChatRoomService.findOrReserveRoom(USER_ID)).willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST))
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null))
                 .willReturn(new AiServerStartSessionResponse(ROOM_ID, null, null, EXPIRATION_AT, 20));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
@@ -401,7 +473,7 @@ class AiChatFacadeTest {
         given(aiChatRoomService.findOrReserveRoom(USER_ID))
                 .willReturn(room(ROOM_ID, AiChatRoomStatus.PENDING, null));
         given(userService.findUserAiProfile(USER_ID)).willReturn(USER_AI_PROFILE);
-        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST))
+        given(aiChatClient.startSession(USER_ID, ROOM_ID, USER_PROFILE_REQUEST, null))
                 .willReturn(startSessionResponse(NEW_ROOM_ID));
 
         assertThatThrownBy(() -> aiChatFacade.startOrResumeConversation(USER_ID))
@@ -1070,7 +1142,7 @@ class AiChatFacadeTest {
                         PlatformType.COUPANG, "gift-1", new java.math.BigDecimal("8.0"), "선물 추천")));
         return new AiServerCloseSessionResponse(
                 ROOM_ID, USER_ID, "캠핑을 즐깁니다.", keywords(tastes, interests),
-                new AiServerRecommendationsResponse(self, gift));
+                new AiServerRecommendationsResponse(self, gift), null);
     }
 
     // AI 답변 스트리밍 호출. 사용자 메시지 ID는 테스트마다 달라 어떤 값이든 받는다

@@ -104,6 +104,12 @@ public class UserService {
         return UserAiProfileResponse.from(user, GiftPreference.fromOnboardingTastes(onboardingTastes));
     }
 
+    public Map<String, Object> findAiMemory(Long userId) {
+        return userTasteProfileRepository.findById(userId)
+                .map(UserTasteProfile::getAiMemory)
+                .orElse(Map.of());
+    }
+
     public boolean isOnboardingCompleted(Long userId) {
         User user = findUser(userId);
         validateLoginAvailableUser(user);
@@ -174,12 +180,16 @@ public class UserService {
     }
 
     @Transactional
-    public void completeTasteAnalysis(
-            Long userId, String summary, List<String> tastes, List<String> interests) {
+    public void completeTasteAnalysis(Long userId, String summary, List<String> tastes,
+                                      List<String> interests, Map<String, Object> aiMemory) {
         User user = findUser(userId);
         UserTasteProfile profile = userTasteProfileRepository.findById(userId)
                 .orElseGet(() -> new UserTasteProfile(user, Map.of()));
         profile.updateAnalysis(summary, toJson(tastes), toJson(interests));
+
+        if (aiMemory != null && !aiMemory.isEmpty()) {
+            profile.updateAiMemory(aiMemory);
+        }
         userTasteProfileRepository.save(profile);
         user.completeTasteAnalysis();
     }
