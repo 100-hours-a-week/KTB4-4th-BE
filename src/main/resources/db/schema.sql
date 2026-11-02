@@ -319,8 +319,9 @@ CREATE TABLE IF NOT EXISTS ai_messages (
     UNIQUE KEY uk_ai_messages_room_client_message_id (ai_chat_room_id, client_message_id),
     -- 메시지 목록 커서 조회(where ai_chat_room_id = ? and id < ? order by id desc)
     KEY idx_ai_messages_room_id_id (ai_chat_room_id, id),
-    -- 중복 요청 시 저장된 답변 재조회(findByReplyToMessageId)
-    KEY idx_ai_messages_reply_to_message_id (reply_to_message_id),
+    -- 사용자 메시지 하나에 답변은 하나만 저장한다. 중복 요청 시 저장된 답변 재조회(findByReplyToMessageId)에도 쓴다.
+    -- 사용자 메시지와 인사말은 NULL이고, 유일 인덱스는 NULL을 여러 개 허용한다.
+    UNIQUE KEY uk_ai_messages_reply_to_message_id (reply_to_message_id),
     CONSTRAINT fk_ai_messages_room FOREIGN KEY (ai_chat_room_id) REFERENCES ai_chat_rooms (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
@@ -350,6 +351,34 @@ SET @add_input_locked = (
 PREPARE add_input_locked_statement FROM @add_input_locked;
 EXECUTE add_input_locked_statement;
 DEALLOCATE PREPARE add_input_locked_statement;
+
+-- 기존 테이블의 답변 인덱스를 유일 인덱스로 바꾼다.
+-- 유일 인덱스를 먼저 만들고 기존 인덱스를 지워서, 중복 답변이 있어 생성이 실패해도 조회 인덱스는 남긴다.
+SET @add_reply_to_message_unique = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_messages ADD UNIQUE INDEX uk_ai_messages_reply_to_message_id (reply_to_message_id)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_messages'
+      AND index_name = 'uk_ai_messages_reply_to_message_id'
+);
+PREPARE add_reply_to_message_unique_statement FROM @add_reply_to_message_unique;
+EXECUTE add_reply_to_message_unique_statement;
+DEALLOCATE PREPARE add_reply_to_message_unique_statement;
+
+SET @drop_reply_to_message_index = (
+    SELECT IF(COUNT(*) > 0,
+              'ALTER TABLE ai_messages DROP INDEX idx_ai_messages_reply_to_message_id',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_messages'
+      AND index_name = 'idx_ai_messages_reply_to_message_id'
+);
+PREPARE drop_reply_to_message_index_statement FROM @drop_reply_to_message_index;
+EXECUTE drop_reply_to_message_index_statement;
+DEALLOCATE PREPARE drop_reply_to_message_index_statement;
 
 -- ---------------------------------------------------------------------------
 -- anonymouschat

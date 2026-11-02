@@ -112,6 +112,7 @@ class AiChatFacadeTest {
     private static final String GREETING = "안녕하세요";
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
     private static final String AI_CONTENT = "러닝을 좋아하시는군요.";
+    private static final String OTHER_AI_CONTENT = "러닝을 즐기시는군요.";
     private static final UUID CLIENT_MESSAGE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Duration MESSAGE_RETRY_AFTER = Duration.ofSeconds(10);
     private static final Duration SHORT_COMPLETION_COOLDOWN = Duration.ofMinutes(5);
@@ -671,6 +672,47 @@ class AiChatFacadeTest {
                 new AiChatCompletedEvent(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false));
         order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DONE,
                 new AiChatDoneEvent(USER_MESSAGE_ID));
+    }
+
+    @Test
+    void replyAlreadySaved_sendMessage_publishesSavedReplyAsCompleted() {
+        givenNewMessage();
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(OTHER_AI_CONTENT)));
+        given(aiMessageService.createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, OTHER_AI_CONTENT, 5, false, PURGE_AT))
+                .willThrow(new DataIntegrityViolationException("uk_ai_messages_reply_to_message_id"));
+        given(aiMessageService.findReply(USER_MESSAGE_ID))
+                .willReturn(Optional.of(message(AI_MESSAGE_ID, USER_MESSAGE_ID)));
+
+        aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        var order = inOrder(aiChatEventPublisher, aiConversationLock);
+        order.verify(aiConversationLock).unlock(LOCK_HANDLE);
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.COMPLETED,
+                new AiChatCompletedEvent(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false));
+        order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DONE,
+                new AiChatDoneEvent(USER_MESSAGE_ID));
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+        verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
+    }
+
+    @Test
+    void integrityViolationWithoutSavedReply_sendMessage_publishesErrorAndReleasesLock() {
+        givenNewMessage();
+        given(streamMessageCall())
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
+        given(aiMessageService.createReplyAndUpdateRoom(
+                ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
+                .willThrow(new DataIntegrityViolationException("fk_ai_messages_room"));
+        given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
+
+        aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
+                USER_MESSAGE_ID, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.getMessage(), true, false));
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.COMPLETED), any());
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
     }
 
     @Test

@@ -269,12 +269,24 @@ public class AiChatFacade {
         turnEvents.accept(userMessage.getId(), userMessage.getClientMessageId());
         AiServerSendMessageResponse response = requestReply(
                 userId, conversationId, userMessage, turnEvents::publishDelta);
-        AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
-                conversationId, userMessage.getId(), response.reply(), response.progress(),
-                response.inputLocked(), toPurgeAt(response.expirationAt()));
-        log.info("AI message replied. userId={}, conversationId={}, messageId={}",
-                userId, conversationId, aiMessage.getId());
-        return aiMessage;
+        return createReply(userId, conversationId, userMessage.getId(), response);
+    }
+
+    private AiMessage createReply(Long userId, Long conversationId, Long userMessageId,
+                                  AiServerSendMessageResponse response) {
+        try {
+            AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
+                    conversationId, userMessageId, response.reply(), response.progress(),
+                    response.inputLocked(), toPurgeAt(response.expirationAt()));
+            log.info("AI message replied. userId={}, conversationId={}, messageId={}",
+                    userId, conversationId, aiMessage.getId());
+            return aiMessage;
+        } catch (DataIntegrityViolationException e) {
+            AiMessage savedReply = aiMessageService.findReply(userMessageId).orElseThrow(() -> e);
+            log.info("AI reply already saved. userId={}, conversationId={}, userMessageId={}, messageId={}",
+                    userId, conversationId, userMessageId, savedReply.getId());
+            return savedReply;
+        }
     }
 
     private void finishReply(Long conversationId, Long userMessageId, AiConversationLock.Handle lock) {
