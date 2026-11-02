@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.notification.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,13 +23,32 @@ import tools.jackson.databind.json.JsonMapper;
 @RequiredArgsConstructor
 public class NotificationCreatedEventListener {
 
+    private static final String STAGE_TIMER = "needu.notification.creation";
+
     private final NotificationRepository notificationRepository;
     private final NotificationEventPublisher notificationEventPublisher;
     private final NotificationPreviewService notificationPreviewService;
     private final JsonMapper jsonMapper;
+    private final MeterRegistry meterRegistry;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publish(NotificationsCreatedEvent event) {
+        if (event.notifications().isEmpty()) {
+            return;
+        }
+
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            publishAll(event);
+        } finally {
+            sample.stop(Timer.builder(STAGE_TIMER)
+                    .tag("stage", "publish")
+                    .tag("type", event.notifications().getFirst().type().name())
+                    .register(meterRegistry));
+        }
+    }
+
+    private void publishAll(NotificationsCreatedEvent event) {
         Map<Long, Long> unreadCountByUserId;
         try {
             unreadCountByUserId = notificationRepository.findAllUnreadCountsByReceiverUserIdIn(

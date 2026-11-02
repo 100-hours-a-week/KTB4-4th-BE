@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.notification.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -24,10 +26,13 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class NotificationCreationService {
 
+    private static final String STAGE_TIMER = "needu.notification.creation";
+
     private final NotificationEventRepository notificationEventRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
 
     /**
      * @param actorUserId 시스템이 발생시킨 알림이면 {@code null}
@@ -51,6 +56,31 @@ public class NotificationCreationService {
             return List.of();
         }
 
+        List<Long> enabledReceiverUserIds = stageTimer("prepare", type)
+                .record(() -> findEnabledReceiverUserIds(receiverUserIds, type, dedupKey));
+        if (enabledReceiverUserIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Notification> savedNotifications = stageTimer("insert", type).record(() -> {
+            NotificationEvent event = notificationEventRepository.save(NotificationEvent.create(
+                    type,
+                    actorUserId,
+                    title,
+                    body,
+                    resourceType,
+                    resourceId,
+                    dedupKey
+            ));
+            return notificationRepository.saveAll(enabledReceiverUserIds.stream()
+                    .map(userId -> Notification.create(event, userId, expiresAt))
+                    .toList());
+        });
+        eventPublisher.publishEvent(NotificationsCreatedEvent.from(savedNotifications));
+        return savedNotifications;
+    }
+
+    private List<Long> findEnabledReceiverUserIds(Set<Long> receiverUserIds, NotificationType type, String dedupKey) {
         // 동시 요청이 함께 통과하면 UNIQUE 제약 위반은 그대로 전파된다.
         // 제약 위반 시점에 트랜잭션이 rollback-only가 되어 catch로는 조용히 넘길 수 없다.
         if (dedupKey != null && notificationEventRepository.existsByDedupKey(dedupKey)) {
@@ -66,29 +96,15 @@ public class NotificationCreationService {
                         setting -> setting.getUserId(),
                         setting -> setting.isEnabled()
                 ));
-        List<Long> enabledReceiverUserIds = receiverUserIds.stream()
+        return receiverUserIds.stream()
                 .filter(userId -> enabledByUserId.getOrDefault(userId, settingType.isDefaultEnabled()))
                 .toList();
+    }
 
-        if (enabledReceiverUserIds.isEmpty()) {
-            return List.of();
-        }
-
-        NotificationEvent event = notificationEventRepository.save(NotificationEvent.create(
-                type,
-                actorUserId,
-                title,
-                body,
-                resourceType,
-                resourceId,
-                dedupKey
-        ));
-        List<Notification> notifications = enabledReceiverUserIds.stream()
-                .map(userId -> Notification.create(event, userId, expiresAt))
-                .toList();
-
-        List<Notification> savedNotifications = notificationRepository.saveAll(notifications);
-        eventPublisher.publishEvent(NotificationsCreatedEvent.from(savedNotifications));
-        return savedNotifications;
+    private Timer stageTimer(String stage, NotificationType type) {
+        return Timer.builder(STAGE_TIMER)
+                .tag("stage", stage)
+                .tag("type", type.name())
+                .register(meterRegistry);
     }
 }

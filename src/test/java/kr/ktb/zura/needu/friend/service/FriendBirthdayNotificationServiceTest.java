@@ -1,9 +1,11 @@
 package kr.ktb.zura.needu.friend.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,8 +22,9 @@ class FriendBirthdayNotificationServiceTest {
     private final FriendRepository friendRepository = org.mockito.Mockito.mock(FriendRepository.class);
     private final NotificationCreationService notificationCreationService =
             org.mockito.Mockito.mock(NotificationCreationService.class);
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final FriendBirthdayNotificationService service = new FriendBirthdayNotificationService(
-            friendRepository, notificationCreationService, 7, "Asia/Seoul");
+            friendRepository, notificationCreationService, meterRegistry, 7, "Asia/Seoul");
 
     @Test
     void multipleOwnersAndFriends_createNotifications_groupsReceiversByBirthdayFriend() {
@@ -74,5 +77,19 @@ class FriendBirthdayNotificationServiceTest {
         service.createNotifications(LocalDate.of(2028, 2, 22));
 
         verify(friendRepository).findAllBirthdayNotificationTargets(2, 29, false);
+    }
+
+    @Test
+    void batchExecuted_createNotifications_recordsQueryAndTotalStageTimers() {
+        given(friendRepository.findAllBirthdayNotificationTargets(10, 19, false)).willReturn(List.of(
+                new FriendBirthdayNotificationTarget(1L, 10L, "수연")
+        ));
+
+        service.createNotifications(LocalDate.of(2026, 10, 12));
+
+        assertThat(meterRegistry.get("needu.friend.birthday.batch").tag("stage", "query").timer().count())
+                .isEqualTo(1);
+        assertThat(meterRegistry.get("needu.friend.birthday.batch").tag("stage", "total").timer().count())
+                .isEqualTo(1);
     }
 }

@@ -1,10 +1,13 @@
 package kr.ktb.zura.needu.notification.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -60,6 +63,11 @@ class NotificationCreatedEventListenerTransactionTest {
                                     && event.unreadCount() == 3L
                                     && event.data().get("notificationId").asLong() == 10L
                                     && event.data().get("targetAvailable").asBoolean()));
+            assertThat(context.getBean(MeterRegistry.class).get("needu.notification.creation")
+                    .tag("stage", "publish")
+                    .tag("type", NotificationType.POKE.name())
+                    .timer()
+                    .count()).isEqualTo(1);
         }
     }
 
@@ -160,17 +168,24 @@ class NotificationCreatedEventListenerTransactionTest {
         }
 
         @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
+
+        @Bean
         NotificationCreatedEventListener notificationCreatedEventListener(
                 NotificationRepository notificationRepository,
                 NotificationEventPublisher notificationEventPublisher,
                 NotificationPreviewService notificationPreviewService,
-                JsonMapper jsonMapper
+                JsonMapper jsonMapper,
+                MeterRegistry meterRegistry
         ) {
             return new NotificationCreatedEventListener(
                     notificationRepository,
                     notificationEventPublisher,
                     notificationPreviewService,
-                    jsonMapper
+                    jsonMapper,
+                    meterRegistry
             );
         }
 

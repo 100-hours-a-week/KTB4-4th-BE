@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -29,11 +30,13 @@ class NotificationCreationServiceTest {
     private final NotificationSettingRepository notificationSettingRepository =
             mock(NotificationSettingRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final NotificationCreationService notificationCreationService = new NotificationCreationService(
             notificationEventRepository,
             notificationRepository,
             notificationSettingRepository,
-            eventPublisher
+            eventPublisher,
+            meterRegistry
     );
 
     @Test
@@ -74,6 +77,8 @@ class NotificationCreationServiceTest {
         assertThat(eventCaptor.getValue().notifications())
                 .extracting(NotificationsCreatedEvent.CreatedNotification::receiverUserId)
                 .containsExactlyInAnyOrder(1L, 3L);
+        assertThat(stageTimerCount("prepare", NotificationType.FRIEND_BIRTHDAY)).isEqualTo(1);
+        assertThat(stageTimerCount("insert", NotificationType.FRIEND_BIRTHDAY)).isEqualTo(1);
     }
 
     @Test
@@ -99,6 +104,8 @@ class NotificationCreationServiceTest {
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
         verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+        assertThat(stageTimerCount("prepare", NotificationType.CHAT)).isEqualTo(1);
+        assertThat(meterRegistry.find("needu.notification.creation").tag("stage", "insert").timer()).isNull();
     }
 
     @Test
@@ -172,5 +179,13 @@ class NotificationCreationServiceTest {
         verify(notificationEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
         verify(notificationRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    private long stageTimerCount(String stage, NotificationType type) {
+        return meterRegistry.get("needu.notification.creation")
+                .tag("stage", stage)
+                .tag("type", type.name())
+                .timer()
+                .count();
     }
 }
