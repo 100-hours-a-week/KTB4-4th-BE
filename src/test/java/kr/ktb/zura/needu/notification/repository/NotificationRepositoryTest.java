@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.notification.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
@@ -145,35 +146,54 @@ class NotificationRepositoryTest {
     }
 
     @Test
-    void receiversGiven_insertAll_savesNotificationsAndReturnsIdsInReceiverOrder() {
+    void rowsOfMultipleEventsGiven_insertAll_savesNotificationsAndReturnsIdsInRowOrder() {
         NotificationEvent event = createEvent("insert-all");
+        NotificationEvent otherEvent = createEvent("insert-all-other");
         LocalDateTime createdAt = LocalDateTime.of(2026, 11, 2, 0, 0);
         LocalDateTime expiresAt = createdAt.plusDays(7);
-        List<Long> receiverUserIds = List.of(30L, 10L, 20L);
+        LocalDateTime otherExpiresAt = createdAt.plusDays(1);
 
-        List<Long> ids = notificationRepository.insertAll(event.getId(), receiverUserIds, createdAt, expiresAt);
+        List<Long> ids = notificationRepository.insertAll(List.of(
+                new NotificationInsertRow(event.getId(), 30L, expiresAt),
+                new NotificationInsertRow(event.getId(), 10L, expiresAt),
+                new NotificationInsertRow(otherEvent.getId(), 20L, otherExpiresAt)
+        ), createdAt);
         entityManager.clear();
 
         assertThat(ids).hasSize(3).doesNotHaveDuplicates();
         assertThat(ids).extracting(id -> notificationRepository.findOneById(id).orElseThrow())
                 .allSatisfy(notification -> {
-                    assertThat(notification.getEvent().getId()).isEqualTo(event.getId());
                     assertThat(notification.getCreatedAt()).isEqualTo(createdAt);
                     assertThat(notification.getUpdatedAt()).isEqualTo(createdAt);
-                    assertThat(notification.getExpiresAt()).isEqualTo(expiresAt);
                     assertThat(notification.getReadAt()).isNull();
                     assertThat(notification.getDeletedAt()).isNull();
                 })
-                .extracting(Notification::getReceiverUserId)
-                .containsExactly(30L, 10L, 20L);
+                .extracting(
+                        notification -> notification.getEvent().getId(),
+                        Notification::getReceiverUserId,
+                        Notification::getExpiresAt
+                )
+                .containsExactly(
+                        tuple(event.getId(), 30L, expiresAt),
+                        tuple(event.getId(), 10L, expiresAt),
+                        tuple(otherEvent.getId(), 20L, otherExpiresAt)
+                );
     }
 
     @Test
-    void receiversMissing_insertAll_returnsEmptyWithoutSaving() {
-        NotificationEvent event = createEvent("insert-all-empty");
+    void someDedupKeysUsed_findAllDedupKeysByDedupKeyIn_returnsOnlyUsedKeys() {
+        createEvent("friend-birthday:10");
+        createEvent("friend-birthday:11");
 
-        List<Long> ids = notificationRepository.insertAll(
-                event.getId(), List.of(), LocalDateTime.now(), LocalDateTime.now().plusDays(1));
+        List<String> usedDedupKeys = notificationEventRepository.findAllDedupKeysByDedupKeyIn(
+                List.of("friend-birthday:10", "friend-birthday:12"));
+
+        assertThat(usedDedupKeys).containsExactly("friend-birthday:10");
+    }
+
+    @Test
+    void rowsMissing_insertAll_returnsEmptyWithoutSaving() {
+        List<Long> ids = notificationRepository.insertAll(List.of(), LocalDateTime.now());
 
         assertThat(ids).isEmpty();
         assertThat(notificationRepository.count()).isZero();

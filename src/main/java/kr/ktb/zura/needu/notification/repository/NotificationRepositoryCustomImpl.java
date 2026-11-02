@@ -23,13 +23,8 @@ public class NotificationRepositoryCustomImpl implements NotificationRepositoryC
     private final JdbcTemplate jdbcTemplate;
 
     @Override
-    public List<Long> insertAll(
-            Long eventId,
-            List<Long> receiverUserIds,
-            LocalDateTime createdAt,
-            LocalDateTime expiresAt
-    ) {
-        if (receiverUserIds.isEmpty()) {
+    public List<Long> insertAll(List<NotificationInsertRow> rows, LocalDateTime createdAt) {
+        if (rows.isEmpty()) {
             return List.of();
         }
 
@@ -40,25 +35,26 @@ public class NotificationRepositoryCustomImpl implements NotificationRepositoryC
                 new BatchPreparedStatementSetter() {
                     @Override
                     public void setValues(PreparedStatement statement, int index) throws SQLException {
-                        statement.setLong(1, eventId);
-                        statement.setLong(2, receiverUserIds.get(index));
+                        NotificationInsertRow row = rows.get(index);
+                        statement.setLong(1, row.eventId());
+                        statement.setLong(2, row.receiverUserId());
                         statement.setObject(3, createdAt);
                         statement.setObject(4, createdAt);
-                        statement.setObject(5, expiresAt);
+                        statement.setObject(5, row.expiresAt());
                     }
 
                     @Override
                     public int getBatchSize() {
-                        return receiverUserIds.size();
+                        return rows.size();
                     }
                 },
                 keyHolder
         );
 
         List<Map<String, Object>> keys = keyHolder.getKeyList();
-        if (keys.size() != receiverUserIds.size()) {
+        if (keys.size() != rows.size()) {
             throw new IllegalStateException("Generated notification id count mismatch. expected="
-                    + receiverUserIds.size() + ", actual=" + keys.size());
+                    + rows.size() + ", actual=" + keys.size());
         }
         return keys.stream()
                 .map(key -> ((Number) key.values().iterator().next()).longValue())
