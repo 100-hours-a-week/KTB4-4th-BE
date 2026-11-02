@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS friends (
     PRIMARY KEY (id),
     -- owner_user_id 단독 조회도 이 인덱스의 선두 컬럼으로 처리된다
     UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id),
-    KEY idx_friends_friend_user_id (friend_user_id)
+    -- 생일 알림 대상 조회가 friend_user_id로 찾고 owner_user_id만 읽으므로 owner_user_id까지 넣어 커버링 인덱스로 둔다
+    KEY idx_friends_friend_user_id_owner_user_id (friend_user_id, owner_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS friend_sync_requests (

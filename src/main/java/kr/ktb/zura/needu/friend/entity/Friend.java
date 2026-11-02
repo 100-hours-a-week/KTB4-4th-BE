@@ -21,7 +21,10 @@ import static lombok.AccessLevel.PROTECTED;
                 name = "uk_friends_owner_friend",
                 columnNames = {"owner_user_id", "friend_user_id"}
         ),
-        indexes = @Index(name = "idx_friends_friend_user_id", columnList = "friend_user_id")
+        indexes = @Index(
+                name = "idx_friends_friend_user_id_owner_user_id",
+                columnList = "friend_user_id, owner_user_id"
+        )
 )
 @NoArgsConstructor(access = PROTECTED)
 public class Friend {
