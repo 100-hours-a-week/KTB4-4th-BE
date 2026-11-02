@@ -33,13 +33,26 @@ public class NotificationEventSubscriber implements MessageListener {
             return;
         }
 
-        if (event.receiverUserId() == null || event.data() == null || !event.data().hasNonNull("notificationId")) {
-            log.warn("Notification Redis event ignored by missing field. receiverUserId={}", event.receiverUserId());
+        if (!hasRequiredFields(event)) {
+            log.warn("Notification Redis event ignored by missing field. recipientCount={}",
+                    event.recipients() == null ? 0 : event.recipients().size());
             return;
         }
 
-        log.info("Notification Redis event received. notificationId={}, receiverUserId={}",
-                event.data().get("notificationId").asString(), event.receiverUserId());
+        log.info("Notification Redis event received. type={}, recipientCount={}",
+                event.data().path("type").asString(), event.recipients().size());
         notificationStreamService.sendNotification(event);
+    }
+
+    private boolean hasRequiredFields(NotificationRedisEvent event) {
+        return event.data() != null
+                && event.data().isObject()
+                && event.recipients() != null
+                && !event.recipients().isEmpty()
+                && event.recipients().stream().allMatch(recipient -> recipient != null
+                        && recipient.receiverUserId() != null
+                        && recipient.data() != null
+                        && recipient.data().isObject()
+                        && recipient.data().hasNonNull("notificationId"));
     }
 }
