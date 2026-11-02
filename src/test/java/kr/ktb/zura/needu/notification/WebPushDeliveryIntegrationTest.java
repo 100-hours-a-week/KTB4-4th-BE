@@ -145,7 +145,7 @@ class WebPushDeliveryIntegrationTest {
         saveSubscription(receiverUserId, "receiver");
         saveSubscription(otherUserId, "other");
 
-        List<Notification> notifications = notificationCreationService.createNotifications(
+        int createdCount = notificationCreationService.createNotifications(
                 Set.of(receiverUserId),
                 NotificationType.POKE,
                 otherUserId,
@@ -157,6 +157,8 @@ class WebPushDeliveryIntegrationTest {
                 LocalDateTime.now().plusDays(NOTIFICATION_RETENTION_DAYS)
         );
 
+        assertThat(createdCount).isOne();
+        List<Notification> notifications = notificationRepository.findAll();
         CapturedPushRequest request = RECEIVED_REQUESTS.poll(DELIVERY_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
         assertThat(request).isNotNull();
         assertThat(request.method()).isEqualTo("POST");

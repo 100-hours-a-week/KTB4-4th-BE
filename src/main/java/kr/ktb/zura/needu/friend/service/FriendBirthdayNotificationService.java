@@ -74,7 +74,7 @@ public class FriendBirthdayNotificationService {
                     friend.userId(),
                     "friend-birthday:" + birthdayDate + ":" + friend.userId() + ":d-" + reminderDays,
                     expiresAt
-            ).size();
+            );
         }
 
         long totalNanos = totalSample.stop(batchTimer("total"));
