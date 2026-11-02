@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import java.util.List;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import kr.ktb.zura.needu.notification.sse.NotificationRedisEvent;
 import org.junit.jupiter.api.Test;
@@ -23,9 +24,8 @@ class NotificationEventPublisherTest {
                 new RedisKeyGenerator("needu:test")
         );
         NotificationRedisEvent event = new NotificationRedisEvent(
-                1L,
-                jsonMapper.readTree("{\"notificationId\":10}"),
-                3L
+                jsonMapper.readTree("{\"type\":\"POKE\"}"),
+                List.of(new NotificationRedisEvent.Recipient(1L, jsonMapper.readTree("{\"notificationId\":10}"), 3L))
         );
 
         publisher.publish(event);

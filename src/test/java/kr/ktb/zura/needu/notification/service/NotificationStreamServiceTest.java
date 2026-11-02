@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -61,9 +62,8 @@ class NotificationStreamServiceTest {
     void connectedUser_sendNotification_sendsCreatedEventWithUnreadCount() throws Exception {
         SseEmitter emitter = mockEmitter(USER_ID);
         NotificationRedisEvent event = new NotificationRedisEvent(
-                USER_ID,
-                jsonMapper.createObjectNode().put("notificationId", 10L).put("title", "새 알림"),
-                3L
+                jsonMapper.createObjectNode().put("title", "새 알림"),
+                List.of(recipient(USER_ID, 10L, 3L))
         );
 
         notificationStreamService.sendNotification(event);
@@ -77,7 +77,30 @@ class NotificationStreamServiceTest {
         assertThat(eventParts).extracting(SseEmitter.DataWithMediaType::getData)
                 .filteredOn(JsonNode.class::isInstance)
                 .singleElement()
-                .satisfies(data -> assertThat(((JsonNode) data).get("unreadCount").asLong()).isEqualTo(3L));
+                .satisfies(data -> {
+                    JsonNode responseData = (JsonNode) data;
+                    assertThat(responseData.get("title").asString()).isEqualTo("새 알림");
+                    assertThat(responseData.get("notificationId").asLong()).isEqualTo(10L);
+                    assertThat(responseData.get("unreadCount").asLong()).isEqualTo(3L);
+                });
+    }
+
+    @Test
+    void recipientsOnSeveralInstances_sendNotification_sendsOnlyToLocalUsersWithOwnValues() throws Exception {
+        SseEmitter firstEmitter = mockEmitter(USER_ID);
+        SseEmitter secondEmitter = mockEmitter(2L);
+        NotificationRedisEvent event = new NotificationRedisEvent(
+                jsonMapper.createObjectNode().put("title", "친구의 생일이 7일 남았어요."),
+                List.of(recipient(USER_ID, 10L, 3L), recipient(2L, 11L, 1L), recipient(3L, 12L, 5L))
+        );
+
+        notificationStreamService.sendNotification(event);
+
+        assertThat(sentData(firstEmitter).get("notificationId").asLong()).isEqualTo(10L);
+        assertThat(sentData(firstEmitter).get("unreadCount").asLong()).isEqualTo(3L);
+        assertThat(sentData(secondEmitter).get("notificationId").asLong()).isEqualTo(11L);
+        assertThat(sentData(secondEmitter).get("unreadCount").asLong()).isEqualTo(1L);
+        assertThat(sentData(secondEmitter).get("title").asString()).isEqualTo("친구의 생일이 7일 남았어요.");
     }
 
     @Test
@@ -86,9 +109,8 @@ class NotificationStreamServiceTest {
         doThrow(new IOException("disconnected"))
                 .when(emitter).send(any(SseEmitter.SseEventBuilder.class));
         NotificationRedisEvent event = new NotificationRedisEvent(
-                USER_ID,
-                jsonMapper.createObjectNode().put("notificationId", 10L),
-                1L
+                jsonMapper.createObjectNode(),
+                List.of(recipient(USER_ID, 10L, 1L))
         );
 
         notificationStreamService.sendNotification(event);
@@ -107,6 +129,25 @@ class NotificationStreamServiceTest {
 
         verify(firstEmitter).send(any(SseEmitter.SseEventBuilder.class));
         verify(secondEmitter).send(any(SseEmitter.SseEventBuilder.class));
+    }
+
+    private NotificationRedisEvent.Recipient recipient(Long receiverUserId, Long notificationId, long unreadCount) {
+        return new NotificationRedisEvent.Recipient(
+                receiverUserId,
+                jsonMapper.createObjectNode().put("notificationId", notificationId),
+                unreadCount
+        );
+    }
+
+    private JsonNode sentData(SseEmitter emitter) throws IOException {
+        ArgumentCaptor<SseEmitter.SseEventBuilder> eventCaptor =
+                ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        verify(emitter).send(eventCaptor.capture());
+        return (JsonNode) eventCaptor.getValue().build().stream()
+                .map(SseEmitter.DataWithMediaType::getData)
+                .filter(JsonNode.class::isInstance)
+                .findFirst()
+                .orElseThrow();
     }
 
     @SuppressWarnings("unchecked")

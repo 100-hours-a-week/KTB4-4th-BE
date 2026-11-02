@@ -1,8 +1,11 @@
 package kr.ktb.zura.needu.notification.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -17,6 +20,7 @@ import kr.ktb.zura.needu.notification.type.NotificationCategory;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -27,12 +31,14 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 class NotificationCreatedEventListenerTransactionTest {
 
     private static final Long RECEIVER_USER_ID = 1L;
     private static final Long PURCHASE_CHECK_ID = 56L;
+    private static final int PUBLISH_CHUNK_SIZE = 2;
 
     @Test
     void transactionCommitted_notificationsCreated_publishesAfterCommit() {
@@ -56,10 +62,11 @@ class NotificationCreatedEventListenerTransactionTest {
 
             verify(notificationEventPublisher)
                     .publish(org.mockito.ArgumentMatchers.argThat(event ->
-                            event.receiverUserId().equals(RECEIVER_USER_ID)
-                                    && event.unreadCount() == 3L
-                                    && event.data().get("notificationId").asLong() == 10L
-                                    && event.data().get("targetAvailable").asBoolean()));
+                            event.data().get("targetAvailable").asBoolean()
+                                    && event.recipients().size() == 1
+                                    && event.recipients().getFirst().receiverUserId().equals(RECEIVER_USER_ID)
+                                    && event.recipients().getFirst().unreadCount() == 3L
+                                    && event.recipients().getFirst().data().get("notificationId").asLong() == 10L));
         }
     }
 
@@ -103,11 +110,88 @@ class NotificationCreatedEventListenerTransactionTest {
                     )))));
 
             verify(notificationEventPublisher)
-                    .publish(org.mockito.ArgumentMatchers.argThat(event ->
-                            event.data().get("notificationId").asLong() == 11L
-                                    && event.data().get("preview").get("productName").asString()
-                                            .equals("섬유유연제")));
+                    .publish(org.mockito.ArgumentMatchers.argThat(event -> {
+                        JsonNode recipientData = event.recipients().getFirst().data();
+                        return recipientData.get("notificationId").asLong() == 11L
+                                && recipientData.get("preview").get("productName").asString().equals("섬유유연제");
+                    }));
         }
+    }
+
+    @Test
+    void receiversExceedChunkSize_notificationsCreated_publishesPerChunk() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            NotificationEventPublisher notificationEventPublisher =
+                    context.getBean(NotificationEventPublisher.class);
+            ApplicationEventPublisher eventPublisher = context;
+            TransactionTemplate transactionTemplate = context.getBean(TransactionTemplate.class);
+
+            transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(
+                    new NotificationsCreatedEvent(List.of(
+                            birthdayNotification(20L, 1L),
+                            birthdayNotification(21L, 2L),
+                            birthdayNotification(22L, 3L)
+                    ))));
+
+            ArgumentCaptor<NotificationRedisEvent> eventCaptor = ArgumentCaptor.forClass(NotificationRedisEvent.class);
+            verify(notificationEventPublisher, times(2)).publish(eventCaptor.capture());
+            assertThat(eventCaptor.getAllValues())
+                    .extracting(event -> event.recipients().stream()
+                            .map(NotificationRedisEvent.Recipient::receiverUserId)
+                            .toList())
+                    .containsExactly(List.of(1L, 2L), List.of(3L));
+            assertThat(eventCaptor.getAllValues())
+                    .allSatisfy(event -> assertThat(event.data().get("title").asString())
+                            .isEqualTo("친구의 생일이 7일 남았어요."));
+        }
+    }
+
+    @Test
+    void notificationsWithDifferentContent_notificationsCreated_publishesSeparately() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            NotificationEventPublisher notificationEventPublisher =
+                    context.getBean(NotificationEventPublisher.class);
+            ApplicationEventPublisher eventPublisher = context;
+            TransactionTemplate transactionTemplate = context.getBean(TransactionTemplate.class);
+
+            transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(
+                    new NotificationsCreatedEvent(List.of(
+                            birthdayNotification(20L, 1L),
+                            createdEvent().notifications().getFirst()
+                    ))));
+
+            ArgumentCaptor<NotificationRedisEvent> eventCaptor = ArgumentCaptor.forClass(NotificationRedisEvent.class);
+            verify(notificationEventPublisher, times(2)).publish(eventCaptor.capture());
+            assertThat(eventCaptor.getAllValues())
+                    .extracting(event -> event.data().get("type").asString())
+                    .containsExactly("FRIEND_BIRTHDAY", "POKE");
+        }
+    }
+
+    @Test
+    void nonPositiveChunkSize_create_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> new NotificationCreatedEventListener(
+                mock(NotificationRepository.class),
+                mock(NotificationEventPublisher.class),
+                new NotificationPreviewService(List.of()),
+                JsonMapper.builder().build(),
+                0
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private NotificationsCreatedEvent.CreatedNotification birthdayNotification(
+            Long notificationId, Long receiverUserId) {
+        return new NotificationsCreatedEvent.CreatedNotification(
+                notificationId,
+                receiverUserId,
+                NotificationCategory.EVENT,
+                NotificationType.FRIEND_BIRTHDAY,
+                "친구의 생일이 7일 남았어요.",
+                "지금 선물을 준비하면 여유 있게 도착해요.",
+                NotificationResourceType.USER,
+                99L,
+                LocalDateTime.of(2026, 10, 10, 9, 0)
+        );
     }
 
     private NotificationsCreatedEvent createdEvent() {
@@ -170,7 +254,8 @@ class NotificationCreatedEventListenerTransactionTest {
                     notificationRepository,
                     notificationEventPublisher,
                     notificationPreviewService,
-                    jsonMapper
+                    jsonMapper,
+                    PUBLISH_CHUNK_SIZE
             );
         }
 

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import kr.ktb.zura.needu.notification.sse.NotificationRedisEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.DefaultMessage;
@@ -25,17 +26,23 @@ class NotificationEventSubscriberTest {
     @Test
     void publishedEventMessage_onMessage_sendsToStreamService() {
         NotificationRedisEvent event = new NotificationRedisEvent(
-                1L,
-                jsonMapper.createObjectNode().put("notificationId", 10L).put("title", "친구가 콕 찔렀어요."),
-                3L
+                jsonMapper.createObjectNode().put("type", "FRIEND_BIRTHDAY").put("title", "친구의 생일이 7일 남았어요."),
+                List.of(
+                        new NotificationRedisEvent.Recipient(
+                                1L, jsonMapper.createObjectNode().put("notificationId", 10L), 3L),
+                        new NotificationRedisEvent.Recipient(
+                                2L, jsonMapper.createObjectNode().put("notificationId", 11L), 1L)
+                )
         );
 
         subscriber.onMessage(toMessage(jsonMapper.writeValueAsString(event)), CHANNEL);
 
         verify(notificationStreamService).sendNotification(argThat(received ->
-                received.receiverUserId().equals(1L)
-                        && received.unreadCount() == 3L
-                        && received.data().get("notificationId").asLong() == 10L));
+                received.data().get("title").asString().equals("친구의 생일이 7일 남았어요.")
+                        && received.recipients().size() == 2
+                        && received.recipients().getFirst().receiverUserId().equals(1L)
+                        && received.recipients().getFirst().unreadCount() == 3L
+                        && received.recipients().getLast().data().get("notificationId").asLong() == 11L));
     }
 
     @Test
@@ -46,15 +53,49 @@ class NotificationEventSubscriberTest {
     }
 
     @Test
+    void recipientsMissing_onMessage_doesNotSend() {
+        subscriber.onMessage(toMessage("{\"data\":{\"title\":\"알림\"}}"), CHANNEL);
+
+        verify(notificationStreamService, never()).sendNotification(any());
+    }
+
+    @Test
     void receiverUserIdMissing_onMessage_doesNotSend() {
-        subscriber.onMessage(toMessage("{\"data\":{\"notificationId\":10},\"unreadCount\":3}"), CHANNEL);
+        subscriber.onMessage(toMessage(
+                "{\"data\":{\"title\":\"알림\"},\"recipients\":[{\"data\":{\"notificationId\":10},\"unreadCount\":3}]}"
+        ), CHANNEL);
 
         verify(notificationStreamService, never()).sendNotification(any());
     }
 
     @Test
     void notificationIdMissing_onMessage_doesNotSend() {
-        subscriber.onMessage(toMessage("{\"receiverUserId\":1,\"data\":{\"title\":\"알림\"},\"unreadCount\":3}"), CHANNEL);
+        subscriber.onMessage(toMessage(
+                "{\"data\":{\"title\":\"알림\"},\"recipients\":[{\"receiverUserId\":1,\"data\":{},\"unreadCount\":3}]}"
+        ), CHANNEL);
+
+        verify(notificationStreamService, never()).sendNotification(any());
+    }
+
+    @Test
+    void someRecipientsInvalid_onMessage_sendsOnlyValidRecipients() {
+        subscriber.onMessage(toMessage(
+                "{\"data\":{\"title\":\"알림\"},\"recipients\":["
+                        + "{\"receiverUserId\":1,\"data\":{\"notificationId\":10},\"unreadCount\":3},"
+                        + "{\"data\":{\"notificationId\":11},\"unreadCount\":1},"
+                        + "{\"receiverUserId\":3,\"data\":{},\"unreadCount\":2}]}"
+        ), CHANNEL);
+
+        verify(notificationStreamService).sendNotification(argThat(received ->
+                received.recipients().size() == 1
+                        && received.recipients().getFirst().receiverUserId().equals(1L)));
+    }
+
+    @Test
+    void commonDataNotObject_onMessage_doesNotSend() {
+        subscriber.onMessage(toMessage(
+                "{\"data\":\"알림\",\"recipients\":[{\"receiverUserId\":1,\"data\":{\"notificationId\":10},\"unreadCount\":3}]}"
+        ), CHANNEL);
 
         verify(notificationStreamService, never()).sendNotification(any());
     }
