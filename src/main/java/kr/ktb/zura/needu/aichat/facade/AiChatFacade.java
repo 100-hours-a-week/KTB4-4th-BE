@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
@@ -46,6 +47,8 @@ import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.ErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductActivityResponse;
+import kr.ktb.zura.needu.product.service.ProductActivityService;
 import kr.ktb.zura.needu.user.service.ConsentService;
 import kr.ktb.zura.needu.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -70,6 +73,7 @@ public class AiChatFacade {
     private final AiReplyTaskExecutor aiReplyTaskExecutor;
     private final UserService userService;
     private final ConsentService consentService;
+    private final ProductActivityService productActivityService;
     private final Duration messageRetryAfter;
     private final Duration shortCompletionCooldown;
     private final Set<Long> shortCooldownExternalIds;
@@ -85,6 +89,7 @@ public class AiChatFacade {
                         AiReplyTaskExecutor aiReplyTaskExecutor,
                         UserService userService,
                         ConsentService consentService,
+                        ProductActivityService productActivityService,
                         @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter,
                         @Value("${ai.chat.short-completion-cooldown:5m}") Duration shortCompletionCooldown,
                         @Value("${ai.chat.short-cooldown-external-ids:}") Set<Long> shortCooldownExternalIds) {
@@ -98,6 +103,7 @@ public class AiChatFacade {
         this.aiChatEventPublisher = aiChatEventPublisher;
         this.aiReplyTaskExecutor = aiReplyTaskExecutor;
         this.userService = userService;
+        this.productActivityService = productActivityService;
         this.consentService = consentService;
         this.messageRetryAfter = messageRetryAfter;
         this.shortCompletionCooldown = shortCompletionCooldown;
@@ -461,10 +467,12 @@ public class AiChatFacade {
     }
 
     private ProductRecommendationStatusResponse closeSessionAndSaveAnalysis(Long userId, Long conversationId) {
+        // 조회가 실패해도 대화방이 ANALYZING에 묶이지 않도록 상태를 바꾸기 전에 모은다
+        AiServerFeedbackRequest feedback = findFeedback(userId);
         aiChatRoomService.startAnalysis(conversationId);
         AiServerCloseSessionResponse response;
         try {
-            response = aiChatClient.confirmAnalysis(userId, conversationId);
+            response = requestCloseSession(userId, conversationId, feedback);
         } catch (BusinessException e) {
             expireRoomIfSessionGone(userId, conversationId, e);
             throw e;
@@ -477,6 +485,28 @@ public class AiChatFacade {
             throw e;
         }
         return ProductRecommendationStatusResponse.success();
+    }
+
+    private AiServerCloseSessionResponse requestCloseSession(Long userId, Long conversationId,
+                                                             AiServerFeedbackRequest feedback) {
+        if (feedback == null) {
+            return aiChatClient.confirmAnalysis(userId, conversationId, null);
+        }
+        try {
+            return aiChatClient.confirmAnalysis(userId, conversationId, feedback);
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != AiChatErrorCode.AICHAT_FEEDBACK_REJECTED) {
+                throw e;
+            }
+            log.warn("AI feedback rejected. Retrying without feedback. userId={}, conversationId={}",
+                    userId, conversationId);
+            return aiChatClient.confirmAnalysis(userId, conversationId, null);
+        }
+    }
+
+    private AiServerFeedbackRequest findFeedback(Long userId) {
+        List<ProductActivityResponse> activities = productActivityService.findAllRecentActivities(userId);
+        return activities.isEmpty() ? null : AiServerFeedbackRequest.from(activities);
     }
 
     // AI 세션은 이미 닫혀 같은 대화방으로는 다시 확정할 수 없다 => ANALYZING에 묶이지 않도록 만료해 새 대화를 시작하게 한다

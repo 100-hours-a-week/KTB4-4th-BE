@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackItemRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
@@ -22,6 +24,8 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse
 import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.product.type.ProductActivityType;
+import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.user.type.Gender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -440,6 +444,79 @@ class AiChatClientTest {
     }
 
     @Test
+    void recentFeedback_confirmAnalysis_sendsFeedbackItems() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {
+                          "userId": 10293,
+                          "feedback": {
+                            "items": [
+                              {
+                                "platform": "COUPANG",
+                                "externalId": "8812345",
+                                "action": "DISLIKE",
+                                "context": "PERSONAL",
+                                "occurredAt": "2026-10-30T12:00:00Z"
+                              },
+                              {
+                                "platform": "KAKAO",
+                                "externalId": "55001",
+                                "action": "RECEIVED",
+                                "context": "FRIEND_GIFT",
+                                "occurredAt": "2026-10-28T09:30:00Z"
+                              }
+                            ]
+                          }
+                        }
+                        """, JsonCompareMode.STRICT))
+                .andRespond(withSuccess("""
+                        {
+                          "conversationId": 101,
+                          "userId": 10293,
+                          "summary": "캠핑을 즐깁니다.",
+                          "keywords": {"taste": [], "interest": []},
+                          "recommendations": {"self": {"items": []}, "gift": {"items": []}}
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        client.confirmAnalysis(10293L, 101L, new AiServerFeedbackRequest(List.of(
+                new AiServerFeedbackItemRequest(PlatformType.COUPANG, "8812345", ProductActivityType.DISLIKE,
+                        ProductContext.PERSONAL, OffsetDateTime.parse("2026-10-30T12:00:00Z")),
+                new AiServerFeedbackItemRequest(PlatformType.KAKAO, "55001", ProductActivityType.RECEIVED,
+                        ProductContext.FRIEND_GIFT, OffsetDateTime.parse("2026-10-28T09:30:00Z")))));
+
+        server.verify();
+    }
+
+    // 피드백을 모르는 AI 서버 버전은 모르는 필드를 400 INVALID_REQUEST로 거절한다
+    @Test
+    void invalidRequest_confirmAnalysisWithFeedback_throwsFeedbackRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "INVALID_REQUEST", "message": "요청 형식이 올바르지 않습니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.confirmAnalysis(10293L, 101L, new AiServerFeedbackRequest(List.of())));
+
+        assertEquals(AiChatErrorCode.AICHAT_FEEDBACK_REJECTED, exception.getErrorCode());
+    }
+
+    @Test
+    void invalidRequest_confirmAnalysisWithoutFeedback_throwsRequestRejected() {
+        server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"code": "INVALID_REQUEST", "message": "요청 형식이 올바르지 않습니다.", "retryable": false}
+                        """));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> client.confirmAnalysis(10293L, 101L, null));
+
+        assertEquals(AiChatErrorCode.AICHAT_REQUEST_REJECTED, exception.getErrorCode());
+    }
+
+    @Test
     void confirmAnalysis_closesSession() {
         server.expect(requestTo("http://localhost:9000/v1/chat/sessions/101/close"))
                 .andExpect(method(HttpMethod.POST))
@@ -448,7 +525,7 @@ class AiChatClientTest {
                         {
                           "userId": 10293
                         }
-                        """))
+                        """, JsonCompareMode.STRICT))
                 .andRespond(withSuccess("""
                         {
                           "conversationId": 101,
@@ -487,7 +564,7 @@ class AiChatClientTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        AiServerCloseSessionResponse response = client.confirmAnalysis(10293L, 101L);
+        AiServerCloseSessionResponse response = client.confirmAnalysis(10293L, 101L, null);
 
         assertEquals(101L, response.conversationId());
         assertEquals(PlatformType.COUPANG,

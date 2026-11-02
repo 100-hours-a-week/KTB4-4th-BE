@@ -62,6 +62,11 @@ needu:
     price-range-cache:
       ttl: ${PRODUCT_PRICE_RANGE_CACHE_TTL:10m}
       maximum-size: ${PRODUCT_PRICE_RANGE_CACHE_MAXIMUM_SIZE:100000}
+    activity:
+      # AI 대화를 닫을 때 추천 피드백으로 보내는 좋아요·싫어요·구매 기록의 범위다. 오래된 반응은 지금 취향과 다를 수 있어 뺀다
+      lookback: ${PRODUCT_ACTIVITY_LOOKBACK:90d}
+      # 보내는 기록의 최대 개수다. 최신순으로 자른다
+      max-items: ${PRODUCT_ACTIVITY_MAX_ITEMS:200}
     link-click:
       # 같은 사용자-상품-context의 클릭을 다시 기록하지 않는 기간
       duplicate-window: ${PRODUCT_LINK_CLICK_DUPLICATE_WINDOW:1h}

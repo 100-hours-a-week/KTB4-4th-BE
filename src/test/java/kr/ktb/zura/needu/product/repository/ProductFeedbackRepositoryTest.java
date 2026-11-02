@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.product.repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import kr.ktb.zura.needu.product.entity.Product;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.data.domain.Limit;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -100,8 +102,69 @@ class ProductFeedbackRepositoryTest {
         assertThat(result).containsExactlyInAnyOrder(disliked.getId(), dislikedTwice.getId());
     }
 
+    @Test
+    void feedbacksSaved_findAllActivitiesByUserIdSince_returnsOwnActiveRecentFeedbacksNewestFirst() {
+        LocalDateTime now = LocalDateTime.of(2026, 11, 2, 7, 0);
+        LocalDateTime since = now.minusDays(90);
+        ProductFeedback liked = saveFeedback(USER_ID, saveProduct("좋아요"), ProductContext.PERSONAL,
+                ProductFeedbackType.LIKE, now.minusDays(10));
+        ProductFeedback disliked = saveFeedback(USER_ID, saveProduct("싫어요"), ProductContext.MY_GIFT,
+                ProductFeedbackType.DISLIKE, now.minusDays(1));
+        ProductFeedback canceled = saveFeedback(USER_ID, saveProduct("취소함"), ProductContext.PERSONAL,
+                ProductFeedbackType.LIKE, now.minusDays(2));
+        canceled.delete();
+        productFeedbackRepository.saveAndFlush(canceled);
+        moveUpdatedAt(canceled, now.minusDays(2));
+        saveFeedback(USER_ID, saveProduct("오래됨"), ProductContext.PERSONAL,
+                ProductFeedbackType.DISLIKE, since.minusSeconds(1));
+        saveFeedback(2L, saveProduct("다른 사용자"), ProductContext.PERSONAL,
+                ProductFeedbackType.DISLIKE, now.minusDays(1));
+        entityManager.clear();
+
+        List<ProductFeedbackActivity> result =
+                productFeedbackRepository.findAllActivitiesByUserIdSince(USER_ID, since, Limit.of(10));
+
+        assertThat(result).containsExactly(
+                new ProductFeedbackActivity(PlatformType.COUPANG, "싫어요", ProductFeedbackType.DISLIKE,
+                        ProductContext.MY_GIFT, disliked.getUpdatedAt()),
+                new ProductFeedbackActivity(PlatformType.COUPANG, "좋아요", ProductFeedbackType.LIKE,
+                        ProductContext.PERSONAL, liked.getUpdatedAt()));
+    }
+
+    @Test
+    void moreThanLimit_findAllActivitiesByUserIdSince_returnsNewestWithinLimit() {
+        LocalDateTime now = LocalDateTime.of(2026, 11, 2, 7, 0);
+        saveFeedback(USER_ID, saveProduct("첫째"), ProductContext.PERSONAL, ProductFeedbackType.LIKE, now.minusDays(3));
+        saveFeedback(USER_ID, saveProduct("둘째"), ProductContext.PERSONAL, ProductFeedbackType.LIKE, now.minusDays(1));
+        saveFeedback(USER_ID, saveProduct("셋째"), ProductContext.PERSONAL, ProductFeedbackType.LIKE, now.minusDays(2));
+        entityManager.clear();
+
+        List<ProductFeedbackActivity> result = productFeedbackRepository.findAllActivitiesByUserIdSince(
+                USER_ID, now.minusDays(90), Limit.of(2));
+
+        assertThat(result).extracting(ProductFeedbackActivity::externalId).containsExactly("둘째", "셋째");
+    }
+
     private void saveFeedback(Long userId, Product product, ProductContext context, ProductFeedbackType feedback) {
         productFeedbackRepository.saveAndFlush(new ProductFeedback(userId, product, context, feedback));
+    }
+
+    // updatedAt은 저장 시각으로 자동 기록되므로, 기간과 정렬을 확인할 때만 직접 옮긴다
+    private ProductFeedback saveFeedback(Long userId, Product product, ProductContext context,
+                                         ProductFeedbackType feedback, LocalDateTime updatedAt) {
+        ProductFeedback saved = productFeedbackRepository.saveAndFlush(
+                new ProductFeedback(userId, product, context, feedback));
+        return moveUpdatedAt(saved, updatedAt);
+    }
+
+    private ProductFeedback moveUpdatedAt(ProductFeedback feedback, LocalDateTime updatedAt) {
+        entityManager.getEntityManager()
+                .createQuery("update ProductFeedback pf set pf.updatedAt = :updatedAt where pf.id = :id")
+                .setParameter("updatedAt", updatedAt)
+                .setParameter("id", feedback.getId())
+                .executeUpdate();
+        entityManager.clear();
+        return entityManager.find(ProductFeedback.class, feedback.getId());
     }
 
     private Product saveProduct() {

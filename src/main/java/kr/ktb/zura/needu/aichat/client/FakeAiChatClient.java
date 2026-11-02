@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
@@ -136,7 +137,8 @@ public class FakeAiChatClient implements AiChatClient {
     }
 
     @Override
-    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId) {
+    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId,
+                                                        AiServerFeedbackRequest feedback) {
         pause();
         AiServerAnalysisProfileResponse profile = mockAnalyses.getOrDefault(
                 conversationRoomId, createMockAnalysis(userId)).profile();

@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.aichat.client;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
@@ -25,5 +26,6 @@ public interface AiChatClient {
 
     AiServerAnalysisResponse patchAnalyze(Long conversationRoomId, AiServerPatchAnalysisRequest request);
 
-    AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId);
+    AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId,
+                                                 AiServerFeedbackRequest feedback);
 }
