@@ -39,6 +39,7 @@ class NotificationCreatedEventListenerTransactionTest {
 
     private static final Long RECEIVER_USER_ID = 1L;
     private static final Long PURCHASE_CHECK_ID = 56L;
+    private static final int PUBLISH_CHUNK_SIZE = 2;
 
     @Test
     void transactionCommitted_notificationsCreated_publishesAfterCommit() {
@@ -120,6 +121,34 @@ class NotificationCreatedEventListenerTransactionTest {
                         return recipientData.get("notificationId").asLong() == 11L
                                 && recipientData.get("preview").get("productName").asString().equals("섬유유연제");
                     }));
+        }
+    }
+
+    @Test
+    void receiversExceedChunkSize_notificationsCreated_publishesPerChunk() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            NotificationEventPublisher notificationEventPublisher =
+                    context.getBean(NotificationEventPublisher.class);
+            ApplicationEventPublisher eventPublisher = context;
+            TransactionTemplate transactionTemplate = context.getBean(TransactionTemplate.class);
+
+            transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(
+                    new NotificationsCreatedEvent(List.of(
+                            birthdayNotification(20L, 1L),
+                            birthdayNotification(21L, 2L),
+                            birthdayNotification(22L, 3L)
+                    ))));
+
+            ArgumentCaptor<NotificationRedisEvent> eventCaptor = ArgumentCaptor.forClass(NotificationRedisEvent.class);
+            verify(notificationEventPublisher, times(2)).publish(eventCaptor.capture());
+            assertThat(eventCaptor.getAllValues())
+                    .extracting(event -> event.recipients().stream()
+                            .map(NotificationRedisEvent.Recipient::receiverUserId)
+                            .toList())
+                    .containsExactly(List.of(1L, 2L), List.of(3L));
+            assertThat(eventCaptor.getAllValues())
+                    .allSatisfy(event -> assertThat(event.data().get("title").asString())
+                            .isEqualTo("친구의 생일이 7일 남았어요."));
         }
     }
 
@@ -227,7 +256,8 @@ class NotificationCreatedEventListenerTransactionTest {
                     notificationEventPublisher,
                     notificationPreviewService,
                     jsonMapper,
-                    meterRegistry
+                    meterRegistry,
+                    PUBLISH_CHUNK_SIZE
             );
         }
 

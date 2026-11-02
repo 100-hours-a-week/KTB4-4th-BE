@@ -14,6 +14,7 @@ import kr.ktb.zura.needu.notification.type.NotificationCategory;
 import kr.ktb.zura.needu.notification.type.NotificationResourceType;
 import kr.ktb.zura.needu.notification.type.NotificationType;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -30,19 +31,22 @@ public class NotificationCreatedEventListener {
     private final NotificationPreviewService notificationPreviewService;
     private final JsonMapper jsonMapper;
     private final MeterRegistry meterRegistry;
+    private final int publishChunkSize;
 
     public NotificationCreatedEventListener(
             NotificationRepository notificationRepository,
             NotificationEventPublisher notificationEventPublisher,
             NotificationPreviewService notificationPreviewService,
             JsonMapper jsonMapper,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            @Value("${needu.notification.publish-chunk-size}") int publishChunkSize
     ) {
         this.notificationRepository = notificationRepository;
         this.notificationEventPublisher = notificationEventPublisher;
         this.notificationPreviewService = notificationPreviewService;
         this.jsonMapper = jsonMapper;
         this.meterRegistry = meterRegistry;
+        this.publishChunkSize = publishChunkSize;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -79,7 +83,7 @@ public class NotificationCreatedEventListener {
             return;
         }
 
-        // 공통 값이 같은 알림끼리 묶어 받는 사용자 수만큼이 아니라 묶음 수만큼만 발행한다
+        // 공통 값이 같은 알림끼리 묶어 받는 사용자 수만큼이 아니라 chunk 수만큼만 발행한다
         Map<NotificationCommonData, List<NotificationsCreatedEvent.CreatedNotification>> notificationsByCommonData =
                 event.notifications().stream()
                         .collect(Collectors.groupingBy(
@@ -87,8 +91,12 @@ public class NotificationCreatedEventListener {
                                 LinkedHashMap::new,
                                 Collectors.toList()
                         ));
-        notificationsByCommonData.forEach((commonData, notifications) ->
-                publish(commonData, notifications, unreadCountByUserId));
+        notificationsByCommonData.forEach((commonData, notifications) -> {
+            for (int fromIndex = 0; fromIndex < notifications.size(); fromIndex += publishChunkSize) {
+                int toIndex = Math.min(fromIndex + publishChunkSize, notifications.size());
+                publish(commonData, notifications.subList(fromIndex, toIndex), unreadCountByUserId);
+            }
+        });
     }
 
     private void publish(
