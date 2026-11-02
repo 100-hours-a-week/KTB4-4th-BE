@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -172,6 +173,18 @@ class NotificationCreatedEventListenerTransactionTest {
                     .extracting(event -> event.data().get("type").asString())
                     .containsExactly("FRIEND_BIRTHDAY", "POKE");
         }
+    }
+
+    @Test
+    void nonPositiveChunkSize_create_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> new NotificationCreatedEventListener(
+                mock(NotificationRepository.class),
+                mock(NotificationEventPublisher.class),
+                new NotificationPreviewService(List.of()),
+                JsonMapper.builder().build(),
+                new SimpleMeterRegistry(),
+                0
+        )).isInstanceOf(IllegalArgumentException.class);
     }
 
     private NotificationsCreatedEvent.CreatedNotification birthdayNotification(

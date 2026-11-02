@@ -41,6 +41,11 @@ public class NotificationCreatedEventListener {
             MeterRegistry meterRegistry,
             @Value("${needu.notification.publish-chunk-size}") int publishChunkSize
     ) {
+        // 0 이하면 chunk 반복이 끝나지 않으므로 기동 시점에 막는다
+        if (publishChunkSize <= 0) {
+            throw new IllegalArgumentException(
+                    "needu.notification.publish-chunk-size must be positive. value=" + publishChunkSize);
+        }
         this.notificationRepository = notificationRepository;
         this.notificationEventPublisher = notificationEventPublisher;
         this.notificationPreviewService = notificationPreviewService;
