@@ -39,6 +39,8 @@ needu:
     heartbeat-interval: ${NOTIFICATION_HEARTBEAT_INTERVAL:25s}
     # 같은 알림을 받는 사용자를 Redis 메시지 하나에 묶는 최대 인원이다
     publish-chunk-size: ${NOTIFICATION_PUBLISH_CHUNK_SIZE:500}
+    # 한 알림 이벤트의 수신자 알림을 INSERT 한 문장에 묶는 최대 행 수다
+    insert-chunk-size: ${NOTIFICATION_INSERT_CHUNK_SIZE:1000}
     friend-birthday:
       cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
       zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}

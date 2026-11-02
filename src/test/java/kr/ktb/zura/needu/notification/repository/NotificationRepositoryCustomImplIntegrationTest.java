@@ -20,8 +20,8 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.dao.DataIntegrityViolationException;
 
 // 생성 키 반환은 MySQL 드라이버가 배치를 다중 행 INSERT로 합칠 때(rewriteBatchedStatements)의 동작을 확인해야 하므로
-// integration 프로필의 MySQL을 사용한다.
-@DataJpaTest(properties = "spring.datasource.hikari.data-source-properties.rewriteBatchedStatements=true")
+// integration 프로필의 MySQL을 사용한다. rewrite 설정은 application-integration.properties에서 운영과 같게 켠다.
+@DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class NotificationRepositoryCustomImplIntegrationTest {
 
