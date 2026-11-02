@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS user_taste_profiles (
     recent_interests  TEXT        NULL,
     ai_summary        TEXT        NULL,
     onboarding_tastes JSON        NOT NULL,
+    ai_memory         JSON        NULL COMMENT 'AI 서버가 대화 종료 시 돌려준 장기 기억. 다음 대화 시작 때 그대로 보낸다',
     created_at        DATETIME(6) NOT NULL,
     updated_at        DATETIME(6) NOT NULL,
     PRIMARY KEY (user_id),

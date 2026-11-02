@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordsResponse;
@@ -31,6 +32,7 @@ class AiAnalysisConfirmServiceTest {
     private static final Long USER_ID = 1L;
     private static final Long ROOM_ID = 101L;
     private static final String SUMMARY = "캠핑을 즐깁니다.";
+    private static final Map<String, Object> MEMORY = Map.of("schemaVersion", "1.0", "userId", USER_ID);
 
     @Mock
     private ProductRecommendationService productRecommendationService;
@@ -53,7 +55,8 @@ class AiAnalysisConfirmServiceTest {
 
         var order = inOrder(productRecommendationService, userService, aiChatRoomService);
         order.verify(productRecommendationService).saveRecommendations(USER_ID, self, gift, List.of("실용적"));
-        order.verify(userService).completeTasteAnalysis(USER_ID, SUMMARY, List.of("실용적"), List.of("캠핑"));
+        order.verify(userService).completeTasteAnalysis(
+                USER_ID, SUMMARY, List.of("실용적"), List.of("캠핑"), MEMORY);
         order.verify(aiChatRoomService).completeRoom(ROOM_ID);
     }
 
@@ -80,7 +83,8 @@ class AiAnalysisConfirmServiceTest {
                 new AiServerAnalysisKeywordsResponse(
                         List.of(new AiServerAnalysisKeywordResponse("실용적", 0.9)),
                         List.of(new AiServerAnalysisKeywordResponse("캠핑", 0.8))),
-                new AiServerRecommendationsResponse(self, gift));
+                new AiServerRecommendationsResponse(self, gift),
+                MEMORY);
     }
 
     private static AiServerRecommendationResult recommendations(String externalId) {

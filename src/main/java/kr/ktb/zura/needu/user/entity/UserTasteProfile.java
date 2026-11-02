@@ -48,6 +48,10 @@ public class UserTasteProfile {
     @Column(nullable = false)
     private Map<String, Object> onboardingTastes;
 
+    // 구조는 AI 서버가 관리, 해석하지 않고 그대로 보관
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> aiMemory;
+
     public UserTasteProfile(User user, Map<String, Object> onboardingTastes) {
         this.user = user;
         this.onboardingTastes = onboardingTastes;
@@ -65,5 +69,9 @@ public class UserTasteProfile {
         this.aiSummary = aiSummary;
         this.recentTastes = recentTastes;
         this.recentInterests = recentInterests;
+    }
+
+    public void updateAiMemory(Map<String, Object> aiMemory) {
+        this.aiMemory = aiMemory;
     }
 }

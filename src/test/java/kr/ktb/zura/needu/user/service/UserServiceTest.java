@@ -259,7 +259,8 @@ class UserServiceTest {
                 1L,
                 "캠핑과 핸드드립을 즐기는 분입니다.",
                 List.of("취향1", "취향2", "취향3"),
-                List.of("캠핑", "자전거타기", "여행"));
+                List.of("캠핑", "자전거타기", "여행"),
+                null);
 
         assertTrue(user.isTasteAnalysisCompleted());
         ArgumentCaptor<UserTasteProfile> profileCaptor = ArgumentCaptor.forClass(UserTasteProfile.class);
@@ -391,6 +392,59 @@ class UserServiceTest {
         assertTrue(response.interestCategoryCodes().isEmpty());
         assertTrue(response.allergyCodes().isEmpty());
         assertTrue(response.giftExclusionCodes().isEmpty());
+    }
+
+    @Test
+    void memoryInCloseResult_completeTasteAnalysis_replacesStoredMemory() {
+        User user = createActiveUser("니듀");
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        profile.updateAiMemory(Map.of("schemaVersion", "1.0", "sessionCount", 1));
+        Map<String, Object> newMemory = Map.of("schemaVersion", "1.0", "sessionCount", 2);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        userService.completeTasteAnalysis(1L, "요약", List.of("취향"), List.of("관심사"), newMemory);
+
+        assertEquals(newMemory, profile.getAiMemory());
+    }
+
+    @Test
+    void noMemoryInCloseResult_completeTasteAnalysis_keepsStoredMemory() {
+        User user = createActiveUser("니듀");
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        Map<String, Object> storedMemory = Map.of("schemaVersion", "1.0", "sessionCount", 1);
+        profile.updateAiMemory(storedMemory);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        userService.completeTasteAnalysis(1L, "요약", List.of("취향"), List.of("관심사"), null);
+
+        assertEquals(storedMemory, profile.getAiMemory());
+    }
+
+    @Test
+    void storedMemory_findAiMemory_returnsMemory() {
+        UserTasteProfile profile = new UserTasteProfile(createActiveUser("니듀"), Map.of());
+        Map<String, Object> storedMemory = Map.of("schemaVersion", "1.0", "sessionCount", 1);
+        profile.updateAiMemory(storedMemory);
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        assertEquals(storedMemory, userService.findAiMemory(1L));
+    }
+
+    @Test
+    void profileWithoutMemory_findAiMemory_returnsEmpty() {
+        UserTasteProfile profile = new UserTasteProfile(createActiveUser("니듀"), Map.of());
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        assertTrue(userService.findAiMemory(1L).isEmpty());
+    }
+
+    @Test
+    void userWithoutTasteProfile_findAiMemory_returnsEmpty() {
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertTrue(userService.findAiMemory(1L).isEmpty());
     }
 
     @Test
