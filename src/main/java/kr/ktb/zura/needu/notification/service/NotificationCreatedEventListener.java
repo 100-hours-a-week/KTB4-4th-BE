@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.notification.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,10 +24,13 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class NotificationCreatedEventListener {
 
+    private static final String STAGE_TIMER = "needu.notification.creation";
+
     private final NotificationRepository notificationRepository;
     private final NotificationEventPublisher notificationEventPublisher;
     private final NotificationPreviewService notificationPreviewService;
     private final JsonMapper jsonMapper;
+    private final MeterRegistry meterRegistry;
     private final int publishChunkSize;
 
     public NotificationCreatedEventListener(
@@ -33,6 +38,7 @@ public class NotificationCreatedEventListener {
             NotificationEventPublisher notificationEventPublisher,
             NotificationPreviewService notificationPreviewService,
             JsonMapper jsonMapper,
+            MeterRegistry meterRegistry,
             @Value("${needu.notification.publish-chunk-size}") int publishChunkSize
     ) {
         // 0 이하면 chunk 반복이 끝나지 않으므로 기동 시점에 막는다
@@ -44,6 +50,7 @@ public class NotificationCreatedEventListener {
         this.notificationEventPublisher = notificationEventPublisher;
         this.notificationPreviewService = notificationPreviewService;
         this.jsonMapper = jsonMapper;
+        this.meterRegistry = meterRegistry;
         this.publishChunkSize = publishChunkSize;
     }
 
@@ -53,6 +60,18 @@ public class NotificationCreatedEventListener {
             return;
         }
 
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            publishAll(event);
+        } finally {
+            sample.stop(Timer.builder(STAGE_TIMER)
+                    .tag("stage", "publish")
+                    .tag("type", event.notifications().getFirst().type().name())
+                    .register(meterRegistry));
+        }
+    }
+
+    private void publishAll(NotificationsCreatedEvent event) {
         Map<Long, Long> unreadCountByUserId;
         try {
             unreadCountByUserId = notificationRepository.findAllUnreadCountsByReceiverUserIdIn(

@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.notification.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -24,10 +26,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class NotificationCreationService {
 
+    private static final String STAGE_TIMER = "needu.notification.creation";
+
     private final NotificationEventRepository notificationEventRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
     private final int insertChunkSize;
 
     public NotificationCreationService(
@@ -35,6 +40,7 @@ public class NotificationCreationService {
             NotificationRepository notificationRepository,
             NotificationSettingRepository notificationSettingRepository,
             ApplicationEventPublisher eventPublisher,
+            MeterRegistry meterRegistry,
             @Value("${needu.notification.insert-chunk-size}") int insertChunkSize
     ) {
         // 0 이하면 chunk 반복이 끝나지 않으므로 기동 시점에 막는다
@@ -46,6 +52,7 @@ public class NotificationCreationService {
         this.notificationRepository = notificationRepository;
         this.notificationSettingRepository = notificationSettingRepository;
         this.eventPublisher = eventPublisher;
+        this.meterRegistry = meterRegistry;
         this.insertChunkSize = insertChunkSize;
     }
 
@@ -72,24 +79,26 @@ public class NotificationCreationService {
             return 0;
         }
 
-        List<Long> enabledReceiverUserIds = findEnabledReceiverUserIds(receiverUserIds, type, dedupKey);
+        List<Long> enabledReceiverUserIds = stageTimer("prepare", type)
+                .record(() -> findEnabledReceiverUserIds(receiverUserIds, type, dedupKey));
         if (enabledReceiverUserIds.isEmpty()) {
             return 0;
         }
 
         LocalDateTime createdAt = LocalDateTime.now(ZoneOffset.UTC);
-        NotificationEvent event = notificationEventRepository.save(NotificationEvent.create(
-                type,
-                actorUserId,
-                title,
-                body,
-                resourceType,
-                resourceId,
-                dedupKey
-        ));
-        List<Long> notificationIds = insertNotifications(event, enabledReceiverUserIds, createdAt, expiresAt);
-        NotificationsCreatedEvent createdEvent =
-                NotificationsCreatedEvent.of(event, notificationIds, enabledReceiverUserIds, createdAt);
+        NotificationsCreatedEvent createdEvent = stageTimer("insert", type).record(() -> {
+            NotificationEvent event = notificationEventRepository.save(NotificationEvent.create(
+                    type,
+                    actorUserId,
+                    title,
+                    body,
+                    resourceType,
+                    resourceId,
+                    dedupKey
+            ));
+            List<Long> notificationIds = insertNotifications(event, enabledReceiverUserIds, createdAt, expiresAt);
+            return NotificationsCreatedEvent.of(event, notificationIds, enabledReceiverUserIds, createdAt);
+        });
         eventPublisher.publishEvent(createdEvent);
         return createdEvent.notifications().size();
     }
@@ -129,5 +138,12 @@ public class NotificationCreationService {
         return receiverUserIds.stream()
                 .filter(userId -> enabledByUserId.getOrDefault(userId, settingType.isDefaultEnabled()))
                 .toList();
+    }
+
+    private Timer stageTimer(String stage, NotificationType type) {
+        return Timer.builder(STAGE_TIMER)
+                .tag("stage", stage)
+                .tag("type", type.name())
+                .register(meterRegistry);
     }
 }
