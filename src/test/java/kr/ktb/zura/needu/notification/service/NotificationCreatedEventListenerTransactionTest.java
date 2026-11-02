@@ -8,8 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -69,11 +67,6 @@ class NotificationCreatedEventListenerTransactionTest {
                                     && event.recipients().getFirst().receiverUserId().equals(RECEIVER_USER_ID)
                                     && event.recipients().getFirst().unreadCount() == 3L
                                     && event.recipients().getFirst().data().get("notificationId").asLong() == 10L));
-            assertThat(context.getBean(MeterRegistry.class).get("needu.notification.creation")
-                    .tag("stage", "publish")
-                    .tag("type", NotificationType.POKE.name())
-                    .timer()
-                    .count()).isEqualTo(1);
         }
     }
 
@@ -182,7 +175,6 @@ class NotificationCreatedEventListenerTransactionTest {
                 mock(NotificationEventPublisher.class),
                 new NotificationPreviewService(List.of()),
                 JsonMapper.builder().build(),
-                new SimpleMeterRegistry(),
                 0
         )).isInstanceOf(IllegalArgumentException.class);
     }
@@ -252,24 +244,17 @@ class NotificationCreatedEventListenerTransactionTest {
         }
 
         @Bean
-        MeterRegistry meterRegistry() {
-            return new SimpleMeterRegistry();
-        }
-
-        @Bean
         NotificationCreatedEventListener notificationCreatedEventListener(
                 NotificationRepository notificationRepository,
                 NotificationEventPublisher notificationEventPublisher,
                 NotificationPreviewService notificationPreviewService,
-                JsonMapper jsonMapper,
-                MeterRegistry meterRegistry
+                JsonMapper jsonMapper
         ) {
             return new NotificationCreatedEventListener(
                     notificationRepository,
                     notificationEventPublisher,
                     notificationPreviewService,
                     jsonMapper,
-                    meterRegistry,
                     PUBLISH_CHUNK_SIZE
             );
         }

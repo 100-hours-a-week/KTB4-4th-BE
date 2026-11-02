@@ -12,7 +12,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashSet;
@@ -42,7 +41,6 @@ class NotificationCreationServiceTest {
     private final NotificationSettingRepository notificationSettingRepository =
             mock(NotificationSettingRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
-    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final NotificationCreationService notificationCreationService = createService(INSERT_CHUNK_SIZE);
 
     @Test
@@ -80,8 +78,6 @@ class NotificationCreationServiceTest {
                 .extracting(NotificationsCreatedEvent.CreatedNotification::createdAt)
                 .allSatisfy(createdAt -> assertThat(createdAt)
                         .isBetween(beforeCreation, LocalDateTime.now(ZoneOffset.UTC)));
-        assertThat(stageTimerCount("prepare", NotificationType.FRIEND_BIRTHDAY)).isEqualTo(1);
-        assertThat(stageTimerCount("insert", NotificationType.FRIEND_BIRTHDAY)).isEqualTo(1);
     }
 
     @Test
@@ -130,8 +126,6 @@ class NotificationCreationServiceTest {
         verify(notificationEventRepository, never()).save(any());
         verify(notificationRepository, never()).insertAll(any(), anyList(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());
-        assertThat(stageTimerCount("prepare", NotificationType.CHAT)).isEqualTo(1);
-        assertThat(meterRegistry.find("needu.notification.creation").tag("stage", "insert").timer()).isNull();
     }
 
     @Test
@@ -206,7 +200,6 @@ class NotificationCreationServiceTest {
                 notificationRepository,
                 notificationSettingRepository,
                 eventPublisher,
-                meterRegistry,
                 insertChunkSize
         );
     }
@@ -246,13 +239,5 @@ class NotificationCreationServiceTest {
         ArgumentCaptor<NotificationsCreatedEvent> eventCaptor = ArgumentCaptor.forClass(NotificationsCreatedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         return eventCaptor.getValue();
-    }
-
-    private long stageTimerCount(String stage, NotificationType type) {
-        return meterRegistry.get("needu.notification.creation")
-                .tag("stage", stage)
-                .tag("type", type.name())
-                .timer()
-                .count();
     }
 }
