@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 
 import jakarta.annotation.PreDestroy;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerCloseSessionRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageStreamRequest;
@@ -139,9 +140,10 @@ public class HttpAiChatClient implements AiChatClient {
     }
 
     @Override
-    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId) {
+    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId,
+                                                        AiServerFeedbackRequest feedback) {
         return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationRoomId),
-                new AiServerCloseSessionRequest(userId), AiServerCloseSessionResponse.class);
+                new AiServerCloseSessionRequest(userId, feedback), AiServerCloseSessionResponse.class);
     }
 
     private Map<String, Long> pathVariables(Long conversationRoomId) {
