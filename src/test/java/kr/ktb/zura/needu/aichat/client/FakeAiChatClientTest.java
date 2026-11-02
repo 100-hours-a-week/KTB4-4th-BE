@@ -39,7 +39,7 @@ class FakeAiChatClientTest {
                         1L,
                         "주말마다 자연에서 쉬는 것을 좋아합니다.",
                         new AiServerAnalysisKeywordsRequest(List.of("가벼운 장비"), List.of("자연"))));
-        AiServerCloseSessionResponse closedSession = client.confirmAnalysis(1L, 101L);
+        AiServerCloseSessionResponse closedSession = client.confirmAnalysis(1L, 101L, null);
 
         assertEquals(101L, session.conversationRoomId());
         assertEquals(50, firstReply.progress());

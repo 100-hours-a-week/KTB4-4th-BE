@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackItemRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisProfileResponse;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
@@ -59,7 +61,11 @@ import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
 import kr.ktb.zura.needu.common.response.CursorPageResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductActivityResponse;
+import kr.ktb.zura.needu.product.service.ProductActivityService;
 import kr.ktb.zura.needu.product.type.PlatformType;
+import kr.ktb.zura.needu.product.type.ProductActivityType;
+import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.user.dto.response.UserAiProfileResponse;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
@@ -138,6 +144,9 @@ class AiChatFacadeTest {
     private ConsentService consentService;
 
     @Mock
+    private ProductActivityService productActivityService;
+
+    @Mock
     private AiConversationLock aiConversationLock;
 
     @Mock
@@ -169,7 +178,7 @@ class AiChatFacadeTest {
         }).when(replySlot).execute(any());
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
-                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, MESSAGE_RETRY_AFTER,
+                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, productActivityService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
     }
 
@@ -264,7 +273,7 @@ class AiChatFacadeTest {
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
-                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, MESSAGE_RETRY_AFTER,
+                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, productActivityService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
@@ -357,7 +366,7 @@ class AiChatFacadeTest {
     void shortCooldownUserRoomPastPurgeAt_startOrResumeConversation_reservesRoomWithoutDailyLimit() {
         aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
-                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, MESSAGE_RETRY_AFTER,
+                aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, productActivityService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
         given(userService.findAuthenticatedUser(USER_ID)).willReturn(new UserResponse(
                 USER_ID, SHORT_COOLDOWN_EXTERNAL_ID, "테스트 사용자", null, true, null));
@@ -1054,21 +1063,53 @@ class AiChatFacadeTest {
     @Test
     void successfulRecommendationJob_confirmAnalysis_returnsCompleted() {
         AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of(), List.of("캠핑"));
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeResponse);
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null)).willReturn(closeResponse);
 
         ProductRecommendationStatusResponse response = aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID);
 
         assertThat(response.isRecommendationCompleted()).isTrue();
         var order = inOrder(aiChatRoomService, aiChatClient, aiAnalysisConfirmService);
         order.verify(aiChatRoomService).startAnalysis(ROOM_ID);
-        order.verify(aiChatClient).confirmAnalysis(USER_ID, ROOM_ID);
+        order.verify(aiChatClient).confirmAnalysis(USER_ID, ROOM_ID, null);
         order.verify(aiAnalysisConfirmService).saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
         verify(aiChatRoomService, never()).expireRoom(anyLong());
     }
 
     @Test
+    void recentActivities_confirmAnalysis_sendsFeedbackToAiServer() {
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 10, 30, 12, 0);
+        ProductActivityResponse activity = new ProductActivityResponse(
+                PlatformType.COUPANG, "8812345", ProductActivityType.DISLIKE, ProductContext.PERSONAL, occurredAt);
+        AiServerFeedbackRequest feedback = new AiServerFeedbackRequest(List.of(new AiServerFeedbackItemRequest(
+                PlatformType.COUPANG, "8812345", ProductActivityType.DISLIKE, ProductContext.PERSONAL,
+                OffsetDateTime.of(occurredAt, ZoneOffset.UTC))));
+        AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of(), List.of("캠핑"));
+        given(productActivityService.findAllRecentActivities(USER_ID)).willReturn(List.of(activity));
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, feedback)).willReturn(closeResponse);
+
+        aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID);
+
+        var order = inOrder(productActivityService, aiChatRoomService, aiChatClient);
+        order.verify(productActivityService).findAllRecentActivities(USER_ID);
+        order.verify(aiChatRoomService).startAnalysis(ROOM_ID);
+        order.verify(aiChatClient).confirmAnalysis(USER_ID, ROOM_ID, feedback);
+    }
+
+    @Test
+    void activityLookupFails_confirmAnalysis_doesNotStartAnalysis() {
+        given(productActivityService.findAllRecentActivities(USER_ID))
+                .willThrow(new RuntimeException("db down"));
+
+        assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
+                .hasMessage("db down");
+
+        verify(aiChatRoomService, never()).startAnalysis(anyLong());
+        verifyNoInteractions(aiChatClient);
+    }
+
+    @Test
     void finalKeywordCountOverThree_confirmAnalysis_expiresRoomWithoutSavingResult() {
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeSessionResponse(
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null)).willReturn(closeSessionResponse(
                 List.of("취향1", "취향2", "취향3", "취향4"),
                 List.of("캠핑", "자전거타기", "여행")));
 
@@ -1083,7 +1124,7 @@ class AiChatFacadeTest {
     @Test
     void resultSaveFailsAfterSessionClosed_confirmAnalysis_expiresRoom() {
         AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of("실용적"), List.of("캠핑"));
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeResponse);
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null)).willReturn(closeResponse);
         willThrow(new RuntimeException("save failed")).given(aiAnalysisConfirmService)
                 .saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
 
@@ -1098,7 +1139,7 @@ class AiChatFacadeTest {
     @Test
     void roomExpireAlsoFails_confirmAnalysis_throwsOriginalFailure() {
         AiServerCloseSessionResponse closeResponse = closeSessionResponse(List.of("실용적"), List.of("캠핑"));
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID)).willReturn(closeResponse);
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null)).willReturn(closeResponse);
         willThrow(new RuntimeException("save failed")).given(aiAnalysisConfirmService)
                 .saveConfirmedAnalysis(USER_ID, ROOM_ID, closeResponse);
         willThrow(new RuntimeException("expire failed")).given(aiChatRoomService).expireRoom(ROOM_ID);
@@ -1111,7 +1152,7 @@ class AiChatFacadeTest {
 
     @Test
     void aiServerUnavailable_confirmAnalysis_keepsRoomForRetry() {
-        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID))
+        given(aiChatClient.confirmAnalysis(USER_ID, ROOM_ID, null))
                 .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
 
         assertThatThrownBy(() -> aiChatFacade.confirmAnalysis(USER_ID, ROOM_ID))
