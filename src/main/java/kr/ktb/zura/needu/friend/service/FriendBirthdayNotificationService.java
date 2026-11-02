@@ -54,17 +54,8 @@ public class FriendBirthdayNotificationService {
         boolean includeLeapDay = !birthdayDate.isLeapYear()
                 && birthdayDate.getMonthValue() == 3
                 && birthdayDate.getDayOfMonth() == 1;
-        // shortcut: 하루 대상 관계를 한 번에 조회한다, 메모리 부담이 커지면 keyset batch로 전환
-        Timer.Sample querySample = Timer.start(meterRegistry);
-        List<FriendBirthdayNotificationTarget> targets = friendRepository.findAllBirthdayNotificationTargets(
-                birthdayDate.getMonthValue(), birthdayDate.getDayOfMonth(), includeLeapDay);
-        long queryNanos = querySample.stop(batchTimer("query"));
-        Map<BirthdayFriend, Set<Long>> receiverUserIdsByFriend = targets.stream()
-                .collect(Collectors.groupingBy(
-                        target -> new BirthdayFriend(target.friendUserId(), target.nickname()),
-                        LinkedHashMap::new,
-                        Collectors.mapping(FriendBirthdayNotificationTarget::ownerUserId, Collectors.toSet())
-                ));
+        Map<BirthdayFriend, Set<Long>> receiverUserIdsByFriend =
+                findReceiverUserIdsByFriend(birthdayDate, includeLeapDay);
         LocalDateTime expiresAt = birthdayDate.plusDays(1)
                 .atStartOfDay(notificationZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
@@ -87,10 +78,25 @@ public class FriendBirthdayNotificationService {
         }
 
         long totalNanos = totalSample.stop(batchTimer("total"));
-        log.info("Friend birthday notification batch completed. targetCount={}, friendCount={}, "
-                        + "notificationCount={}, queryMs={}, totalMs={}",
-                targets.size(), receiverUserIdsByFriend.size(), notificationCount,
-                Duration.ofNanos(queryNanos).toMillis(), Duration.ofNanos(totalNanos).toMillis());
+        log.info("Friend birthday notification batch completed. receiverCount={}, friendCount={}, "
+                        + "notificationCount={}, totalMs={}",
+                receiverUserIdsByFriend.values().stream().mapToInt(Set::size).sum(), receiverUserIdsByFriend.size(),
+                notificationCount, Duration.ofNanos(totalNanos).toMillis());
+    }
+
+    // 조회 결과 목록은 이 메서드 안에서만 참조해 그룹핑 뒤 바로 GC 대상이 되게 한다 (300만 행 규모)
+    private Map<BirthdayFriend, Set<Long>> findReceiverUserIdsByFriend(LocalDate birthdayDate, boolean includeLeapDay) {
+        // shortcut: 하루 대상 관계를 한 번에 조회한다, 메모리 부담이 커지면 keyset batch로 전환
+        Timer.Sample querySample = Timer.start(meterRegistry);
+        List<FriendBirthdayNotificationTarget> targets = friendRepository.findAllBirthdayNotificationTargets(
+                birthdayDate.getMonthValue(), birthdayDate.getDayOfMonth(), includeLeapDay);
+        querySample.stop(batchTimer("query"));
+        return targets.stream()
+                .collect(Collectors.groupingBy(
+                        target -> new BirthdayFriend(target.friendUserId(), target.nickname()),
+                        LinkedHashMap::new,
+                        Collectors.mapping(FriendBirthdayNotificationTarget::ownerUserId, Collectors.toSet())
+                ));
     }
 
     private Timer batchTimer(String stage) {
