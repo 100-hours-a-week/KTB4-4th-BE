@@ -11,10 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 class AiMessageRepositoryTest {
@@ -22,6 +24,7 @@ class AiMessageRepositoryTest {
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
     private static final String USER_CONTENT = "요즘 러닝에 관심이 생겼어.";
+    private static final String AI_CONTENT = "러닝을 좋아하시는군요.";
 
     @Autowired
     private AiMessageRepository aiMessageRepository;
@@ -86,6 +89,28 @@ class AiMessageRepositoryTest {
                 aiMessageRepository.findAllByAiChatRoomIdBeforeCursor(room.getId(), third.getId(), Limit.of(10));
 
         assertThat(result).extracting(AiMessage::getId).containsExactly(second.getId(), first.getId());
+    }
+
+    @Test
+    void replyAlreadySaved_saveAndFlush_throwsDataIntegrityViolation() {
+        AiMessage userMessage = saveUserMessage(room);
+        aiMessageRepository.saveAndFlush(AiMessage.createReply(room, userMessage.getId(), AI_CONTENT, 5, false));
+
+        assertThatThrownBy(() -> aiMessageRepository.saveAndFlush(
+                AiMessage.createReply(room, userMessage.getId(), AI_CONTENT, 10, false)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void messagesWithoutReplyTo_saveAndFlush_savesAll() {
+        saveUserMessage(room);
+        saveUserMessage(room);
+        aiMessageRepository.saveAndFlush(AiMessage.createGreeting(room, AI_CONTENT));
+        entityManager.clear();
+
+        List<AiMessage> result = aiMessageRepository.findAllByAiChatRoomId(room.getId(), Limit.of(10));
+
+        assertThat(result).hasSize(3);
     }
 
     private AiMessage saveUserMessage(AiChatRoom aiChatRoom) {
