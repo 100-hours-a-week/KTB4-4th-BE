@@ -254,4 +254,5 @@ needu:
     events:
       anonymous-chat-message-send:
         limit: 10
-        window: 1s
+        # TODO: dev 확인용으로 10초로 늘림. 확인 후 1s로 되돌리기
+        window: 10s
