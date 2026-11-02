@@ -17,7 +17,10 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Getter
-@Table(name = "users")
+@Table(
+        name = "users",
+        indexes = @Index(name = "idx_users_birth_month_day_status", columnList = "birth_month_day, status")
+)
 @NoArgsConstructor(access = PROTECTED)
 public class User {
 
@@ -43,6 +46,11 @@ public class User {
 
     @Column
     private LocalDate birthDate;
+
+    // DB가 birth_date로 계산하는 생성 컬럼이다. 생일 조회 조건에만 쓰고 애플리케이션에서 값을 쓰지 않는다
+    @Column(insertable = false, updatable = false,
+            columnDefinition = "SMALLINT GENERATED ALWAYS AS (MONTH(birth_date) * 100 + DAY(birth_date))")
+    private Integer birthMonthDay;
 
     @Column(nullable = false)
     private boolean onboardingCompleted = false;

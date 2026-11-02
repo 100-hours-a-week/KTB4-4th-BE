@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
     profile_image_url        VARCHAR(2048) NULL,
     gender                   VARCHAR(255)  NOT NULL COMMENT 'MALE, FEMALE, NONE',
     birth_date               DATE          NULL,
+    -- 연도와 무관한 생일 조회용 (예: 11월 9일 → 1109). VIRTUAL이라 컬럼 추가 시 테이블을 다시 쓰지 않는다
+    birth_month_day          SMALLINT      GENERATED ALWAYS AS (MONTH(birth_date) * 100 + DAY(birth_date)) VIRTUAL,
     onboarding_completed     TINYINT(1)    NOT NULL,
     taste_analysis_completed TINYINT(1)    NOT NULL,
     status                   VARCHAR(30)   NOT NULL COMMENT 'ONBOARDING, ACTIVE, BLOCKED, WITHDRAWN',
@@ -37,7 +39,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at               DATETIME(6)   NOT NULL,
     deleted_at               DATETIME(6)   NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_users_external_id (external_id)
+    UNIQUE KEY uk_users_external_id (external_id),
+    KEY idx_users_birth_month_day_status (birth_month_day, status)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- users와 1:1 (@MapsId). PK가 곧 users.id

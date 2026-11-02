@@ -28,7 +28,7 @@ class FriendBirthdayNotificationServiceTest {
 
     @Test
     void multipleOwnersAndFriends_createNotifications_groupsReceiversByBirthdayFriend() {
-        given(friendRepository.findAllBirthdayNotificationTargets(10, 19, false)).willReturn(List.of(
+        given(friendRepository.findAllBirthdayNotificationTargets(List.of(1019))).willReturn(List.of(
                 new FriendBirthdayNotificationTarget(1L, 10L, "수연"),
                 new FriendBirthdayNotificationTarget(2L, 10L, "수연"),
                 new FriendBirthdayNotificationTarget(3L, 11L, "민지")
@@ -62,26 +62,26 @@ class FriendBirthdayNotificationServiceTest {
 
     @Test
     void marchFirstOfNonLeapYear_createNotifications_includesLeapDayBirthdays() {
-        given(friendRepository.findAllBirthdayNotificationTargets(3, 1, true)).willReturn(List.of());
+        given(friendRepository.findAllBirthdayNotificationTargets(List.of(301, 229))).willReturn(List.of());
 
         service.createNotifications(LocalDate.of(2027, 2, 22));
 
-        verify(friendRepository).findAllBirthdayNotificationTargets(3, 1, true);
+        verify(friendRepository).findAllBirthdayNotificationTargets(List.of(301, 229));
         verifyNoInteractions(notificationCreationService);
     }
 
     @Test
     void februaryTwentyNinthOfLeapYear_createNotifications_doesNotIncludeMarchFirstRule() {
-        given(friendRepository.findAllBirthdayNotificationTargets(2, 29, false)).willReturn(List.of());
+        given(friendRepository.findAllBirthdayNotificationTargets(List.of(229))).willReturn(List.of());
 
         service.createNotifications(LocalDate.of(2028, 2, 22));
 
-        verify(friendRepository).findAllBirthdayNotificationTargets(2, 29, false);
+        verify(friendRepository).findAllBirthdayNotificationTargets(List.of(229));
     }
 
     @Test
     void batchExecuted_createNotifications_recordsQueryAndTotalStageTimers() {
-        given(friendRepository.findAllBirthdayNotificationTargets(10, 19, false)).willReturn(List.of(
+        given(friendRepository.findAllBirthdayNotificationTargets(List.of(1019))).willReturn(List.of(
                 new FriendBirthdayNotificationTarget(1L, 10L, "수연")
         ));
 

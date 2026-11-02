@@ -66,7 +66,7 @@ class FriendRepositoryTest {
         ));
 
         List<FriendBirthdayNotificationTarget> targets =
-                friendRepository.findAllBirthdayNotificationTargets(3, 1, true);
+                friendRepository.findAllBirthdayNotificationTargets(List.of(301, 229));
 
         assertThat(targets)
                 .extracting(
@@ -78,7 +78,7 @@ class FriendRepositoryTest {
                         org.assertj.core.groups.Tuple.tuple(owner.getId(), marchFirst.getId(), "삼월생"),
                         org.assertj.core.groups.Tuple.tuple(owner.getId(), leapDay.getId(), "윤일생")
                 );
-        assertThat(friendRepository.findAllBirthdayNotificationTargets(3, 1, false))
+        assertThat(friendRepository.findAllBirthdayNotificationTargets(List.of(301)))
                 .extracting(FriendBirthdayNotificationTarget::friendUserId)
                 .containsExactly(marchFirst.getId());
     }

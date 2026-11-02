@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 public class FriendBirthdayNotificationService {
 
     private static final String BODY = "지금 선물을 준비하면 여유 있게 도착해요.";
+    private static final int LEAP_DAY_MONTH_DAY = 229;
     private static final String BATCH_TIMER = "needu.friend.birthday.batch";
 
     private final FriendRepository friendRepository;
@@ -88,8 +89,12 @@ public class FriendBirthdayNotificationService {
     private Map<BirthdayFriend, Set<Long>> findReceiverUserIdsByFriend(LocalDate birthdayDate, boolean includeLeapDay) {
         // shortcut: 하루 대상 관계를 한 번에 조회한다, 메모리 부담이 커지면 keyset batch로 전환
         Timer.Sample querySample = Timer.start(meterRegistry);
-        List<FriendBirthdayNotificationTarget> targets = friendRepository.findAllBirthdayNotificationTargets(
-                birthdayDate.getMonthValue(), birthdayDate.getDayOfMonth(), includeLeapDay);
+        int birthMonthDay = birthdayDate.getMonthValue() * 100 + birthdayDate.getDayOfMonth();
+        List<Integer> birthMonthDays = includeLeapDay
+                ? List.of(birthMonthDay, LEAP_DAY_MONTH_DAY)
+                : List.of(birthMonthDay);
+        List<FriendBirthdayNotificationTarget> targets =
+                friendRepository.findAllBirthdayNotificationTargets(birthMonthDays);
         querySample.stop(batchTimer("query"));
         return targets.stream()
                 .collect(Collectors.groupingBy(
