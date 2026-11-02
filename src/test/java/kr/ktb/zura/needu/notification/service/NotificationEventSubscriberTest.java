@@ -78,6 +78,20 @@ class NotificationEventSubscriberTest {
     }
 
     @Test
+    void someRecipientsInvalid_onMessage_sendsOnlyValidRecipients() {
+        subscriber.onMessage(toMessage(
+                "{\"data\":{\"title\":\"알림\"},\"recipients\":["
+                        + "{\"receiverUserId\":1,\"data\":{\"notificationId\":10},\"unreadCount\":3},"
+                        + "{\"data\":{\"notificationId\":11},\"unreadCount\":1},"
+                        + "{\"receiverUserId\":3,\"data\":{},\"unreadCount\":2}]}"
+        ), CHANNEL);
+
+        verify(notificationStreamService).sendNotification(argThat(received ->
+                received.recipients().size() == 1
+                        && received.recipients().getFirst().receiverUserId().equals(1L)));
+    }
+
+    @Test
     void commonDataNotObject_onMessage_doesNotSend() {
         subscriber.onMessage(toMessage(
                 "{\"data\":\"알림\",\"recipients\":[{\"receiverUserId\":1,\"data\":{\"notificationId\":10},\"unreadCount\":3}]}"

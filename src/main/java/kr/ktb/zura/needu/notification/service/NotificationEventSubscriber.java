@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.notification.service;
 
+import java.util.List;
 import kr.ktb.zura.needu.notification.sse.NotificationRedisEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
@@ -33,26 +34,35 @@ public class NotificationEventSubscriber implements MessageListener {
             return;
         }
 
-        if (!hasRequiredFields(event)) {
+        if (event.data() == null || !event.data().isObject() || event.recipients() == null) {
             log.warn("Notification Redis event ignored by missing field. recipientCount={}",
                     event.recipients() == null ? 0 : event.recipients().size());
             return;
         }
 
+        // 한 메시지에 여러 사용자가 묶여 있으므로 잘못된 수신자만 빼고 나머지에게는 전달한다
+        List<NotificationRedisEvent.Recipient> validRecipients = event.recipients().stream()
+                .filter(this::isValidRecipient)
+                .toList();
+        int invalidCount = event.recipients().size() - validRecipients.size();
+        if (invalidCount > 0) {
+            log.warn("Notification Redis recipients ignored by missing field. invalidCount={}, recipientCount={}",
+                    invalidCount, event.recipients().size());
+        }
+        if (validRecipients.isEmpty()) {
+            return;
+        }
+
         log.info("Notification Redis event received. type={}, recipientCount={}",
-                event.data().path("type").asString(), event.recipients().size());
-        notificationStreamService.sendNotification(event);
+                event.data().path("type").asString(), validRecipients.size());
+        notificationStreamService.sendNotification(new NotificationRedisEvent(event.data(), validRecipients));
     }
 
-    private boolean hasRequiredFields(NotificationRedisEvent event) {
-        return event.data() != null
-                && event.data().isObject()
-                && event.recipients() != null
-                && !event.recipients().isEmpty()
-                && event.recipients().stream().allMatch(recipient -> recipient != null
-                        && recipient.receiverUserId() != null
-                        && recipient.data() != null
-                        && recipient.data().isObject()
-                        && recipient.data().hasNonNull("notificationId"));
+    private boolean isValidRecipient(NotificationRedisEvent.Recipient recipient) {
+        return recipient != null
+                && recipient.receiverUserId() != null
+                && recipient.data() != null
+                && recipient.data().isObject()
+                && recipient.data().hasNonNull("notificationId");
     }
 }
