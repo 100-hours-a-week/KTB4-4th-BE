@@ -113,6 +113,30 @@ class AiChatStreamConnectionTest {
     }
 
     @Test
+    void pendingEvents_complete_dropsEventsAndCompletesEmitter() throws Exception {
+        AiChatStreamConnection connection = openedConnection(10);
+        connection.enqueue(first);
+
+        connection.complete();
+        runScheduledTasks();
+
+        verify(emitter).complete();
+        verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
+        assertThat(closedCount).hasValue(1);
+    }
+
+    @Test
+    void completedConnection_enqueue_doesNotSend() throws Exception {
+        AiChatStreamConnection connection = openedConnection(10);
+        connection.complete();
+
+        connection.enqueue(first);
+        runScheduledTasks();
+
+        verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
+    }
+
+    @Test
     void closedConnection_close_notifiesOnlyOnce() {
         AiChatStreamConnection connection = connection(10);
 
