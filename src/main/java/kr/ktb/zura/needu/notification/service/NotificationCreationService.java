@@ -1,7 +1,5 @@
 package kr.ktb.zura.needu.notification.service;
 
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -32,13 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class NotificationCreationService {
 
-    private static final String STAGE_TIMER = "needu.notification.creation";
-
     private final NotificationEventRepository notificationEventRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final MeterRegistry meterRegistry;
     private final int insertChunkSize;
 
     public NotificationCreationService(
@@ -46,7 +41,6 @@ public class NotificationCreationService {
             NotificationRepository notificationRepository,
             NotificationSettingRepository notificationSettingRepository,
             ApplicationEventPublisher eventPublisher,
-            MeterRegistry meterRegistry,
             @Value("${needu.notification.insert-chunk-size}") int insertChunkSize
     ) {
         // 0 이하면 chunk 반복이 끝나지 않으므로 기동 시점에 막는다
@@ -58,7 +52,6 @@ public class NotificationCreationService {
         this.notificationRepository = notificationRepository;
         this.notificationSettingRepository = notificationSettingRepository;
         this.eventPublisher = eventPublisher;
-        this.meterRegistry = meterRegistry;
         this.insertChunkSize = insertChunkSize;
     }
 
@@ -100,17 +93,13 @@ public class NotificationCreationService {
             return 0;
         }
 
-        // 구간 타이머 태그는 첫 명령의 타입으로 붙인다 (생일 배치처럼 묶어 부르는 쪽은 모두 같은 타입이다)
-        NotificationType timerType = requestedCommands.getFirst().type();
-        List<EnabledNotification> enabledNotifications = stageTimer("prepare", timerType)
-                .record(() -> findEnabledNotifications(requestedCommands));
+        List<EnabledNotification> enabledNotifications = findEnabledNotifications(requestedCommands);
         if (enabledNotifications.isEmpty()) {
             return 0;
         }
 
         LocalDateTime createdAt = LocalDateTime.now(ZoneOffset.UTC);
-        NotificationsCreatedEvent createdEvent = stageTimer("insert", timerType)
-                .record(() -> saveNotifications(enabledNotifications, createdAt));
+        NotificationsCreatedEvent createdEvent = saveNotifications(enabledNotifications, createdAt);
         eventPublisher.publishEvent(createdEvent);
         return createdEvent.notifications().size();
     }
@@ -215,13 +204,6 @@ public class NotificationCreationService {
                                 setting -> setting.isEnabled()
                         ))));
         return enabledByUserIdBySettingType;
-    }
-
-    private Timer stageTimer(String stage, NotificationType type) {
-        return Timer.builder(STAGE_TIMER)
-                .tag("stage", stage)
-                .tag("type", type.name())
-                .register(meterRegistry);
     }
 
     private record EnabledNotification(NotificationCreationCommand command, List<Long> receiverUserIds) {

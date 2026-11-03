@@ -8,7 +8,6 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -30,7 +29,6 @@ class FriendBirthdayNotificationServiceTest {
     private final FriendRepository friendRepository = org.mockito.Mockito.mock(FriendRepository.class);
     private final NotificationCreationService notificationCreationService =
             org.mockito.Mockito.mock(NotificationCreationService.class);
-    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final FriendBirthdayNotificationService service = createService(CHUNK_SIZE);
 
     @Test
@@ -118,7 +116,7 @@ class FriendBirthdayNotificationServiceTest {
 
     private FriendBirthdayNotificationService createService(int chunkSize) {
         return new FriendBirthdayNotificationService(
-                friendRepository, notificationCreationService, meterRegistry, 7, "Asia/Seoul", chunkSize);
+                friendRepository, notificationCreationService, 7, "Asia/Seoul", chunkSize);
     }
 
     private void givenBirthdayFriends(Long... friendUserIds) {
@@ -133,19 +131,5 @@ class FriendBirthdayNotificationServiceTest {
         return chunkCaptor.getAllValues().stream()
                 .map(chunk -> chunk.stream().map(NotificationCreationCommand::resourceId).toList())
                 .toList();
-    }
-
-    @Test
-    void batchExecuted_createNotifications_recordsQueryAndTotalStageTimers() {
-        given(friendRepository.findAllBirthdayNotificationTargets(List.of(1019))).willReturn(List.of(
-                new FriendBirthdayNotificationTarget(1L, 10L, "수연")
-        ));
-
-        service.createNotifications(LocalDate.of(2026, 10, 12));
-
-        assertThat(meterRegistry.get("needu.friend.birthday.batch").tag("stage", "query").timer().count())
-                .isEqualTo(1);
-        assertThat(meterRegistry.get("needu.friend.birthday.batch").tag("stage", "total").timer().count())
-                .isEqualTo(1);
     }
 }
