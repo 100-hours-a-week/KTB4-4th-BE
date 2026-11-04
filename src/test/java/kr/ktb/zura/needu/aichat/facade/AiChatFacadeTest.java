@@ -48,6 +48,7 @@ import kr.ktb.zura.needu.aichat.service.AiChatStreamService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
+import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatAcceptedEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
@@ -123,14 +124,17 @@ class AiChatFacadeTest {
     private static final AiServerUserProfileRequest USER_PROFILE_REQUEST =
             AiServerUserProfileRequest.from(USER_AI_PROFILE);
     private static final Map<String, Object> MEMORY = Map.of("schemaVersion", "1.0", "userId", USER_ID);
-    private static final AiConversationLock.Handle LOCK_HANDLE =
-            new AiConversationLock.Handle(ROOM_ID, "lock-owner-token");
+    private static final String LOCK_TOKEN = "lock-owner-token";
+    private static final AiConversationLock.Handle LOCK_HANDLE = new AiConversationLock.Handle(ROOM_ID, LOCK_TOKEN);
 
     @Mock
     private AiChatRoomService aiChatRoomService;
 
     @Mock
     private AiMessageService aiMessageService;
+
+    @Mock
+    private AiReplyJobService aiReplyJobService;
 
     @Mock
     private AiChatClient aiChatClient;
@@ -177,7 +181,7 @@ class AiChatFacadeTest {
             invocation.<Runnable>getArgument(0).run();
             return null;
         }).when(replySlot).execute(any());
-        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
+        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiReplyJobService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
                 aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, productActivityService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of());
@@ -272,7 +276,7 @@ class AiChatFacadeTest {
 
     @Test
     void shortCooldownUser_startOrResumeConversation_usesShortCooldown() {
-        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
+        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiReplyJobService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
                 aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, productActivityService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
@@ -365,7 +369,7 @@ class AiChatFacadeTest {
 
     @Test
     void shortCooldownUserRoomPastPurgeAt_startOrResumeConversation_reservesRoomWithoutDailyLimit() {
-        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiConversationLock,
+        aiChatFacade = new AiChatFacade(aiChatRoomService, aiMessageService, aiReplyJobService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
                 aiChatEventPublisher, aiReplyTaskExecutor, userService, consentService, productActivityService, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, Set.of(SHORT_COOLDOWN_EXTERNAL_ID));
@@ -510,7 +514,8 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(AiChatErrorCode.AICHAT_CONSENT_REQUIRED);
-        verifyNoInteractions(aiChatRoomService, aiMessageService, aiConversationLock, aiReplyTaskExecutor, aiChatClient);
+        verifyNoInteractions(aiChatRoomService, aiMessageService, aiReplyJobService, aiConversationLock,
+                aiReplyTaskExecutor, aiChatClient);
     }
 
     @Test
@@ -529,7 +534,7 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
 
@@ -537,7 +542,8 @@ class AiChatFacadeTest {
 
         assertThat(result.isAccepted()).isTrue();
         assertThat(result.accepted()).isEqualTo(new AiMessageAcceptedResponse(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
-        verify(aiMessageService).createReplyAndUpdateRoom(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
+        verify(aiReplyJobService).createReplyAndSucceed(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
+        verify(aiReplyJobService, never()).failJob(anyLong(), any());
     }
 
     @Test
@@ -545,7 +551,7 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT, true)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, true, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID, true));
 
@@ -570,15 +576,15 @@ class AiChatFacadeTest {
                 new AiMessageResponse(USER_MESSAGE_ID, AI_MESSAGE_ID, AI_CONTENT, 5, false));
         verify(aiConversationLock, never()).tryLock(anyLong());
         verifyNoInteractions(aiChatClient, aiChatEventPublisher, aiReplyTaskExecutor);
-        verify(aiMessageService, never()).createUserMessage(anyLong(), any(), any());
+        verify(aiReplyJobService, never()).createUserMessageAndJob(anyLong(), anyLong(), any(), any(), any());
     }
 
     @Test
-    void replyBeingGenerated_sendMessage_returnsSameAcceptedWithoutRegenerating() {
+    void replyJobInProgress_sendMessage_returnsSameAcceptedWithoutRegenerating() {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID))
                 .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
         given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
-        given(aiGenerationStateService.isGenerating(ROOM_ID, USER_MESSAGE_ID)).willReturn(true);
+        given(aiReplyJobService.isReplyInProgress(USER_MESSAGE_ID)).willReturn(true);
 
         AiMessageSendResult result = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
@@ -589,23 +595,26 @@ class AiChatFacadeTest {
     }
 
     @Test
-    void unansweredMessageNotGenerating_sendMessage_regeneratesReplyForSameMessage() {
+    void unansweredMessageWithoutJobInProgress_sendMessage_restartsJobAndRegeneratesReply() {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID))
                 .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
         given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
-        given(aiGenerationStateService.isGenerating(ROOM_ID, USER_MESSAGE_ID)).willReturn(false);
+        given(aiReplyJobService.isReplyInProgress(USER_MESSAGE_ID)).willReturn(false);
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
 
         AiMessageSendResult result = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
         assertThat(result.accepted()).isEqualTo(new AiMessageAcceptedResponse(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
-        verify(aiMessageService, never()).createUserMessage(anyLong(), any(), any());
-        verify(aiGenerationStateService).startGenerating(ROOM_ID, USER_MESSAGE_ID);
-        verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
+        verify(aiReplyJobService, never()).createUserMessageAndJob(anyLong(), anyLong(), any(), any(), any());
+        var order = inOrder(aiReplyJobService, aiChatClient);
+        order.verify(aiReplyJobService).restartJob(ROOM_ID, USER_MESSAGE_ID, USER_ID, LOCK_TOKEN);
+        order.verify(aiReplyJobService).startJob(USER_MESSAGE_ID);
+        order.verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
+        order.verify(aiReplyJobService).createReplyAndSucceed(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
     }
 
     @Test
@@ -614,7 +623,7 @@ class AiChatFacadeTest {
                 .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
         given(aiMessageService.findReply(USER_MESSAGE_ID))
                 .willReturn(Optional.empty(), Optional.of(message(AI_MESSAGE_ID, USER_MESSAGE_ID)));
-        given(aiGenerationStateService.isGenerating(ROOM_ID, USER_MESSAGE_ID)).willReturn(false);
+        given(aiReplyJobService.isReplyInProgress(USER_MESSAGE_ID)).willReturn(false);
 
         AiMessageSendResult result = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
@@ -629,20 +638,21 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
 
         aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
-        var order = inOrder(aiReplyTaskExecutor, aiMessageService, aiGenerationStateService, replySlot,
+        var order = inOrder(aiReplyTaskExecutor, aiReplyJobService, aiGenerationStateService, replySlot,
                 aiChatClient, aiConversationLock);
         order.verify(aiReplyTaskExecutor).tryReserve();
-        order.verify(aiMessageService).createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT);
+        order.verify(aiReplyJobService).createUserMessageAndJob(ROOM_ID, USER_ID, CLIENT_MESSAGE_ID, USER_CONTENT, LOCK_TOKEN);
         order.verify(aiGenerationStateService).startGenerating(ROOM_ID, USER_MESSAGE_ID);
         order.verify(replySlot).execute(any());
+        order.verify(aiReplyJobService).startJob(USER_MESSAGE_ID);
         order.verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
-        order.verify(aiMessageService).createReplyAndUpdateRoom(
+        order.verify(aiReplyJobService).createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
         order.verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
         order.verify(aiConversationLock).unlock(LOCK_HANDLE);
@@ -653,19 +663,19 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
 
         aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
-        var order = inOrder(aiChatEventPublisher, aiChatClient, aiMessageService, aiConversationLock);
+        var order = inOrder(aiChatEventPublisher, aiChatClient, aiReplyJobService, aiConversationLock);
         order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ACCEPTED,
                 new AiChatAcceptedEvent(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
         order.verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
         order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DELTA,
                 new AiChatDeltaEvent(USER_MESSAGE_ID, 0, AI_CONTENT));
-        order.verify(aiMessageService).createReplyAndUpdateRoom(
+        order.verify(aiReplyJobService).createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
         order.verify(aiConversationLock).unlock(LOCK_HANDLE);
         order.verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.COMPLETED,
@@ -679,7 +689,7 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(OTHER_AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, OTHER_AI_CONTENT, 5, false, PURGE_AT))
                 .willThrow(new DataIntegrityViolationException("uk_ai_messages_reply_to_message_id"));
         given(aiMessageService.findReply(USER_MESSAGE_ID))
@@ -702,7 +712,7 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willThrow(new DataIntegrityViolationException("fk_ai_messages_room"));
         given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
@@ -713,6 +723,7 @@ class AiChatFacadeTest {
                 USER_MESSAGE_ID, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.getMessage(), true, false));
         verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.COMPLETED), any());
         verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyJobService).failJob(USER_MESSAGE_ID, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.name());
     }
 
     @Test
@@ -748,7 +759,7 @@ class AiChatFacadeTest {
         verify(aiChatRoomService).expireRoom(ROOM_ID);
         verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
                 USER_MESSAGE_ID, AiChatErrorCode.AICHAT_SESSION_NOT_FOUND.getMessage(), false, true));
-        verify(aiMessageService, never()).createReplyAndUpdateRoom(
+        verify(aiReplyJobService, never()).createReplyAndSucceed(
                 anyLong(), anyLong(), any(), anyInt(), anyBoolean(), any());
     }
 
@@ -823,7 +834,7 @@ class AiChatFacadeTest {
         givenNewMessage();
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
-        given(aiMessageService.createReplyAndUpdateRoom(
+        given(aiReplyJobService.createReplyAndSucceed(
                 ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT))
                 .willReturn(message(AI_MESSAGE_ID, USER_MESSAGE_ID));
         willThrow(new IllegalStateException("redis down"))
@@ -832,7 +843,7 @@ class AiChatFacadeTest {
         AiMessageSendResult result = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
 
         assertThat(result.isAccepted()).isTrue();
-        verify(aiMessageService).createReplyAndUpdateRoom(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
+        verify(aiReplyJobService).createReplyAndSucceed(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
         verify(aiChatEventPublisher, times(1)).publish(anyLong(), any(), any());
     }
 
@@ -843,7 +854,7 @@ class AiChatFacadeTest {
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(TooManyRequestsException.class);
-        verify(aiMessageService, never()).createUserMessage(anyLong(), any(), any());
+        verify(aiReplyJobService, never()).createUserMessageAndJob(anyLong(), anyLong(), any(), any(), any());
         verifyNoInteractions(aiChatClient, aiReplyTaskExecutor);
     }
 
@@ -855,7 +866,7 @@ class AiChatFacadeTest {
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
-        verify(aiMessageService, never()).createUserMessage(anyLong(), any(), any());
+        verify(aiReplyJobService, never()).createUserMessageAndJob(anyLong(), anyLong(), any(), any(), any());
         verify(aiConversationLock).unlock(LOCK_HANDLE);
         verifyNoInteractions(aiChatClient);
     }
@@ -870,6 +881,7 @@ class AiChatFacadeTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
         verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
+        verify(aiReplyJobService).failJob(USER_MESSAGE_ID, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE.name());
         verify(replySlot).release();
         verify(aiConversationLock).unlock(LOCK_HANDLE);
         verifyNoInteractions(aiChatClient, aiChatEventPublisher);
@@ -878,7 +890,7 @@ class AiChatFacadeTest {
     @Test
     void duplicateInsertFromAnotherInstance_sendMessage_throwsTooManyRequestsWithoutEvents() {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
-        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+        given(aiReplyJobService.createUserMessageAndJob(ROOM_ID, USER_ID, CLIENT_MESSAGE_ID, USER_CONTENT, LOCK_TOKEN))
                 .willThrow(new DataIntegrityViolationException("duplicate"));
 
         assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
@@ -886,6 +898,62 @@ class AiChatFacadeTest {
         verify(replySlot).release();
         verify(aiConversationLock).unlock(LOCK_HANDLE);
         verifyNoInteractions(aiChatClient, aiChatEventPublisher);
+    }
+
+    @Test
+    void replyJobInProgressInConversation_sendMessage_throwsTooManyRequestsAndReleasesLock() {
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiReplyJobService.existsReplyInProgress(ROOM_ID)).willReturn(true);
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(TooManyRequestsException.class);
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyJobService, never()).createUserMessageAndJob(anyLong(), anyLong(), any(), any(), any());
+        verifyNoInteractions(aiReplyTaskExecutor, aiChatClient);
+    }
+
+    @Test
+    void replyFailed_sendMessage_recordsJobFailedWithErrorCodeBeforeUnlock() {
+        givenNewMessage();
+        given(streamMessageCall())
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        var order = inOrder(aiReplyJobService, aiConversationLock);
+        order.verify(aiReplyJobService).startJob(USER_MESSAGE_ID);
+        order.verify(aiReplyJobService).failJob(USER_MESSAGE_ID, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE.name());
+        order.verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyJobService, never()).createReplyAndSucceed(
+                anyLong(), anyLong(), any(), anyInt(), anyBoolean(), any());
+    }
+
+    @Test
+    void jobFailureRecordFails_sendMessage_stillReleasesLockAndPublishesError() {
+        givenNewMessage();
+        given(streamMessageCall())
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+        willThrow(new IllegalStateException("db down")).given(aiReplyJobService).failJob(anyLong(), any());
+
+        AiMessageSendResult result = aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        assertThat(result.isAccepted()).isTrue();
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
+                USER_MESSAGE_ID, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE.getMessage(), true, false));
+    }
+
+    @Test
+    void jobStartFails_sendMessage_publishesErrorAndReleasesLockWithoutAiCall() {
+        givenNewMessage();
+        willThrow(new IllegalStateException("db down")).given(aiReplyJobService).startJob(USER_MESSAGE_ID);
+
+        aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest());
+
+        verifyNoInteractions(aiChatClient);
+        verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
+                USER_MESSAGE_ID, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.getMessage(), true, false));
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
     }
 
     @Test
@@ -1296,14 +1364,14 @@ class AiChatFacadeTest {
 
     private void givenNewMessage() {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
-        given(aiMessageService.createUserMessage(ROOM_ID, CLIENT_MESSAGE_ID, USER_CONTENT))
+        given(aiReplyJobService.createUserMessageAndJob(ROOM_ID, USER_ID, CLIENT_MESSAGE_ID, USER_CONTENT, LOCK_TOKEN))
                 .willReturn(message(USER_MESSAGE_ID, null));
     }
 
     private void verifyInvalidResponseError() {
         verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.ERROR, new AiChatErrorEvent(
                 USER_MESSAGE_ID, AiChatErrorCode.AICHAT_INVALID_RESPONSE.getMessage(), true, false));
-        verify(aiMessageService, never()).createReplyAndUpdateRoom(
+        verify(aiReplyJobService, never()).createReplyAndSucceed(
                 anyLong(), anyLong(), any(), anyInt(), anyBoolean(), any());
         verify(aiConversationLock).unlock(LOCK_HANDLE);
     }

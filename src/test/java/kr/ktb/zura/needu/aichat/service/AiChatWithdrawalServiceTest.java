@@ -10,6 +10,7 @@ import java.util.List;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
+import kr.ktb.zura.needu.aichat.repository.AiReplyJobRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -17,10 +18,12 @@ class AiChatWithdrawalServiceTest {
 
     private final AiChatRoomRepository roomRepository = mock(AiChatRoomRepository.class);
     private final AiMessageRepository messageRepository = mock(AiMessageRepository.class);
-    private final AiChatWithdrawalService service = new AiChatWithdrawalService(roomRepository, messageRepository);
+    private final AiReplyJobRepository replyJobRepository = mock(AiReplyJobRepository.class);
+    private final AiChatWithdrawalService service =
+            new AiChatWithdrawalService(roomRepository, messageRepository, replyJobRepository);
 
     @Test
-    void roomsExist_deleteUserData_deletesMessagesBeforeRooms() {
+    void roomsExist_deleteUserData_deletesReplyJobsAndMessagesBeforeRooms() {
         AiChatRoom first = mock(AiChatRoom.class);
         AiChatRoom second = mock(AiChatRoom.class);
         when(first.getId()).thenReturn(10L);
@@ -29,7 +32,8 @@ class AiChatWithdrawalServiceTest {
 
         service.deleteUserData(1L);
 
-        InOrder order = inOrder(messageRepository, roomRepository);
+        InOrder order = inOrder(replyJobRepository, messageRepository, roomRepository);
+        order.verify(replyJobRepository).deleteAllByAiChatRoomIdIn(List.of(10L, 20L));
         order.verify(messageRepository).deleteAllByAiChatRoomIdIn(List.of(10L, 20L));
         order.verify(roomRepository).deleteAll(List.of(first, second));
     }
@@ -40,6 +44,7 @@ class AiChatWithdrawalServiceTest {
 
         service.deleteUserData(1L);
 
+        verify(replyJobRepository, never()).deleteAllByAiChatRoomIdIn(org.mockito.ArgumentMatchers.anyList());
         verify(messageRepository, never()).deleteAllByAiChatRoomIdIn(org.mockito.ArgumentMatchers.anyList());
         verify(roomRepository, never()).deleteAll(org.mockito.ArgumentMatchers.anyList());
     }
