@@ -101,4 +101,33 @@ class AiReplyJobRepositoryTest {
 
         assertThat(aiReplyJobRepository.existsByAiChatRoomIdAndStatusIn(room.getId(), UNFINISHED)).isFalse();
     }
+
+    @Test
+    void unfinishedJobUpdatedAfterTime_existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter_returnsTrue() {
+        AiReplyJob job = aiReplyJobRepository.saveAndFlush(AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN));
+
+        assertThat(aiReplyJobRepository.existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
+                room.getId(), UNFINISHED, job.getUpdatedAt().minusSeconds(1))).isTrue();
+    }
+
+    @Test
+    void unfinishedJobNotUpdatedAfterTime_existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter_returnsFalse() {
+        AiReplyJob job = aiReplyJobRepository.saveAndFlush(AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN));
+
+        assertThat(aiReplyJobRepository.existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
+                room.getId(), UNFINISHED, job.getUpdatedAt())).isFalse();
+    }
+
+    @Test
+    void jobsInSeveralRooms_deleteAllByAiChatRoomIdIn_deletesOnlyGivenRooms() {
+        AiChatRoom otherRoom = entityManager.persistAndFlush(AiChatRoom.reserve(OTHER_USER_ID));
+        aiReplyJobRepository.saveAndFlush(AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN));
+        aiReplyJobRepository.saveAndFlush(AiReplyJob.create(otherRoom, 301L, OTHER_USER_ID, LOCK_TOKEN));
+
+        aiReplyJobRepository.deleteAllByAiChatRoomIdIn(List.of(room.getId()));
+        entityManager.clear();
+
+        assertThat(aiReplyJobRepository.findByUserMessageId(201L)).isEmpty();
+        assertThat(aiReplyJobRepository.findByUserMessageId(301L)).isPresent();
+    }
 }
