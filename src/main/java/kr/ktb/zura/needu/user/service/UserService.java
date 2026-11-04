@@ -27,6 +27,7 @@ import kr.ktb.zura.needu.user.type.Gender;
 import kr.ktb.zura.needu.user.type.TasteProfileStatus;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -121,6 +122,15 @@ public class UserService {
                 .filter(User::isActive)
                 .map(UserDetailResponse::from)
                 .toList();
+    }
+
+    // 생일 월·일(예: 11월 9일 → 1109)이 맞는 활성 사용자를 id 순서로 cursorUserId 다음부터 limit명 조회한다
+    public List<UserSummaryResponse> findAllActiveUsersByBirthMonthDays(
+            Collection<Integer> birthMonthDays,
+            Long cursorUserId,
+            int limit
+    ) {
+        return userRepository.findAllActiveByBirthMonthDaysAfterId(birthMonthDays, cursorUserId, Limit.of(limit));
     }
 
     public Map<Long, Long> findUserIdsByExternalIds(Collection<Long> externalIds) {
