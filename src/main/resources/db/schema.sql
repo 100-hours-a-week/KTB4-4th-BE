@@ -384,6 +384,34 @@ PREPARE drop_reply_to_message_index_statement FROM @drop_reply_to_message_index;
 EXECUTE drop_reply_to_message_index_statement;
 DEALLOCATE PREPARE drop_reply_to_message_index_statement;
 
+-- 사용자 메시지마다 AI 답변을 만들어야 하는 작업. 처리하던 서버가 죽거나 Redis가 대기열을 잃어도 작업을 이어갈 수 있도록 원본을 DB에 둔다.
+-- 사용자 메시지와 같은 트랜잭션에서 생성한다. 사용자 메시지·사용자는 FK 없이 ID만 저장한다.
+CREATE TABLE IF NOT EXISTS ai_reply_jobs (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    ai_chat_room_id BIGINT       NOT NULL,
+    user_message_id BIGINT       NOT NULL,
+    user_id         BIGINT       NOT NULL,
+    status          VARCHAR(20)  NOT NULL COMMENT 'QUEUED, RUNNING, SUCCEEDED, FAILED',
+    -- 작업을 가져갈 때마다 1씩 오르는 처리 권한 번호. 가장 최근에 가져간 서버만 답변을 저장할 수 있다
+    attempt         INT          NOT NULL DEFAULT 0,
+    -- 지금 유효한 배달. 재배달하면 바뀌어 이전 대기열 항목을 무시한다
+    dispatch_token  VARCHAR(36)  NOT NULL,
+    stream_entry_id VARCHAR(40)  NULL COMMENT '마지막 배달의 대기열 항목 ID',
+    -- 대화방 락 토큰. 작업을 회수한 서버가 이어받아 락을 풀어 준다
+    lock_token      VARCHAR(36)  NOT NULL,
+    last_error_code VARCHAR(100) NULL,
+    created_at      DATETIME(6)  NOT NULL,
+    updated_at      DATETIME(6)  NOT NULL,
+    finished_at     DATETIME(6)  NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_reply_jobs_user_message_id (user_message_id),
+    -- 오래 멈춘 작업 찾기(유실 복구)
+    KEY idx_ai_reply_jobs_status_updated_at (status, updated_at),
+    -- 대화방에 끝나지 않은 작업이 있는지 확인
+    KEY idx_ai_reply_jobs_room_status (ai_chat_room_id, status),
+    CONSTRAINT fk_ai_reply_jobs_room FOREIGN KEY (ai_chat_room_id) REFERENCES ai_chat_rooms (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- anonymouschat
 -- ---------------------------------------------------------------------------
