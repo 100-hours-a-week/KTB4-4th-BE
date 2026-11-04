@@ -40,6 +40,7 @@ import kr.ktb.zura.needu.aichat.service.AiChatTurnEvents;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
+import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -64,6 +65,7 @@ public class AiChatFacade {
 
     private final AiChatRoomService aiChatRoomService;
     private final AiMessageService aiMessageService;
+    private final AiReplyJobService aiReplyJobService;
     private final AiConversationLock aiConversationLock;
     private final AiGenerationStateService aiGenerationStateService;
     private final AiChatClient aiChatClient;
@@ -80,6 +82,7 @@ public class AiChatFacade {
 
     public AiChatFacade(AiChatRoomService aiChatRoomService,
                         AiMessageService aiMessageService,
+                        AiReplyJobService aiReplyJobService,
                         AiConversationLock aiConversationLock,
                         AiGenerationStateService aiGenerationStateService,
                         AiChatClient aiChatClient,
@@ -95,6 +98,7 @@ public class AiChatFacade {
                         @Value("${ai.chat.short-cooldown-external-ids:}") Set<Long> shortCooldownExternalIds) {
         this.aiChatRoomService = aiChatRoomService;
         this.aiMessageService = aiMessageService;
+        this.aiReplyJobService = aiReplyJobService;
         this.aiConversationLock = aiConversationLock;
         this.aiGenerationStateService = aiGenerationStateService;
         this.aiChatClient = aiChatClient;
@@ -200,7 +204,7 @@ public class AiChatFacade {
         if (reply.isPresent()) {
             return Optional.of(AiMessageSendResult.replied(AiMessageResponse.from(reply.get())));
         }
-        if (aiGenerationStateService.isGenerating(conversationId, userMessage.get().getId())) {
+        if (aiReplyJobService.isReplyInProgress(userMessage.get().getId())) {
             return Optional.of(AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(userMessage.get())));
         }
         return Optional.empty();
@@ -216,18 +220,18 @@ public class AiChatFacade {
             aiConversationLock.unlock(lock);
             return AiMessageSendResult.replied(AiMessageResponse.from(reply.get()));
         }
+        if (aiReplyJobService.existsReplyInProgress(conversationId)) {
+            log.info("AI reply job already in progress. userId={}, conversationId={}", userId, conversationId);
+            throw new TooManyRequestsException(messageRetryAfter.toSeconds());
+        }
         AiReplyTaskExecutor.Slot slot = aiReplyTaskExecutor.tryReserve().orElseThrow(() -> {
             log.info("AI reply capacity exceeded. userId={}, conversationId={}", userId, conversationId);
             return new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
         });
         try {
             AiMessage userMessage = sentMessage.isPresent()
-                    ? sentMessage.get()
-                    : createUserMessage(conversationId, request);
-            if (sentMessage.isPresent()) {
-                log.info("AI reply regenerating for unanswered message. userId={}, conversationId={}, userMessageId={}",
-                        userId, conversationId, userMessage.getId());
-            }
+                    ? restartReply(userId, conversationId, sentMessage.get(), lock)
+                    : createUserMessage(userId, conversationId, request, lock);
             startReply(userId, conversationId, userMessage, lock, slot);
             return AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(userMessage));
         } catch (RuntimeException e) {
@@ -242,6 +246,7 @@ public class AiChatFacade {
         try {
             slot.execute(() -> replyInBackground(userId, conversationId, userMessage, lock));
         } catch (RuntimeException e) {
+            recordReplyFailure(conversationId, userMessage.getId(), e);
             aiGenerationStateService.finishGenerating(conversationId, userMessage.getId());
             throw e;
         }
@@ -256,6 +261,7 @@ public class AiChatFacade {
         } catch (RuntimeException e) {
             Thread.interrupted();
             logReplyFailure(userId, conversationId, userMessage.getId(), e);
+            recordReplyFailure(conversationId, userMessage.getId(), e);
             finishReply(conversationId, userMessage.getId(), lock);
             turnEvents.fail(e);
             return;
@@ -267,6 +273,7 @@ public class AiChatFacade {
     private AiMessage generateReply(Long userId, Long conversationId, AiMessage userMessage,
                                     AiChatTurnEvents turnEvents) {
         turnEvents.accept(userMessage.getId(), userMessage.getClientMessageId());
+        aiReplyJobService.startJob(userMessage.getId());
         AiServerSendMessageResponse response = requestReply(
                 userId, conversationId, userMessage, turnEvents::publishDelta);
         return createReply(userId, conversationId, userMessage.getId(), response);
@@ -275,7 +282,7 @@ public class AiChatFacade {
     private AiMessage createReply(Long userId, Long conversationId, Long userMessageId,
                                   AiServerSendMessageResponse response) {
         try {
-            AiMessage aiMessage = aiMessageService.createReplyAndUpdateRoom(
+            AiMessage aiMessage = aiReplyJobService.createReplyAndSucceed(
                     conversationId, userMessageId, response.reply(), response.progress(),
                     response.inputLocked(), toPurgeAt(response.expirationAt()));
             log.info("AI message replied. userId={}, conversationId={}, messageId={}",
@@ -294,6 +301,18 @@ public class AiChatFacade {
         aiConversationLock.unlock(lock);
     }
 
+    private void recordReplyFailure(Long conversationId, Long userMessageId, RuntimeException cause) {
+        String errorCode = cause instanceof BusinessException businessException
+                ? businessException.getErrorCode().name()
+                : CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.name();
+        try {
+            aiReplyJobService.failJob(userMessageId, errorCode);
+        } catch (RuntimeException e) {
+            log.warn("AI reply job failure record failed. conversationId={}, userMessageId={}",
+                    conversationId, userMessageId, e);
+        }
+    }
+
     private void logReplyFailure(Long userId, Long conversationId, Long userMessageId, RuntimeException e) {
         if (!(e instanceof BusinessException businessException)) {
             log.error("AI reply failed unexpectedly. userId={}, conversationId={}, userMessageId={}",
@@ -310,9 +329,19 @@ public class AiChatFacade {
                 userId, conversationId, userMessageId, errorCode.name());
     }
 
-    private AiMessage createUserMessage(Long conversationId, SendMessageRequest request) {
+    private AiMessage restartReply(Long userId, Long conversationId, AiMessage userMessage,
+                                   AiConversationLock.Handle lock) {
+        log.info("AI reply regenerating for unanswered message. userId={}, conversationId={}, userMessageId={}",
+                userId, conversationId, userMessage.getId());
+        aiReplyJobService.restartJob(conversationId, userMessage.getId(), userId, lock.ownerToken());
+        return userMessage;
+    }
+
+    private AiMessage createUserMessage(Long userId, Long conversationId, SendMessageRequest request,
+                                        AiConversationLock.Handle lock) {
         try {
-            return aiMessageService.createUserMessage(conversationId, request.clientMessageId(), request.content());
+            return aiReplyJobService.createUserMessageAndJob(
+                    conversationId, userId, request.clientMessageId(), request.content(), lock.ownerToken());
         } catch (DataIntegrityViolationException e) {
             // 다른 인스턴스가 같은 clientMessageId를 이미 처리 중 => 대화방 락이 막지 못하는 경우
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
