@@ -43,8 +43,9 @@ class NotificationRepositoryCustomImplIntegrationTest {
                 .boxed()
                 .toList();
 
-        List<Long> ids = notificationRepository.insertAll(
-                event.getId(), receiverUserIds, createdAt, createdAt.plusDays(7));
+        List<Long> ids = notificationRepository.insertAll(receiverUserIds.stream()
+                .map(receiverUserId -> new NotificationInsertRow(event.getId(), receiverUserId, createdAt.plusDays(7)))
+                .toList(), createdAt);
         entityManager.clear();
 
         assertThat(ids).hasSize(300).doesNotHaveDuplicates();
@@ -57,10 +58,14 @@ class NotificationRepositoryCustomImplIntegrationTest {
     void receiverAlreadyNotified_insertAll_throwsDataIntegrityViolation() {
         NotificationEvent event = createEvent("duplicate-receiver");
         LocalDateTime createdAt = LocalDateTime.of(2026, 11, 2, 0, 0);
-        notificationRepository.insertAll(event.getId(), List.of(1L), createdAt, createdAt.plusDays(7));
+        LocalDateTime expiresAt = createdAt.plusDays(7);
+        notificationRepository.insertAll(
+                List.of(new NotificationInsertRow(event.getId(), 1L, expiresAt)), createdAt);
 
-        assertThatThrownBy(() -> notificationRepository.insertAll(
-                event.getId(), List.of(2L, 1L), createdAt, createdAt.plusDays(7)))
+        assertThatThrownBy(() -> notificationRepository.insertAll(List.of(
+                new NotificationInsertRow(event.getId(), 2L, expiresAt),
+                new NotificationInsertRow(event.getId(), 1L, expiresAt)
+        ), createdAt))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

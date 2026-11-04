@@ -48,39 +48,30 @@ class FriendRepositoryTest {
     }
 
     @Test
-    void birthdayAndLeapDayFriends_findAllBirthdayNotificationTargets_returnsOnlyActiveRelations() {
+    void birthdayFriends_findAllBirthdayNotificationTargets_returnsRelationsOfActiveOwners() {
         User owner = saveUser("알림수신자", LocalDate.of(2000, 1, 1));
+        User otherOwner = saveUser("다른수신자", LocalDate.of(2000, 1, 1));
         User inactiveOwner = saveUser("비활성수신자", LocalDate.of(2000, 1, 1));
         inactiveOwner.block();
         User marchFirst = saveUser("삼월생", LocalDate.of(2000, 3, 1));
         User leapDay = saveUser("윤일생", LocalDate.of(2000, 2, 29));
-        User otherDay = saveUser("다른날", LocalDate.of(2000, 3, 2));
-        User inactiveFriend = saveUser("비활성친구", LocalDate.of(2000, 3, 1));
-        inactiveFriend.withdraw();
+        User notRequested = saveUser("다른날", LocalDate.of(2000, 3, 2));
         friendRepository.saveAll(List.of(
                 new Friend(owner.getId(), marchFirst.getId()),
+                new Friend(otherOwner.getId(), marchFirst.getId()),
                 new Friend(owner.getId(), leapDay.getId()),
-                new Friend(owner.getId(), otherDay.getId()),
-                new Friend(owner.getId(), inactiveFriend.getId()),
+                new Friend(owner.getId(), notRequested.getId()),
                 new Friend(inactiveOwner.getId(), marchFirst.getId())
         ));
 
         List<FriendBirthdayNotificationTarget> targets =
-                friendRepository.findAllBirthdayNotificationTargets(3, 1, true);
+                friendRepository.findAllBirthdayNotificationTargets(List.of(marchFirst.getId(), leapDay.getId()));
 
-        assertThat(targets)
-                .extracting(
-                        FriendBirthdayNotificationTarget::ownerUserId,
-                        FriendBirthdayNotificationTarget::friendUserId,
-                        FriendBirthdayNotificationTarget::nickname
-                )
-                .containsExactlyInAnyOrder(
-                        org.assertj.core.groups.Tuple.tuple(owner.getId(), marchFirst.getId(), "삼월생"),
-                        org.assertj.core.groups.Tuple.tuple(owner.getId(), leapDay.getId(), "윤일생")
-                );
-        assertThat(friendRepository.findAllBirthdayNotificationTargets(3, 1, false))
-                .extracting(FriendBirthdayNotificationTarget::friendUserId)
-                .containsExactly(marchFirst.getId());
+        assertThat(targets).containsExactlyInAnyOrder(
+                new FriendBirthdayNotificationTarget(owner.getId(), marchFirst.getId()),
+                new FriendBirthdayNotificationTarget(otherOwner.getId(), marchFirst.getId()),
+                new FriendBirthdayNotificationTarget(owner.getId(), leapDay.getId())
+        );
     }
 
     @Test

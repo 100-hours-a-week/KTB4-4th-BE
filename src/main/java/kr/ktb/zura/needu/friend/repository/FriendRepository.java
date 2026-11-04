@@ -47,23 +47,14 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
 
     @Query("""
             select new kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget(
-                f.ownerUserId, friendUser.id, friendUser.nickname)
+                f.ownerUserId, f.friendUserId)
             from Friend f
-            join User friendUser on friendUser.id = f.friendUserId
             join User ownerUser on ownerUser.id = f.ownerUserId
-            where friendUser.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
+            where f.friendUserId in :birthdayFriendUserIds
               and ownerUser.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
-              and (
-                  (month(friendUser.birthDate) = :month and day(friendUser.birthDate) = :day)
-                  or (:includeLeapDay = true
-                      and month(friendUser.birthDate) = 2
-                      and day(friendUser.birthDate) = 29)
-              )
             """)
     List<FriendBirthdayNotificationTarget> findAllBirthdayNotificationTargets(
-            @Param("month") int month,
-            @Param("day") int day,
-            @Param("includeLeapDay") boolean includeLeapDay
+            @Param("birthdayFriendUserIds") Collection<Long> birthdayFriendUserIds
     );
 
     @Query("""
