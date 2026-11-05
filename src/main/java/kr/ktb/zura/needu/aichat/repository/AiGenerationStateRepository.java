@@ -19,6 +19,13 @@ public class AiGenerationStateRepository {
             return 0
             """, Long.class);
 
+    private static final DefaultRedisScript<Long> EXTEND_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('pexpire', KEYS[1], ARGV[2])
+            end
+            return 0
+            """, Long.class);
+
     private final StringRedisTemplate redisTemplate;
     private final RedisKeyGenerator keyGenerator;
     private final Duration ttl;
@@ -44,6 +51,12 @@ public class AiGenerationStateRepository {
 
     public void delete(Long conversationId, Long userMessageId) {
         redisTemplate.execute(DELETE_SCRIPT, List.of(generateKey(conversationId)), String.valueOf(userMessageId));
+    }
+
+    public boolean extend(Long conversationId, Long userMessageId) {
+        Long result = redisTemplate.execute(EXTEND_SCRIPT, List.of(generateKey(conversationId)),
+                String.valueOf(userMessageId), String.valueOf(ttl.toMillis()));
+        return Long.valueOf(1).equals(result);
     }
 
     private String generateKey(Long conversationId) {

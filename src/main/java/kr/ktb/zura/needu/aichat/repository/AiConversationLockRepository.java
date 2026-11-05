@@ -17,6 +17,19 @@ public class AiConversationLockRepository {
             return 0
             """, Long.class);
 
+    private static final DefaultRedisScript<Long> ENSURE_SCRIPT = new DefaultRedisScript<>("""
+            local value = redis.call('get', KEYS[1])
+            if value == ARGV[1] then
+                redis.call('pexpire', KEYS[1], ARGV[2])
+                return 1
+            end
+            if not value then
+                redis.call('set', KEYS[1], ARGV[1], 'PX', ARGV[2])
+                return 2
+            end
+            return 0
+            """, Long.class);
+
     private final StringRedisTemplate redisTemplate;
     private final AiConversationLockProperties properties;
 
@@ -41,7 +54,25 @@ public class AiConversationLockRepository {
         redisTemplate.execute(RELEASE_SCRIPT, List.of(generateKey(conversationId)), ownerToken);
     }
 
+    public EnsureResult ensure(Long conversationId, String ownerToken) {
+        Long result = redisTemplate.execute(ENSURE_SCRIPT, List.of(generateKey(conversationId)),
+                ownerToken, String.valueOf(properties.ttl().toMillis()));
+        if (result == null) {
+            throw new IllegalStateException("Invalid Redis lock ensure result");
+        }
+        if (result == 1) {
+            return EnsureResult.EXTENDED;
+        }
+        return result == 2 ? EnsureResult.REACQUIRED : EnsureResult.HELD_BY_OTHER;
+    }
+
     private String generateKey(Long conversationId) {
         return properties.keyPrefix() + ":" + conversationId;
+    }
+
+    public enum EnsureResult {
+        EXTENDED,
+        REACQUIRED,
+        HELD_BY_OTHER
     }
 }
