@@ -73,6 +73,7 @@ public class FriendBirthdayNotificationService {
         int friendCount = 0;
         int notificationCount = 0;
         int failedFriendCount = 0;
+        RuntimeException firstChunkFailure = null;
         // 생일 친구를 id 순서로 chunk만큼 읽고 바로 알림을 만든다. 하루 대상 전체를 메모리에 올리지 않는다
         // 한 친구의 수신자는 항상 같은 chunk에 들어간다 (나뉘면 뒤쪽 수신자가 dedupKey에 걸려 빠진다)
         Long cursorUserId = 0L;
@@ -94,6 +95,9 @@ public class FriendBirthdayNotificationService {
                 } catch (RuntimeException exception) {
                     // 실패한 chunk만 롤백되고 다음 chunk는 계속 만든다. 다시 실행하면 dedupKey로 이미 만든 알림은 건너뛴다
                     failedFriendCount += commands.size();
+                    if (firstChunkFailure == null) {
+                        firstChunkFailure = exception;
+                    }
                     log.warn("Friend birthday notification chunk failed. birthdayDate={}, firstFriendUserId={}, friendCount={}",
                             birthdayDate, commands.getFirst().resourceId(), commands.size(), exception);
                 }
@@ -106,6 +110,11 @@ public class FriendBirthdayNotificationService {
         log.info("Friend birthday notification batch completed. receiverCount={}, friendCount={}, "
                         + "notificationCount={}, failedFriendCount={}",
                 receiverCount, friendCount, notificationCount, failedFriendCount);
+        if (firstChunkFailure != null) {
+            throw new IllegalStateException(
+                    "Friend birthday notification batch partially failed. failedFriendCount=" + failedFriendCount,
+                    firstChunkFailure);
+        }
     }
 
     // 알림을 받을 활성 친구가 없는 생일 친구는 command를 만들지 않는다

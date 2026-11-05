@@ -114,16 +114,31 @@ class FriendBirthdayNotificationServiceTest {
     }
 
     @Test
-    void chunkFailed_createNotifications_continuesWithNextChunk() {
+    void chunkFailed_createNotifications_continuesWithNextChunkAndThrowsAfterBatch() {
         givenBirthdayFriendPage(0L, 10L, 11L);
         givenBirthdayFriendPage(11L, 12L);
         given(notificationCreationService.createNotifications(anyList()))
                 .willThrow(new IllegalStateException("insert failed"))
                 .willReturn(1);
 
-        service.createNotifications(LocalDate.of(2026, 10, 12));
+        assertThatThrownBy(() -> service.createNotifications(LocalDate.of(2026, 10, 12)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("partially failed")
+                .hasCauseInstanceOf(IllegalStateException.class);
 
         assertThat(captureCreatedFriendUserIdChunks()).containsExactly(List.of(10L, 11L), List.of(12L));
+    }
+
+    @Test
+    void birthdayFriendLookupFailed_createNotifications_propagatesFailure() {
+        given(userService.findAllActiveUsersByBirthMonthDays(OCTOBER_19, 0L, CHUNK_SIZE))
+                .willThrow(new IllegalStateException("lookup failed"));
+
+        assertThatThrownBy(() -> service.createNotifications(LocalDate.of(2026, 10, 12)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("lookup failed");
+
+        verifyNoInteractions(friendRepository, notificationCreationService);
     }
 
     @Test
