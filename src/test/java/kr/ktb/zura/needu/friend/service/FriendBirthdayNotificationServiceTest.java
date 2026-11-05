@@ -28,6 +28,7 @@ import org.mockito.ArgumentCaptor;
 class FriendBirthdayNotificationServiceTest {
 
     private static final int CHUNK_SIZE = 2;
+    private static final List<Integer> REMINDER_DAYS = List.of(7, 5, 3, 1, 0);
     private static final List<Integer> OCTOBER_19 = List.of(1019);
 
     private final FriendRepository friendRepository = org.mockito.Mockito.mock(FriendRepository.class);
@@ -86,6 +87,46 @@ class FriendBirthdayNotificationServiceTest {
         assertThat(captureCreatedFriendUserIdChunks()).containsExactly(List.of(10L, 11L), List.of(12L));
         verify(friendRepository).findAllBirthdayNotificationTargets(List.of(10L, 11L));
         verify(friendRepository).findAllBirthdayNotificationTargets(List.of(12L));
+    }
+
+    @Test
+    void multipleReminderDays_createNotifications_createsEachReminderNotification() {
+        givenReminderDayTarget(1019, 10L, "친구10");
+        givenReminderDayTarget(1017, 11L, "친구11");
+        givenReminderDayTarget(1015, 12L, "친구12");
+        givenReminderDayTarget(1013, 13L, "친구13");
+        givenReminderDayTarget(1012, 14L, "친구14");
+
+        service.createNotifications(LocalDate.of(2026, 10, 12));
+
+        ArgumentCaptor<List<NotificationCreationCommand>> commandCaptor = ArgumentCaptor.forClass(List.class);
+        verify(notificationCreationService, atLeastOnce()).createNotifications(commandCaptor.capture());
+        assertThat(commandCaptor.getAllValues().stream().map(List::getFirst).toList())
+                .extracting(
+                        NotificationCreationCommand::title,
+                        NotificationCreationCommand::dedupKey,
+                        NotificationCreationCommand::expiresAt)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                "친구10 님의 생일이 7일 남았어요.",
+                                "friend-birthday:2026-10-19:10:d-7",
+                                LocalDateTime.of(2026, 10, 19, 15, 0)),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "친구11 님의 생일이 5일 남았어요.",
+                                "friend-birthday:2026-10-17:11:d-5",
+                                LocalDateTime.of(2026, 10, 17, 15, 0)),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "친구12 님의 생일이 3일 남았어요.",
+                                "friend-birthday:2026-10-15:12:d-3",
+                                LocalDateTime.of(2026, 10, 15, 15, 0)),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "친구13 님의 생일이 1일 남았어요.",
+                                "friend-birthday:2026-10-13:13:d-1",
+                                LocalDateTime.of(2026, 10, 13, 15, 0)),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "친구14 님의 생일이에요.",
+                                "friend-birthday:2026-10-12:14:d-0",
+                                LocalDateTime.of(2026, 10, 12, 15, 0)));
     }
 
     @Test
@@ -170,7 +211,14 @@ class FriendBirthdayNotificationServiceTest {
 
     private FriendBirthdayNotificationService createService(int chunkSize) {
         return new FriendBirthdayNotificationService(
-                friendRepository, userService, notificationCreationService, 7, "Asia/Seoul", chunkSize);
+                friendRepository, userService, notificationCreationService, REMINDER_DAYS, "Asia/Seoul", chunkSize);
+    }
+
+    private void givenReminderDayTarget(int birthMonthDay, Long friendUserId, String nickname) {
+        given(userService.findAllActiveUsersByBirthMonthDays(List.of(birthMonthDay), 0L, CHUNK_SIZE))
+                .willReturn(List.of(birthdayFriend(friendUserId, nickname)));
+        given(friendRepository.findAllBirthdayNotificationTargets(List.of(friendUserId)))
+                .willReturn(List.of(new FriendBirthdayNotificationTarget(1L, friendUserId)));
     }
 
     // cursorUserId 다음 페이지로 주어진 생일 친구를 돌려주고, 친구마다 수신자 1명을 둔다

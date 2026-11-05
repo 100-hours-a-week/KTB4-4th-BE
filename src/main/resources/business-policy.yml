@@ -44,7 +44,8 @@ needu:
     friend-birthday:
       cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
       zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}
-      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7}
+      # 생일 며칠 전에 알림을 보낼지 지정한다. 0은 생일 당일이다
+      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7,5,3,1,0}
       # 한 트랜잭션에서 알림을 만드는 생일 친구 수다. 실패하면 이 수만큼 함께 롤백된다
       chunk-size: ${FRIEND_BIRTHDAY_NOTIFICATION_CHUNK_SIZE:100}
       # 최초 실행 실패 후 전체 배치를 다시 실행하는 최대 횟수와 재시도 간격이다
