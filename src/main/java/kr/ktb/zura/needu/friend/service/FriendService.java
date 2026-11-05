@@ -56,7 +56,7 @@ public class FriendService {
             FriendSyncRequestRepository friendSyncRequestRepository,
             UserService userService,
             Clock clock,
-            @Value("${needu.notification.friend-birthday.reminder-days}") int upcomingEventDays,
+            @Value("${needu.friend.upcoming-event-days}") int upcomingEventDays,
             @Value("${needu.notification.friend-birthday.zone}") String eventZone
     ) {
         this.friendRepository = friendRepository;
