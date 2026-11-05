@@ -24,7 +24,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class FriendBirthdayNotificationService {
 
-    private static final String BODY = "지금 선물을 준비하면 여유 있게 도착해요.";
     private static final int LEAP_DAY_MONTH_DAY = 229;
 
     private final FriendRepository friendRepository;
@@ -160,14 +159,14 @@ public class FriendBirthdayNotificationService {
             int reminderDay,
             LocalDateTime expiresAt
     ) {
+        FriendBirthdayNotificationMessage message =
+                FriendBirthdayNotificationMessage.from(friend.nickname(), reminderDay);
         return new NotificationCreationCommand(
                 receiverUserIds,
                 NotificationType.FRIEND_BIRTHDAY,
                 null,
-                reminderDay == 0
-                        ? friend.nickname() + " 님의 생일이에요."
-                        : friend.nickname() + " 님의 생일이 " + reminderDay + "일 남았어요.",
-                BODY,
+                message.title(),
+                message.body(),
                 NotificationResourceType.USER,
                 friend.id(),
                 "friend-birthday:" + birthdayDate + ":" + friend.id() + ":d-" + reminderDay,

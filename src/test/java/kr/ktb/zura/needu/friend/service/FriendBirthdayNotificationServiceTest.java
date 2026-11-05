@@ -57,7 +57,7 @@ class FriendBirthdayNotificationServiceTest {
                         NotificationType.FRIEND_BIRTHDAY,
                         null,
                         "수연 님의 생일이 7일 남았어요.",
-                        "지금 선물을 준비하면 여유 있게 도착해요.",
+                        "미리 취향에 맞는 선물을 골라 여유 있게 준비해 보세요.",
                         NotificationResourceType.USER,
                         10L,
                         "friend-birthday:2026-10-19:10:d-7",
@@ -68,7 +68,7 @@ class FriendBirthdayNotificationServiceTest {
                         NotificationType.FRIEND_BIRTHDAY,
                         null,
                         "민지 님의 생일이 7일 남았어요.",
-                        "지금 선물을 준비하면 여유 있게 도착해요.",
+                        "미리 취향에 맞는 선물을 골라 여유 있게 준비해 보세요.",
                         NotificationResourceType.USER,
                         11L,
                         "friend-birthday:2026-10-19:11:d-7",
@@ -104,27 +104,33 @@ class FriendBirthdayNotificationServiceTest {
         assertThat(commandCaptor.getAllValues().stream().map(List::getFirst).toList())
                 .extracting(
                         NotificationCreationCommand::title,
+                        NotificationCreationCommand::body,
                         NotificationCreationCommand::dedupKey,
                         NotificationCreationCommand::expiresAt)
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(
                                 "친구10 님의 생일이 7일 남았어요.",
+                                "미리 취향에 맞는 선물을 골라 여유 있게 준비해 보세요.",
                                 "friend-birthday:2026-10-19:10:d-7",
                                 LocalDateTime.of(2026, 10, 19, 15, 0)),
                         org.assertj.core.groups.Tuple.tuple(
                                 "친구11 님의 생일이 5일 남았어요.",
+                                "선물을 고민 중이라면 지금 추천 상품을 확인해 보세요.",
                                 "friend-birthday:2026-10-17:11:d-5",
                                 LocalDateTime.of(2026, 10, 17, 15, 0)),
                         org.assertj.core.groups.Tuple.tuple(
                                 "친구12 님의 생일이 3일 남았어요.",
+                                "생일이 가까워졌어요. 마음에 드는 선물을 지금 골라보세요.",
                                 "friend-birthday:2026-10-15:12:d-3",
                                 LocalDateTime.of(2026, 10, 15, 15, 0)),
                         org.assertj.core.groups.Tuple.tuple(
-                                "친구13 님의 생일이 1일 남았어요.",
+                                "친구13 님의 생일이 하루 남았어요.",
+                                "늦기 전에 취향에 맞는 선물을 준비해 보세요.",
                                 "friend-birthday:2026-10-13:13:d-1",
                                 LocalDateTime.of(2026, 10, 13, 15, 0)),
                         org.assertj.core.groups.Tuple.tuple(
                                 "친구14 님의 생일이에요.",
+                                "오늘 마음을 담은 선물로 생일을 축하해 주세요.",
                                 "friend-birthday:2026-10-12:14:d-0",
                                 LocalDateTime.of(2026, 10, 12, 15, 0)));
     }

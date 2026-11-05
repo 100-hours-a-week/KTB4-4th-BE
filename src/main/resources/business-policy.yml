@@ -61,6 +61,8 @@ needu:
       block-duration: ${ANONYMOUS_CHAT_REPORT_BLOCK_DURATION:3d}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
+    # 다가오는 친구 이벤트 목록에 오늘부터 며칠 뒤까지 포함할지 지정한다
+    upcoming-event-days: ${FRIEND_UPCOMING_EVENT_DAYS:7}
     sync:
       fixed-delay: ${FRIEND_SYNC_FIXED_DELAY:1m}
       batch-size: ${FRIEND_SYNC_BATCH_SIZE:20}
