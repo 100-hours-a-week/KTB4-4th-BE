@@ -50,9 +50,13 @@ needu:
     friend-birthday:
       cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
       zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}
-      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7}
+      # 생일 며칠 전에 알림을 보낼지 지정한다. 0은 생일 당일이다
+      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7,5,3,1,0}
       # 한 트랜잭션에서 알림을 만드는 생일 친구 수다. 실패하면 이 수만큼 함께 롤백된다
       chunk-size: ${FRIEND_BIRTHDAY_NOTIFICATION_CHUNK_SIZE:100}
+      # 최초 실행 실패 후 전체 배치를 다시 실행하는 최대 횟수와 재시도 간격이다
+      max-retry-count: ${FRIEND_BIRTHDAY_NOTIFICATION_MAX_RETRY_COUNT:2}
+      retry-delay: ${FRIEND_BIRTHDAY_NOTIFICATION_RETRY_DELAY:5s}
       lock-at-most-for: ${FRIEND_BIRTHDAY_LOCK_AT_MOST_FOR:10m}
       lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
   anonymous-chat:
@@ -63,6 +67,8 @@ needu:
       block-duration: ${ANONYMOUS_CHAT_REPORT_BLOCK_DURATION:3d}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
+    # 다가오는 친구 이벤트 목록에 오늘부터 며칠 뒤까지 포함할지 지정한다
+    upcoming-event-days: ${FRIEND_UPCOMING_EVENT_DAYS:7}
     sync:
       fixed-delay: ${FRIEND_SYNC_FIXED_DELAY:1m}
       batch-size: ${FRIEND_SYNC_BATCH_SIZE:20}

@@ -24,13 +24,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class FriendBirthdayNotificationService {
 
-    private static final String BODY = "지금 선물을 준비하면 여유 있게 도착해요.";
     private static final int LEAP_DAY_MONTH_DAY = 229;
 
     private final FriendRepository friendRepository;
     private final UserService userService;
     private final NotificationCreationService notificationCreationService;
-    private final int reminderDays;
+    private final List<Integer> reminderDays;
     private final ZoneId notificationZone;
     private final int chunkSize;
 
@@ -38,7 +37,7 @@ public class FriendBirthdayNotificationService {
             FriendRepository friendRepository,
             UserService userService,
             NotificationCreationService notificationCreationService,
-            @Value("${needu.notification.friend-birthday.reminder-days}") int reminderDays,
+            @Value("${needu.notification.friend-birthday.reminder-days}") List<Integer> reminderDays,
             @Value("${needu.notification.friend-birthday.zone}") String notificationZone,
             @Value("${needu.notification.friend-birthday.chunk-size}") int chunkSize
     ) {
@@ -47,16 +46,34 @@ public class FriendBirthdayNotificationService {
             throw new IllegalArgumentException(
                     "needu.notification.friend-birthday.chunk-size must be positive. value=" + chunkSize);
         }
+        if (reminderDays.isEmpty() || reminderDays.stream().anyMatch(day -> day < 0)) {
+            throw new IllegalArgumentException(
+                    "needu.notification.friend-birthday.reminder-days must not be empty or negative. value="
+                            + reminderDays);
+        }
         this.friendRepository = friendRepository;
         this.userService = userService;
         this.notificationCreationService = notificationCreationService;
-        this.reminderDays = reminderDays;
+        this.reminderDays = List.copyOf(reminderDays);
         this.notificationZone = ZoneId.of(notificationZone);
         this.chunkSize = chunkSize;
     }
 
     public void createNotifications(LocalDate executionDate) {
-        LocalDate birthdayDate = executionDate.plusDays(reminderDays);
+        RuntimeException firstChunkFailure = null;
+        for (int reminderDay : reminderDays) {
+            RuntimeException chunkFailure = createNotifications(executionDate, reminderDay);
+            if (firstChunkFailure == null) {
+                firstChunkFailure = chunkFailure;
+            }
+        }
+        if (firstChunkFailure != null) {
+            throw new IllegalStateException("Friend birthday notification batch partially failed.", firstChunkFailure);
+        }
+    }
+
+    private RuntimeException createNotifications(LocalDate executionDate, int reminderDay) {
+        LocalDate birthdayDate = executionDate.plusDays(reminderDay);
         boolean includeLeapDay = !birthdayDate.isLeapYear()
                 && birthdayDate.getMonthValue() == 3
                 && birthdayDate.getDayOfMonth() == 1;
@@ -73,6 +90,7 @@ public class FriendBirthdayNotificationService {
         int friendCount = 0;
         int notificationCount = 0;
         int failedFriendCount = 0;
+        RuntimeException firstChunkFailure = null;
         // 생일 친구를 id 순서로 chunk만큼 읽고 바로 알림을 만든다. 하루 대상 전체를 메모리에 올리지 않는다
         // 한 친구의 수신자는 항상 같은 chunk에 들어간다 (나뉘면 뒤쪽 수신자가 dedupKey에 걸려 빠진다)
         Long cursorUserId = 0L;
@@ -84,7 +102,8 @@ public class FriendBirthdayNotificationService {
             }
             cursorUserId = birthdayFriends.getLast().id();
 
-            List<NotificationCreationCommand> commands = toCommands(birthdayFriends, birthdayDate, expiresAt);
+            List<NotificationCreationCommand> commands =
+                    toCommands(birthdayFriends, birthdayDate, reminderDay, expiresAt);
             if (!commands.isEmpty()) {
                 friendCount += commands.size();
                 receiverCount += commands.stream().mapToInt(command -> command.receiverUserIds().size()).sum();
@@ -94,6 +113,9 @@ public class FriendBirthdayNotificationService {
                 } catch (RuntimeException exception) {
                     // 실패한 chunk만 롤백되고 다음 chunk는 계속 만든다. 다시 실행하면 dedupKey로 이미 만든 알림은 건너뛴다
                     failedFriendCount += commands.size();
+                    if (firstChunkFailure == null) {
+                        firstChunkFailure = exception;
+                    }
                     log.warn("Friend birthday notification chunk failed. birthdayDate={}, firstFriendUserId={}, friendCount={}",
                             birthdayDate, commands.getFirst().resourceId(), commands.size(), exception);
                 }
@@ -104,14 +126,16 @@ public class FriendBirthdayNotificationService {
         }
 
         log.info("Friend birthday notification batch completed. receiverCount={}, friendCount={}, "
-                        + "notificationCount={}, failedFriendCount={}",
-                receiverCount, friendCount, notificationCount, failedFriendCount);
+                        + "notificationCount={}, failedFriendCount={}, reminderDay={}",
+                receiverCount, friendCount, notificationCount, failedFriendCount, reminderDay);
+        return firstChunkFailure;
     }
 
     // 알림을 받을 활성 친구가 없는 생일 친구는 command를 만들지 않는다
     private List<NotificationCreationCommand> toCommands(
             List<UserSummaryResponse> birthdayFriends,
             LocalDate birthdayDate,
+            int reminderDay,
             LocalDateTime expiresAt
     ) {
         List<Long> birthdayFriendUserIds = birthdayFriends.stream().map(UserSummaryResponse::id).toList();
@@ -123,7 +147,8 @@ public class FriendBirthdayNotificationService {
                         ));
         return birthdayFriends.stream()
                 .filter(friend -> receiverUserIdsByFriendUserId.containsKey(friend.id()))
-                .map(friend -> toCommand(friend, receiverUserIdsByFriendUserId.get(friend.id()), birthdayDate, expiresAt))
+                .map(friend -> toCommand(
+                        friend, receiverUserIdsByFriendUserId.get(friend.id()), birthdayDate, reminderDay, expiresAt))
                 .toList();
     }
 
@@ -131,17 +156,20 @@ public class FriendBirthdayNotificationService {
             UserSummaryResponse friend,
             Set<Long> receiverUserIds,
             LocalDate birthdayDate,
+            int reminderDay,
             LocalDateTime expiresAt
     ) {
+        FriendBirthdayNotificationMessage message =
+                FriendBirthdayNotificationMessage.from(friend.nickname(), reminderDay);
         return new NotificationCreationCommand(
                 receiverUserIds,
                 NotificationType.FRIEND_BIRTHDAY,
                 null,
-                friend.nickname() + " 님의 생일이 " + reminderDays + "일 남았어요.",
-                BODY,
+                message.title(),
+                message.body(),
                 NotificationResourceType.USER,
                 friend.id(),
-                "friend-birthday:" + birthdayDate + ":" + friend.id() + ":d-" + reminderDays,
+                "friend-birthday:" + birthdayDate + ":" + friend.id() + ":d-" + reminderDay,
                 expiresAt
         );
     }
