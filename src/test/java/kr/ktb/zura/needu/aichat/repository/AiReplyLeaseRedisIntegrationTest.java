@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit;
 
 import kr.ktb.zura.needu.aichat.config.AiConversationLockConfig;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 // 워커가 답변을 만드는 동안 대화방 락과 생성 중 표시를 유지하는 Lua를 실제 Redis에서 확인한다
 @DataRedisTest
 @Import({AiConversationLockRepository.class, AiGenerationStateRepository.class,
-        AiConversationLockConfig.class, RedisKeyGenerator.class})
+        AiConversationLockConfig.class, RedisKeyGenerator.class, StreamRedisConfig.class})
 class AiReplyLeaseRedisIntegrationTest {
 
     private static final Long CONVERSATION_ID = 101L;
