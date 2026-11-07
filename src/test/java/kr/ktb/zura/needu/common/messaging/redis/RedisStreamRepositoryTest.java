@@ -124,6 +124,26 @@ class RedisStreamRepositoryTest {
         verifyNoInteractions(streamOperations);
     }
 
+    @Test
+    void acknowledgeAndDelete_runsAckAndDeleteInOneScript() {
+        repository.acknowledgeAndDelete(STREAM_KEY, GROUP, "1-0");
+
+        verify(redisTemplate).execute(
+                RedisStreamRepository.ACKNOWLEDGE_AND_DELETE_SCRIPT, List.of(STREAM_KEY), GROUP, "1-0");
+        assertThat(RedisStreamRepository.ACKNOWLEDGE_AND_DELETE_SCRIPT.getScriptAsString())
+                .contains("XACK", "XDEL");
+    }
+
+    @Test
+    void acknowledgeAndDelete_propagatesRedisFailure() {
+        when(redisTemplate.execute(
+                RedisStreamRepository.ACKNOWLEDGE_AND_DELETE_SCRIPT, List.of(STREAM_KEY), GROUP, "1-0"))
+                .thenThrow(redisError("timeout"));
+
+        assertThatThrownBy(() -> repository.acknowledgeAndDelete(STREAM_KEY, GROUP, "1-0"))
+                .isInstanceOf(RedisSystemException.class);
+    }
+
     // Lettuce 오류가 Spring 예외에 감싸져 오는 형태를 흉내 낸다
     private RedisSystemException redisError(String message) {
         return new RedisSystemException("Redis error", new RuntimeException(message));
