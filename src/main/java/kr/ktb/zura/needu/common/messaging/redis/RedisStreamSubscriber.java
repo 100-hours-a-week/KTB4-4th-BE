@@ -43,19 +43,4 @@ public class RedisStreamSubscriber implements MessageSubscriber {
                 RedisStreamNames.toStreamKey(keyGenerator, topic),
                 RedisStreamNames.toGroupName(topic));
     }
-
-    // XACK
-    private void acknowledge(String streamKey, String messageId) {
-        throw new UnsupportedOperationException("Not implemented yet.");
-    }
-
-    // XAUTOCLAIM으로 죽은 소비자가 처리하다 만 메시지를 가져온다
-    private void claimPendingMessages(String streamKey) {
-        throw new UnsupportedOperationException("Not implemented yet.");
-    }
-
-    // 전달 횟수가 한도를 넘은 메시지를 DLQ 스트림으로 옮기고 원래 메시지는 ACK한다
-    private void moveToDeadLetter(String streamKey, String messageId) {
-        throw new UnsupportedOperationException("Not implemented yet.");
-    }
 }
