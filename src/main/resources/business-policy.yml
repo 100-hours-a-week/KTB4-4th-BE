@@ -29,6 +29,12 @@ ai:
     reply-max-concurrency: ${AI_CHAT_REPLY_MAX_CONCURRENCY:200}
     # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 중단하고 error 이벤트를 보낸다. ECS stopTimeout보다 짧게 둔다.
     reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
+    reply-queue:
+      # AI 서버 전체에 동시에 보내는 답변 수다. BE 인스턴스 수와 상관없이 Redis에서 함께 센다.
+      # AI 서버 1대 한계 60(부하 테스트) × 0.8(임시) = 48, AI 서버 2대 기준. 운영 대수와 모델 쪽 한도를 확인해 조정
+      global-max-concurrency: ${AI_CHAT_REPLY_GLOBAL_MAX_CONCURRENCY:96}
+      # 워커가 연장하지 않으면 허가가 풀리는 시간이다. 죽은 워커가 반납하지 못한 허가는 이 시간이 지나면 다시 쓸 수 있다.
+      permit-ttl: ${AI_CHAT_REPLY_PERMIT_TTL:30s}
 
 needu:
   user:
