@@ -2,6 +2,8 @@ package kr.ktb.zura.needu.aichat.repository;
 
 import java.util.List;
 import kr.ktb.zura.needu.aichat.config.AiConversationLockProperties;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
@@ -34,7 +36,7 @@ public class AiConversationLockRepository {
     private final AiConversationLockProperties properties;
 
     public AiConversationLockRepository(
-            StringRedisTemplate redisTemplate,
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
             AiConversationLockProperties properties
     ) {
         this.redisTemplate = redisTemplate;

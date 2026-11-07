@@ -3,6 +3,8 @@ package kr.ktb.zura.needu.aichat.service;
 import kr.ktb.zura.needu.aichat.sse.AiChatEventType;
 import kr.ktb.zura.needu.aichat.sse.AiChatRedisEvent;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -17,7 +19,7 @@ public class AiChatEventPublisher {
     private final RedisKeyGenerator keyGenerator;
 
     public AiChatEventPublisher(
-            StringRedisTemplate redisTemplate,
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
             JsonMapper jsonMapper,
             RedisKeyGenerator keyGenerator
     ) {

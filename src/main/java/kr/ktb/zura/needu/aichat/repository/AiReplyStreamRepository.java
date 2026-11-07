@@ -7,7 +7,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Range;
@@ -71,7 +73,10 @@ public class AiReplyStreamRepository {
     private final StringRedisTemplate redisTemplate;
     private final String key;
 
-    public AiReplyStreamRepository(StringRedisTemplate redisTemplate, RedisKeyGenerator keyGenerator) {
+    public AiReplyStreamRepository(
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
+            RedisKeyGenerator keyGenerator
+    ) {
         this.redisTemplate = redisTemplate;
         this.key = keyGenerator.generate("aichat", "reply-jobs");
     }
