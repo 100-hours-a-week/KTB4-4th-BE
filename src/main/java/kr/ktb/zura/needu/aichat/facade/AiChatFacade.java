@@ -40,7 +40,10 @@ import kr.ktb.zura.needu.aichat.service.AiChatTurnEvents;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
+import kr.ktb.zura.needu.aichat.service.AiReplyCommitResult;
+import kr.ktb.zura.needu.aichat.service.AiReplyJobDispatch;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
+import kr.ktb.zura.needu.aichat.service.AiReplyJobTakeResult;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -62,6 +65,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Slf4j
 @Component
 public class AiChatFacade {
+
+    private static final long FIRST_DELIVERY = 1L;
+    private static final String LOCK_LOST_ERROR_CODE = "AICHAT_REPLY_LOCK_LOST";
 
     private final AiChatRoomService aiChatRoomService;
     private final AiMessageService aiMessageService;
@@ -229,71 +235,140 @@ public class AiChatFacade {
             return new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
         });
         try {
-            AiMessage userMessage = sentMessage.isPresent()
+            AiReplyJobDispatch dispatch = sentMessage.isPresent()
                     ? restartReply(userId, conversationId, sentMessage.get(), lock)
                     : createUserMessage(userId, conversationId, request, lock);
-            startReply(userId, conversationId, userMessage, lock, slot);
-            return AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(userMessage));
+            startReply(conversationId, dispatch, lock, slot);
+            return AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(dispatch.userMessage()));
         } catch (RuntimeException e) {
             slot.release();
             throw e;
         }
     }
 
-    private void startReply(Long userId, Long conversationId, AiMessage userMessage,
+    private void startReply(Long conversationId, AiReplyJobDispatch dispatch,
                             AiConversationLock.Handle lock, AiReplyTaskExecutor.Slot slot) {
-        aiGenerationStateService.startGenerating(conversationId, userMessage.getId());
+        Long userMessageId = dispatch.userMessage().getId();
+        aiGenerationStateService.startGenerating(conversationId, userMessageId);
         try {
-            slot.execute(() -> replyInBackground(userId, conversationId, userMessage, lock));
+            slot.execute(() -> replyInBackground(conversationId, dispatch, lock));
         } catch (RuntimeException e) {
-            recordReplyFailure(conversationId, userMessage.getId(), e);
-            aiGenerationStateService.finishGenerating(conversationId, userMessage.getId());
+            recordReplyFailure(conversationId, userMessageId, e);
+            aiGenerationStateService.finishGenerating(conversationId, userMessageId);
             throw e;
         }
     }
 
-    private void replyInBackground(Long userId, Long conversationId, AiMessage userMessage,
-                                   AiConversationLock.Handle lock) {
-        AiChatTurnEvents turnEvents = new AiChatTurnEvents(aiChatEventPublisher, conversationId);
-        AiMessage reply;
+    // 지금 경로는 접수한 서버가 바로 첫 할당으로 처리
+    private void replyInBackground(Long conversationId, AiReplyJobDispatch dispatch, AiConversationLock.Handle lock) {
         try {
-            reply = generateReply(userId, conversationId, userMessage, turnEvents);
+            replyToJob(dispatch.jobId(), dispatch.dispatchToken(), FIRST_DELIVERY, null);
+        } catch (RuntimeException e) {
+            Long userMessageId = dispatch.userMessage().getId();
+            log.error("AI reply job take failed. conversationId={}, userMessageId={}", conversationId, userMessageId, e);
+            recordReplyFailure(conversationId, userMessageId, e);
+            finishReply(conversationId, userMessageId, lock);
+        }
+    }
+
+    // 큐 워커도 이 메서드로 작업 하나를 처리 => 두 경로가 같은 저장 규칙을 사용하도록
+    private void replyToJob(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId) {
+        AiReplyJobTakeResult job = aiReplyJobService.take(jobId, dispatchToken, deliveryCount, streamEntryId);
+        switch (job.outcome()) {
+            case STALE -> log.info("AI reply job stale. jobId={}", jobId);
+            case ALREADY_SUCCEEDED -> finishSucceededJob(job);
+            case GAVE_UP -> finishGivenUpJob(job);
+            case TAKEN -> generateJobReply(job);
+        }
+    }
+
+    private void finishSucceededJob(AiReplyJobTakeResult job) {
+        AiMessage reply = aiMessageService.findReply(job.userMessageId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "AI reply not found for succeeded job. jobId=" + job.jobId()));
+        finishReply(job.conversationId(), job.userMessageId(), toLock(job));
+        AiChatTurnEvents.ofAcceptedTurn(aiChatEventPublisher, job.conversationId(), job.userMessageId())
+                .complete(AiChatCompletedEvent.from(reply));
+    }
+
+    private void finishGivenUpJob(AiReplyJobTakeResult job) {
+        finishReply(job.conversationId(), job.userMessageId(), toLock(job));
+        AiChatTurnEvents.ofAcceptedTurn(aiChatEventPublisher, job.conversationId(), job.userMessageId())
+                .fail(new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE));
+    }
+
+    private void generateJobReply(AiReplyJobTakeResult job) {
+        Long conversationId = job.conversationId();
+        Long userMessageId = job.userMessageId();
+        AiConversationLock.Handle lock = toLock(job);
+        AiChatTurnEvents turnEvents = new AiChatTurnEvents(aiChatEventPublisher, conversationId);
+        AiReplyCommitResult committed;
+        try {
+            if (!aiConversationLock.ensure(lock)) {
+                // 다른 턴이 대화방 락을 잡음 => 그 턴의 락과 생성 중 표시는 건드리지 않는다
+                log.info("AI reply lock held by another turn. jobId={}, conversationId={}, userMessageId={}",
+                        job.jobId(), conversationId, userMessageId);
+                recordTakenJobFailure(job, LOCK_LOST_ERROR_CODE);
+                return;
+            }
+            turnEvents.accept(userMessageId, job.userMessage().getClientMessageId());
+            aiChatRoomService.validateMessageSendableRoom(job.userId(), conversationId);
+            AiServerSendMessageResponse response = requestReply(
+                    job.userId(), conversationId, job.userMessage(), turnEvents::publishDelta);
+            committed = commitReply(job, response);
         } catch (RuntimeException e) {
             Thread.interrupted();
-            logReplyFailure(userId, conversationId, userMessage.getId(), e);
-            recordReplyFailure(conversationId, userMessage.getId(), e);
-            finishReply(conversationId, userMessage.getId(), lock);
-            turnEvents.fail(e);
+            failJobReply(job, lock, turnEvents, e);
             return;
         }
-        finishReply(conversationId, userMessage.getId(), lock);
-        turnEvents.complete(AiChatCompletedEvent.from(reply));
-    }
-
-    private AiMessage generateReply(Long userId, Long conversationId, AiMessage userMessage,
-                                    AiChatTurnEvents turnEvents) {
-        turnEvents.accept(userMessage.getId(), userMessage.getClientMessageId());
-        aiReplyJobService.startJob(userMessage.getId());
-        AiServerSendMessageResponse response = requestReply(
-                userId, conversationId, userMessage, turnEvents::publishDelta);
-        return createReply(userId, conversationId, userMessage.getId(), response);
-    }
-
-    private AiMessage createReply(Long userId, Long conversationId, Long userMessageId,
-                                  AiServerSendMessageResponse response) {
-        try {
-            AiMessage aiMessage = aiReplyJobService.createReplyAndSucceed(
-                    conversationId, userMessageId, response.reply(), response.progress(),
-                    response.inputLocked(), toPurgeAt(response.expirationAt()));
-            log.info("AI message replied. userId={}, conversationId={}, messageId={}",
-                    userId, conversationId, aiMessage.getId());
-            return aiMessage;
-        } catch (DataIntegrityViolationException e) {
-            AiMessage savedReply = aiMessageService.findReply(userMessageId).orElseThrow(() -> e);
-            log.info("AI reply already saved. userId={}, conversationId={}, userMessageId={}, messageId={}",
-                    userId, conversationId, userMessageId, savedReply.getId());
-            return savedReply;
+        if (committed.isRejected()) {
+            return;
         }
+        finishReply(conversationId, userMessageId, lock);
+        turnEvents.complete(AiChatCompletedEvent.from(committed.reply()));
+    }
+
+    private AiReplyCommitResult commitReply(AiReplyJobTakeResult job, AiServerSendMessageResponse response) {
+        try {
+            AiReplyCommitResult committed = aiReplyJobService.commitReply(job.jobId(), job.attempt(),
+                    response.reply(), response.progress(), response.inputLocked(),
+                    toPurgeAt(response.expirationAt()));
+            if (!committed.isRejected()) {
+                log.info("AI message replied. userId={}, conversationId={}, messageId={}",
+                        job.userId(), job.conversationId(), committed.reply().getId());
+            }
+            return committed;
+        } catch (DataIntegrityViolationException e) {
+            AiMessage savedReply = aiMessageService.findReply(job.userMessageId()).orElseThrow(() -> e);
+            log.info("AI reply already saved. userId={}, conversationId={}, userMessageId={}, messageId={}",
+                    job.userId(), job.conversationId(), job.userMessageId(), savedReply.getId());
+            return AiReplyCommitResult.saved(savedReply);
+        }
+    }
+
+    private void failJobReply(AiReplyJobTakeResult job, AiConversationLock.Handle lock,
+                              AiChatTurnEvents turnEvents, RuntimeException cause) {
+        logReplyFailure(job.userId(), job.conversationId(), job.userMessageId(), cause);
+        if (!recordTakenJobFailure(job, toErrorCode(cause))) {
+            return;
+        }
+        finishReply(job.conversationId(), job.userMessageId(), lock);
+        turnEvents.fail(cause);
+    }
+
+    // 기록이 실패하면(DB 장애) 처리 권한을 확인할 수 없다 => 사용자가 계속 기다리지 않도록 마무리는 진행한다
+    private boolean recordTakenJobFailure(AiReplyJobTakeResult job, String errorCode) {
+        try {
+            return aiReplyJobService.failTakenJob(job.jobId(), job.attempt(), errorCode);
+        } catch (RuntimeException e) {
+            log.warn("AI reply job failure record failed. conversationId={}, userMessageId={}",
+                    job.conversationId(), job.userMessageId(), e);
+            return true;
+        }
+    }
+
+    private AiConversationLock.Handle toLock(AiReplyJobTakeResult job) {
+        return new AiConversationLock.Handle(job.conversationId(), job.lockToken());
     }
 
     private void finishReply(Long conversationId, Long userMessageId, AiConversationLock.Handle lock) {
@@ -302,15 +377,18 @@ public class AiChatFacade {
     }
 
     private void recordReplyFailure(Long conversationId, Long userMessageId, RuntimeException cause) {
-        String errorCode = cause instanceof BusinessException businessException
-                ? businessException.getErrorCode().name()
-                : CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.name();
         try {
-            aiReplyJobService.failJob(userMessageId, errorCode);
+            aiReplyJobService.failJob(userMessageId, toErrorCode(cause));
         } catch (RuntimeException e) {
             log.warn("AI reply job failure record failed. conversationId={}, userMessageId={}",
                     conversationId, userMessageId, e);
         }
+    }
+
+    private String toErrorCode(RuntimeException cause) {
+        return cause instanceof BusinessException businessException
+                ? businessException.getErrorCode().name()
+                : CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.name();
     }
 
     private void logReplyFailure(Long userId, Long conversationId, Long userMessageId, RuntimeException e) {
@@ -329,19 +407,18 @@ public class AiChatFacade {
                 userId, conversationId, userMessageId, errorCode.name());
     }
 
-    private AiMessage restartReply(Long userId, Long conversationId, AiMessage userMessage,
-                                   AiConversationLock.Handle lock) {
+    private AiReplyJobDispatch restartReply(Long userId, Long conversationId, AiMessage userMessage,
+                                            AiConversationLock.Handle lock) {
         log.info("AI reply regenerating for unanswered message. userId={}, conversationId={}, userMessageId={}",
                 userId, conversationId, userMessage.getId());
-        return aiReplyJobService.restartJob(conversationId, userMessage, userId, lock.ownerToken()).userMessage();
+        return aiReplyJobService.restartJob(conversationId, userMessage, userId, lock.ownerToken());
     }
 
-    private AiMessage createUserMessage(Long userId, Long conversationId, SendMessageRequest request,
-                                        AiConversationLock.Handle lock) {
+    private AiReplyJobDispatch createUserMessage(Long userId, Long conversationId, SendMessageRequest request,
+                                                 AiConversationLock.Handle lock) {
         try {
             return aiReplyJobService.createUserMessageAndJob(
-                    conversationId, userId, request.clientMessageId(), request.content(), lock.ownerToken())
-                    .userMessage();
+                    conversationId, userId, request.clientMessageId(), request.content(), lock.ownerToken());
         } catch (DataIntegrityViolationException e) {
             // 다른 인스턴스가 같은 clientMessageId를 이미 처리 중 => 대화방 락이 막지 못하는 경우
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());

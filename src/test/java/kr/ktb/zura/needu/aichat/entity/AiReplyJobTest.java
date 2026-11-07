@@ -35,22 +35,6 @@ class AiReplyJobTest {
     }
 
     @Test
-    void queuedJob_start_becomesRunning() {
-        AiReplyJob job = queuedJob();
-
-        job.start();
-
-        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
-    }
-
-    @Test
-    void runningJob_start_throws() {
-        AiReplyJob job = runningJob();
-
-        assertThatThrownBy(job::start).isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
     void queuedJob_take_becomesRunningWithFirstAttemptAndStreamEntryId() {
         AiReplyJob job = queuedJob();
 

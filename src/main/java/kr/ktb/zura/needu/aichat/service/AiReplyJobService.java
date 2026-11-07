@@ -91,20 +91,6 @@ public class AiReplyJobService {
     }
 
     @Transactional
-    public void startJob(Long userMessageId) {
-        findJob(userMessageId).start();
-    }
-
-    @Transactional
-    public AiMessage createReplyAndSucceed(Long conversationId, Long userMessageId, String content,
-                                           int progress, boolean inputLocked, LocalDateTime purgeAt) {
-        AiMessage reply = aiMessageService.createReplyAndUpdateRoom(
-                conversationId, userMessageId, content, progress, inputLocked, purgeAt);
-        findJob(userMessageId).succeed(now());
-        return reply;
-    }
-
-    @Transactional
     public AiReplyJobTakeResult take(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId) {
         Optional<AiReplyJob> found = aiReplyJobRepository.findByIdForUpdate(jobId);
         if (found.isEmpty()
