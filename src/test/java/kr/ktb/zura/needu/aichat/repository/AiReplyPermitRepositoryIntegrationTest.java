@@ -5,6 +5,7 @@ import java.util.stream.IntStream;
 
 import kr.ktb.zura.needu.aichat.config.AiReplyQueueConfig;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "ai.chat.reply-queue.global-max-concurrency=3",
         "ai.chat.reply-queue.permit-ttl=200ms"
 })
-@Import({AiReplyPermitRepository.class, AiReplyQueueConfig.class, RedisKeyGenerator.class})
+@Import({AiReplyPermitRepository.class, AiReplyQueueConfig.class, RedisKeyGenerator.class, StreamRedisConfig.class})
 class AiReplyPermitRepositoryIntegrationTest {
 
     private static final String KEY = "backend:test:aichat:reply-permits";
