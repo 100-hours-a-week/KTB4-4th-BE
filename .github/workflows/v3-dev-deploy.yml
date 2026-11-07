@@ -1,0 +1,166 @@
+
+name: Backend V3 Dev GitOps Deploy
+
+on:
+  workflow_call:
+    inputs:
+      image_sha:
+        description: "V3 Dev에 배포할 ECR 이미지의 Git SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v3-dev-backend-gitops
+  cancel-in-progress: false
+
+jobs:
+  gitops-pr:
+    name: Create V3 Dev GitOps PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ap-northeast-2
+      ECR_REPOSITORY: need-u/backend
+      GITOPS_REPOSITORY: 100-hours-a-week/KTB4-4th-GITOPS
+      GITOPS_FILE: environments/dev/backend-image.yaml
+
+    steps:
+      - name: Validate V3 Dev Image SHA
+        env:
+          IMAGE_SHA: ${{ inputs.image_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "V3 Dev 이미지 SHA는 40자리 Git SHA여야 합니다."
+            exit 1
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve V3 Dev ECR Image Digest
+        id: image
+        env:
+          IMAGE_SHA: ${{ inputs.image_sha }}
+        run: |
+          set -euo pipefail
+
+          IMAGE_TAG="v2-${IMAGE_SHA}"
+
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "유효하지 않은 ECR Image Digest: $DIGEST"
+            exit 1
+          fi
+
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          owner: 100-hours-a-week
+          repositories: KTB4-4th-GITOPS
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPOSITORY }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: main
+          path: gitops
+          persist-credentials: false
+
+      - name: Install yq
+        run: |
+          set -euo pipefail
+
+          YQ_VERSION=v4.45.4
+
+          curl -fsSL \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+            -o /tmp/yq
+
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
+
+          yq --version
+
+      - name: Update V3 Dev Backend Image
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          cd gitops
+
+          test -f "$GITOPS_FILE"
+
+          yq -i '.image.digest = strenv(IMAGE_DIGEST)' "$GITOPS_FILE"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' "$GITOPS_FILE"
+
+          git diff --check
+          git diff -- "$GITOPS_FILE"
+
+      - name: Create V3 Dev GitOps Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          path: gitops
+          base: main
+          branch: automation/v3-dev-backend-image
+          delete-branch: true
+          add-paths: environments/dev/backend-image.yaml
+          commit-message: "chore(v3-dev): update backend image"
+          title: "chore(v3-dev): update backend image"
+          body: |
+            ## 변경 내용
+            - V3 Dev Backend 이미지 Digest 업데이트
+            - ECR Tag: `${{ steps.image.outputs.tag }}`
+            - Image Digest: `${{ steps.image.outputs.digest }}`
+
+            ## 배포 영향
+            - 변경 환경: V3 Dev
+            - 변경 대상: auth-api, recommendation-api, social-api, ai-api
+            - GitOps PR 병합 후 Argo CD Auto Sync로 EKS 배포
+            - V2 ECS 배포에는 영향 없음
+
+            ## 검증
+            - [ ] GitOps 설정 검증
+            - [ ] Backend 4개 Deployment Rolling Update 확인
+            - [ ] 모든 Pod Ready 및 Image Digest 확인
+
+            ## 원본
+            - Backend Commit: `${{ inputs.image_sha }}`
+
+      - name: Print GitOps PR Result
+        if: steps.create-pr.outputs.pull-request-number != ''
+        env:
+          PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
+        run: |
+          echo "GitOps PR: $PR_URL"
+          echo "### V3 Dev GitOps PR" >> "$GITHUB_STEP_SUMMARY"
+          echo "$PR_URL" >> "$GITHUB_STEP_SUMMARY"
