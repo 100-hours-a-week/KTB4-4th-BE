@@ -11,6 +11,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "ai.chat.reply-queue")
 public record AiReplyQueueProperties(
         @Positive int globalMaxConcurrency,
-        @NotNull Duration permitTtl
+        @NotNull Duration permitTtl,
+        @Positive int maxDeliveries
 ) {
 }

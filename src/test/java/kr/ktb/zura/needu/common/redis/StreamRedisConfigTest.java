@@ -56,7 +56,8 @@ class StreamRedisConfigTest {
                     "ai.chat.lock.ttl=120s",
                     "ai.chat.lock.key-prefix=backend:test:aichat:lock",
                     "ai.chat.reply-queue.global-max-concurrency=96",
-                    "ai.chat.reply-queue.permit-ttl=30s"
+                    "ai.chat.reply-queue.permit-ttl=30s",
+                    "ai.chat.reply-queue.max-deliveries=3"
             );
 
     @Test

@@ -35,6 +35,8 @@ ai:
       global-max-concurrency: ${AI_CHAT_REPLY_GLOBAL_MAX_CONCURRENCY:96}
       # 워커가 연장하지 않으면 허가가 풀리는 시간이다. 죽은 워커가 반납하지 못한 허가는 이 시간이 지나면 다시 쓸 수 있다.
       permit-ttl: ${AI_CHAT_REPLY_PERMIT_TTL:30s}
+      # 같은 작업을 이 횟수보다 많이 할당받으면 더 처리하지 않고 실패로 닫는다. 처리할 때마다 서버를 죽이는 작업이 계속 돌지 않게 한다.
+      max-deliveries: ${AI_CHAT_REPLY_MAX_DELIVERIES:3}
 
 needu:
   user:
