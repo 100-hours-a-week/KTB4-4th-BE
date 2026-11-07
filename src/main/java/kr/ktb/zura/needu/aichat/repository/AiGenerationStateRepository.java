@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -24,7 +26,7 @@ public class AiGenerationStateRepository {
     private final Duration ttl;
 
     public AiGenerationStateRepository(
-            StringRedisTemplate redisTemplate,
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
             RedisKeyGenerator keyGenerator,
             @Value("${ai.chat.generation-ttl}") Duration ttl
     ) {

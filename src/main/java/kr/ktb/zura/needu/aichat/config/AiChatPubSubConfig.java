@@ -2,6 +2,8 @@ package kr.ktb.zura.needu.aichat.config;
 
 import kr.ktb.zura.needu.aichat.service.AiChatEventSubscriber;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,7 +18,7 @@ public class AiChatPubSubConfig {
 
     @Bean(autowireCandidate = false)
     public RedisMessageListenerContainer aiChatRedisMessageListenerContainer(
-            RedisConnectionFactory connectionFactory,
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_CONNECTION_FACTORY) RedisConnectionFactory connectionFactory,
             AiChatEventSubscriber subscriber,
             RedisKeyGenerator keyGenerator
     ) {
