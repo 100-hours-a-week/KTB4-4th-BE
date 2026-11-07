@@ -76,7 +76,7 @@ class AiReplyJobRepositoryTest {
     @Test
     void runningJobInRoom_existsByAiChatRoomIdAndStatusIn_returnsTrue() {
         AiReplyJob job = AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN);
-        job.start();
+        job.take(null);
         aiReplyJobRepository.saveAndFlush(job);
 
         assertThat(aiReplyJobRepository.existsByAiChatRoomIdAndStatusIn(room.getId(), UNFINISHED)).isTrue();
@@ -85,7 +85,7 @@ class AiReplyJobRepositoryTest {
     @Test
     void onlyFinishedJobsInRoom_existsByAiChatRoomIdAndStatusIn_returnsFalse() {
         AiReplyJob succeeded = AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN);
-        succeeded.start();
+        succeeded.take(null);
         succeeded.succeed(FINISHED_AT);
         AiReplyJob failed = AiReplyJob.create(room, 202L, USER_ID, LOCK_TOKEN);
         failed.fail("AICHAT_REQUEST_TIMEOUT", FINISHED_AT);

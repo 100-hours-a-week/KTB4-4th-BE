@@ -30,6 +30,12 @@ public class AiMessageService {
     }
 
     @Transactional(readOnly = true)
+    public AiMessage findMessage(Long messageId) {
+        return aiMessageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalStateException("AI message not found. messageId=" + messageId));
+    }
+
+    @Transactional(readOnly = true)
     public Optional<AiMessage> findReply(Long userMessageId) {
         return aiMessageRepository.findByReplyToMessageId(userMessageId);
     }
