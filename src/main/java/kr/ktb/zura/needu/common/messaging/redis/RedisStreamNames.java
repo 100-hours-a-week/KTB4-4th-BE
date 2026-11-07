@@ -10,4 +10,8 @@ final class RedisStreamNames {
     static String toStreamKey(RedisKeyGenerator keyGenerator, String topic) {
         return keyGenerator.generate("messaging", "stream", topic);
     }
+
+    static String toGroupName(String topic) {
+        return topic + "-workers";
+    }
 }

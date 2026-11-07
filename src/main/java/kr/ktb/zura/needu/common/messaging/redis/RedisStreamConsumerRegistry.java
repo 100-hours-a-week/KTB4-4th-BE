@@ -4,12 +4,21 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import kr.ktb.zura.needu.common.messaging.MessageConsumer;
 import kr.ktb.zura.needu.common.messaging.MessageConsumerRegistry;
+import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RedisStreamConsumerRegistry implements MessageConsumerRegistry {
 
     private final Map<String, MessageConsumer<?>> consumersByTopic = new ConcurrentHashMap<>();
+
+    private final RedisStreamRepository streamRepository;
+    private final RedisKeyGenerator keyGenerator;
+
+    RedisStreamConsumerRegistry(RedisStreamRepository streamRepository, RedisKeyGenerator keyGenerator) {
+        this.streamRepository = streamRepository;
+        this.keyGenerator = keyGenerator;
+    }
 
     @Override
     public void register(MessageConsumer<?> consumer) {
@@ -25,8 +34,10 @@ public class RedisStreamConsumerRegistry implements MessageConsumerRegistry {
         }
     }
 
-    private void createConsumerGroup(String streamKey) {
-        throw new UnsupportedOperationException("Not implemented yet.");
+    private void createConsumerGroup(String topic) {
+        streamRepository.createGroupIfAbsent(
+                RedisStreamNames.toStreamKey(keyGenerator, topic),
+                RedisStreamNames.toGroupName(topic));
     }
 
     private void acknowledge(String streamKey, String messageId) {

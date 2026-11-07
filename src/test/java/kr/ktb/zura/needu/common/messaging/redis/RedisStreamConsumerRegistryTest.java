@@ -2,13 +2,16 @@ package kr.ktb.zura.needu.common.messaging.redis;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import kr.ktb.zura.needu.common.messaging.MessageConsumer;
+import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import org.junit.jupiter.api.Test;
 
 class RedisStreamConsumerRegistryTest {
 
-    private final RedisStreamConsumerRegistry registry = new RedisStreamConsumerRegistry();
+    private final RedisStreamConsumerRegistry registry = new RedisStreamConsumerRegistry(
+            mock(RedisStreamRepository.class), new RedisKeyGenerator("backend:test"));
 
     @Test
     void register_registersConsumersOfDifferentTopics() {
