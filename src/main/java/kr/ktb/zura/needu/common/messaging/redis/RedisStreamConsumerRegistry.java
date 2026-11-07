@@ -39,16 +39,4 @@ public class RedisStreamConsumerRegistry implements MessageConsumerRegistry {
                 RedisStreamNames.toStreamKey(keyGenerator, topic),
                 RedisStreamNames.toGroupName(topic));
     }
-
-    private void acknowledge(String streamKey, String messageId) {
-        throw new UnsupportedOperationException("Not implemented yet.");
-    }
-
-    private void claimPendingMessages(String streamKey) {
-        throw new UnsupportedOperationException("Not implemented yet.");
-    }
-
-    private void moveToDeadLetter(String streamKey, String messageId) {
-        throw new UnsupportedOperationException("Not implemented yet.");
-    }
 }
