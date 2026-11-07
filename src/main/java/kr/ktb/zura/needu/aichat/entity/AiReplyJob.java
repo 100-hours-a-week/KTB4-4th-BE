@@ -98,11 +98,6 @@ public class AiReplyJob {
         return new AiReplyJob(aiChatRoom, userMessageId, userId, lockToken);
     }
 
-    public void start() {
-        validateStatus(AiReplyJobStatus.QUEUED, "start");
-        this.status = AiReplyJobStatus.RUNNING;
-    }
-
     public void take(String streamEntryId) {
         if (isFinished()) {
             throw invalidTransition("take");

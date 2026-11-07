@@ -74,6 +74,30 @@ class AiConversationLockTest {
     }
 
     @Test
+    void lockHeldWithSameToken_ensure_returnsTrue() {
+        given(lockRepository.ensure(CONVERSATION_ID, "owner-token"))
+                .willReturn(AiConversationLockRepository.EnsureResult.EXTENDED);
+
+        assertThat(aiConversationLock.ensure(new AiConversationLock.Handle(CONVERSATION_ID, "owner-token"))).isTrue();
+    }
+
+    @Test
+    void lockExpired_ensure_reacquiresAndReturnsTrue() {
+        given(lockRepository.ensure(CONVERSATION_ID, "owner-token"))
+                .willReturn(AiConversationLockRepository.EnsureResult.REACQUIRED);
+
+        assertThat(aiConversationLock.ensure(new AiConversationLock.Handle(CONVERSATION_ID, "owner-token"))).isTrue();
+    }
+
+    @Test
+    void lockHeldByAnotherTurn_ensure_returnsFalse() {
+        given(lockRepository.ensure(CONVERSATION_ID, "owner-token"))
+                .willReturn(AiConversationLockRepository.EnsureResult.HELD_BY_OTHER);
+
+        assertThat(aiConversationLock.ensure(new AiConversationLock.Handle(CONVERSATION_ID, "owner-token"))).isFalse();
+    }
+
+    @Test
     void heldLock_unlock_deletesWithOwnerToken() {
         AiConversationLock.Handle handle = new AiConversationLock.Handle(CONVERSATION_ID, "owner-token");
 

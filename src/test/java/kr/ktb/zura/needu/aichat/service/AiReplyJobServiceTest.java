@@ -213,42 +213,6 @@ class AiReplyJobServiceTest {
     }
 
     @Test
-    void queuedJob_startJob_becomesRunning() {
-        Long userMessageId = createUserMessageAndJob();
-
-        aiReplyJobService.startJob(userMessageId);
-
-        assertThat(findJob(userMessageId).getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
-    }
-
-    @Test
-    void runningJob_createReplyAndSucceed_savesReplyAndSucceedsJob() {
-        Long userMessageId = createUserMessageAndJob();
-        aiReplyJobService.startJob(userMessageId);
-
-        AiMessage reply = aiReplyJobService.createReplyAndSucceed(
-                roomId, userMessageId, AI_CONTENT, 20, false, PURGE_AT);
-
-        assertThat(aiMessageRepository.findByReplyToMessageId(userMessageId))
-                .get().extracting(AiMessage::getId).isEqualTo(reply.getId());
-        AiReplyJob job = findJob(userMessageId);
-        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.SUCCEEDED);
-        assertThat(job.getFinishedAt()).isNotNull();
-    }
-
-    @Test
-    void jobNotRunning_createReplyAndSucceed_throwsAndRollsBackReply() {
-        Long userMessageId = createUserMessageAndJob();
-
-        assertThatThrownBy(() -> aiReplyJobService.createReplyAndSucceed(
-                roomId, userMessageId, AI_CONTENT, 20, false, PURGE_AT))
-                .isInstanceOf(IllegalStateException.class);
-
-        assertThat(aiMessageRepository.findByReplyToMessageId(userMessageId)).isEmpty();
-        assertThat(findJob(userMessageId).getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
-    }
-
-    @Test
     void queuedJob_take_takesFirstAttemptWithUserMessage() {
         AiReplyJobDispatch dispatch = createJob();
 
