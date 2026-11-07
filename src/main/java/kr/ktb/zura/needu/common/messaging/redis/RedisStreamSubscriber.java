@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import kr.ktb.zura.needu.common.messaging.MessageConsumer;
 import kr.ktb.zura.needu.common.messaging.MessageSubscriber;
+import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import org.springframework.stereotype.Component;
 
 // 소비자 그룹으로 Redis Stream을 읽어 MessageConsumer에 넘긴다.
@@ -13,6 +14,14 @@ public class RedisStreamSubscriber implements MessageSubscriber {
 
     // topic마다 Consumer 하나만 둔다 => 같은 메시지를 어느 Consumer가 처리할지 모호하지 않게
     private final Map<String, MessageConsumer<?>> consumersByTopic = new ConcurrentHashMap<>();
+
+    private final RedisStreamRepository streamRepository;
+    private final RedisKeyGenerator keyGenerator;
+
+    RedisStreamSubscriber(RedisStreamRepository streamRepository, RedisKeyGenerator keyGenerator) {
+        this.streamRepository = streamRepository;
+        this.keyGenerator = keyGenerator;
+    }
 
     @Override
     public void subscribe(MessageConsumer<?> consumer) {
@@ -28,9 +37,11 @@ public class RedisStreamSubscriber implements MessageSubscriber {
         }
     }
 
-    // XGROUP CREATE ... MKSTREAM, 이미 있으면(BUSYGROUP) 무시한다
-    private void createConsumerGroup(String streamKey) {
-        throw new UnsupportedOperationException("Not implemented yet.");
+    // 읽기 루프 시작 시 topic마다 한 번 호출한다. 이미 있으면 그대로 둔다
+    private void createConsumerGroup(String topic) {
+        streamRepository.createGroupIfAbsent(
+                RedisStreamNames.toStreamKey(keyGenerator, topic),
+                RedisStreamNames.toGroupName(topic));
     }
 
     // XACK
