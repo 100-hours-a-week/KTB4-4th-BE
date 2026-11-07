@@ -48,6 +48,7 @@ import kr.ktb.zura.needu.aichat.service.AiChatStreamService;
 import kr.ktb.zura.needu.aichat.service.AiConversationLock;
 import kr.ktb.zura.needu.aichat.service.AiGenerationStateService;
 import kr.ktb.zura.needu.aichat.service.AiMessageService;
+import kr.ktb.zura.needu.aichat.service.AiReplyJobDispatch;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatAcceptedEvent;
@@ -126,6 +127,8 @@ class AiChatFacadeTest {
     private static final Map<String, Object> MEMORY = Map.of("schemaVersion", "1.0", "userId", USER_ID);
     private static final String LOCK_TOKEN = "lock-owner-token";
     private static final AiConversationLock.Handle LOCK_HANDLE = new AiConversationLock.Handle(ROOM_ID, LOCK_TOKEN);
+    private static final Long JOB_ID = 301L;
+    private static final String DISPATCH_TOKEN = "dispatch-token";
 
     @Mock
     private AiChatRoomService aiChatRoomService;
@@ -596,10 +599,12 @@ class AiChatFacadeTest {
 
     @Test
     void unansweredMessageWithoutJobInProgress_sendMessage_restartsJobAndRegeneratesReply() {
-        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID))
-                .willReturn(Optional.of(message(USER_MESSAGE_ID, null)));
+        AiMessage userMessage = message(USER_MESSAGE_ID, null);
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.of(userMessage));
         given(aiMessageService.findReply(USER_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiReplyJobService.isReplyInProgress(USER_MESSAGE_ID)).willReturn(false);
+        given(aiReplyJobService.restartJob(ROOM_ID, userMessage, USER_ID, LOCK_TOKEN))
+                .willReturn(new AiReplyJobDispatch(JOB_ID, DISPATCH_TOKEN, userMessage));
         given(streamMessageCall())
                 .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
         given(aiReplyJobService.createReplyAndSucceed(
@@ -611,7 +616,7 @@ class AiChatFacadeTest {
         assertThat(result.accepted()).isEqualTo(new AiMessageAcceptedResponse(USER_MESSAGE_ID, CLIENT_MESSAGE_ID));
         verify(aiReplyJobService, never()).createUserMessageAndJob(anyLong(), anyLong(), any(), any(), any());
         var order = inOrder(aiReplyJobService, aiChatClient);
-        order.verify(aiReplyJobService).restartJob(ROOM_ID, USER_MESSAGE_ID, USER_ID, LOCK_TOKEN);
+        order.verify(aiReplyJobService).restartJob(ROOM_ID, userMessage, USER_ID, LOCK_TOKEN);
         order.verify(aiReplyJobService).startJob(USER_MESSAGE_ID);
         order.verify(aiChatClient).streamMessage(eq(USER_ID), eq(ROOM_ID), eq(USER_MESSAGE_ID), eq(USER_CONTENT), any());
         order.verify(aiReplyJobService).createReplyAndSucceed(ROOM_ID, USER_MESSAGE_ID, AI_CONTENT, 5, false, PURGE_AT);
@@ -1365,7 +1370,7 @@ class AiChatFacadeTest {
     private void givenNewMessage() {
         given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
         given(aiReplyJobService.createUserMessageAndJob(ROOM_ID, USER_ID, CLIENT_MESSAGE_ID, USER_CONTENT, LOCK_TOKEN))
-                .willReturn(message(USER_MESSAGE_ID, null));
+                .willReturn(new AiReplyJobDispatch(JOB_ID, DISPATCH_TOKEN, message(USER_MESSAGE_ID, null)));
     }
 
     private void verifyInvalidResponseError() {

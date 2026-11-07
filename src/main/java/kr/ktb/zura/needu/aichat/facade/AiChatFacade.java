@@ -333,15 +333,15 @@ public class AiChatFacade {
                                    AiConversationLock.Handle lock) {
         log.info("AI reply regenerating for unanswered message. userId={}, conversationId={}, userMessageId={}",
                 userId, conversationId, userMessage.getId());
-        aiReplyJobService.restartJob(conversationId, userMessage.getId(), userId, lock.ownerToken());
-        return userMessage;
+        return aiReplyJobService.restartJob(conversationId, userMessage, userId, lock.ownerToken()).userMessage();
     }
 
     private AiMessage createUserMessage(Long userId, Long conversationId, SendMessageRequest request,
                                         AiConversationLock.Handle lock) {
         try {
             return aiReplyJobService.createUserMessageAndJob(
-                    conversationId, userId, request.clientMessageId(), request.content(), lock.ownerToken());
+                    conversationId, userId, request.clientMessageId(), request.content(), lock.ownerToken())
+                    .userMessage();
         } catch (DataIntegrityViolationException e) {
             // 다른 인스턴스가 같은 clientMessageId를 이미 처리 중 => 대화방 락이 막지 못하는 경우
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
