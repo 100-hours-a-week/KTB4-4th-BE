@@ -1,3 +1,4 @@
+
 name: Backend V3 GitOps Rollback
 
 on:
@@ -28,6 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      id-token: write
 
     env:
       AWS_REGION: ap-northeast-2
@@ -269,15 +274,15 @@ jobs:
           branch: automation/v3-${{ inputs.environment }}-backend-rollback
           delete-branch: true
           add-paths: ${{ env.GITOPS_FILE }}
-          commit-message: "revert(v3-${{ inputs.environment }}): rollback backend image"
-          title: "revert(v3-${{ inputs.environment }}): rollback backend image"
+          commit-message: "revert(v3-${{ inputs.environment }}): 백엔드 이미지 롤백"
+          title: "revert(v3-${{ inputs.environment }}): 백엔드 이미지 롤백"
           body: |
             ## 변경 내용
-            - V3 Backend GitOps 배포 변경 Revert
+            - V3 백엔드 GitOps 이미지 롤백
             - 대상 환경: `${{ inputs.environment }}`
-            - Rollback Commit: `${{ inputs.revert_commit }}`
-            - 복구 Image Tag: `${{ steps.image.outputs.tag }}`
-            - 복구 Image Digest: `${{ steps.image.outputs.digest }}`
+            - 롤백 대상 Commit: `${{ inputs.revert_commit }}`
+            - 복구 이미지 Tag: `${{ steps.image.outputs.tag }}`
+            - 복구 이미지 Digest: `${{ steps.image.outputs.digest }}`
 
             ## 배포 영향
             - auth-api
@@ -291,16 +296,16 @@ jobs:
             - Kubernetes Rolling Update
 
             ## 검증
-            - [ ] Rollback 대상 Commit 확인
-            - [ ] 이전 정상 Image Digest 확인
+            - [ ] 롤백 대상 Commit 확인
+            - [ ] 이전 정상 이미지 Digest 확인
             - [ ] GitOps CI 통과
-            - [ ] Backend 4개 Deployment Rolling Update 확인
+            - [ ] 백엔드 4개 Deployment Rolling Update 확인
             - [ ] Readiness Probe 정상
             - [ ] 주요 API Smoke Test 통과
 
             ## 주의 사항
             - 이 PR은 자동 병합하지 않습니다.
-            - PR 병합 전 다른 Backend 배포 PR이 없는지 확인합니다.
+            - PR 병합 전 다른 백엔드 배포 PR이 없는지 확인합니다.
             - Production은 승인 후 복구합니다.
 
       - name: Print Rollback PR Result

@@ -134,27 +134,27 @@ jobs:
           branch: automation/v3-dev-backend-image
           delete-branch: true
           add-paths: environments/dev/backend-image.yaml
-          commit-message: "chore(v3-dev): update backend image"
-          title: "chore(v3-dev): update backend image"
+          commit-message: "chore(v3-dev): 백엔드 이미지 업데이트"
+          title: "chore(v3-dev): 백엔드 이미지 업데이트"
           body: |
             ## 변경 내용
-            - V3 Dev Backend 이미지 Digest 업데이트
-            - ECR Tag: `${{ steps.image.outputs.tag }}`
-            - Image Digest: `${{ steps.image.outputs.digest }}`
+            - V3 Dev 백엔드 이미지 Tag 및 Digest 업데이트
+            - ECR 이미지 Tag: `${{ steps.image.outputs.tag }}`
+            - ECR 이미지 Digest: `${{ steps.image.outputs.digest }}`
 
             ## 배포 영향
-            - 변경 환경: V3 Dev
-            - 변경 대상: auth-api, recommendation-api, social-api, ai-api
+            - 대상 환경: V3 Dev
+            - 대상 서비스: auth-api, recommendation-api, social-api, ai-api
             - GitOps PR 병합 후 Argo CD Auto Sync로 EKS 배포
-            - V2 ECS 배포에는 영향 없음
+            - 기존 V2 ECS 배포에는 영향 없음
 
             ## 검증
             - [ ] GitOps 설정 검증
-            - [ ] Backend 4개 Deployment Rolling Update 확인
+            - [ ] 백엔드 4개 Deployment Rolling Update 확인
             - [ ] 모든 Pod Ready 및 Image Digest 확인
 
             ## 원본
-            - Backend Commit: `${{ inputs.image_sha }}`
+            - 백엔드 Commit: `${{ inputs.image_sha }}`
 
       - name: Print GitOps PR Result
         if: steps.create-pr.outputs.pull-request-number != ''
