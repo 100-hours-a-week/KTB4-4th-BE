@@ -12,6 +12,7 @@ import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 @Slf4j
@@ -21,6 +22,10 @@ class RedisStreamRepository {
     private static final String BUSY_GROUP_ERROR = "BUSYGROUP";
     private static final String NO_GROUP_ERROR = "NOGROUP";
     private static final ReadOffset GROUP_START_OFFSET = ReadOffset.from("0");
+    static final DefaultRedisScript<Long> ACKNOWLEDGE_AND_DELETE_SCRIPT = new DefaultRedisScript<>("""
+            redis.call('XACK', KEYS[1], ARGV[1], ARGV[2])
+            return redis.call('XDEL', KEYS[1], ARGV[2])
+            """, Long.class);
 
     private final StringRedisTemplate redisTemplate;
 
@@ -61,7 +66,7 @@ class RedisStreamRepository {
     }
 
     void acknowledgeAndDelete(String streamKey, String group, String messageId) {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        redisTemplate.execute(ACKNOWLEDGE_AND_DELETE_SCRIPT, List.of(streamKey), group, messageId);
     }
 
     private boolean isRedisError(DataAccessException exception, String errorPrefix) {
