@@ -103,6 +103,23 @@ public class AiReplyJob {
         this.status = AiReplyJobStatus.RUNNING;
     }
 
+    public void take(String streamEntryId) {
+        if (isFinished()) {
+            throw invalidTransition("take");
+        }
+        this.status = AiReplyJobStatus.RUNNING;
+        this.attempt++;
+        this.streamEntryId = streamEntryId;
+    }
+
+    public boolean isOwnedBy(int attempt) {
+        return status == AiReplyJobStatus.RUNNING && this.attempt == attempt;
+    }
+
+    public boolean isDispatchedWith(String dispatchToken) {
+        return this.dispatchToken.equals(dispatchToken);
+    }
+
     public void succeed(LocalDateTime finishedAt) {
         validateStatus(AiReplyJobStatus.RUNNING, "succeed");
         this.status = AiReplyJobStatus.SUCCEEDED;

@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 
 import kr.ktb.zura.needu.aichat.type.AiReplyJobStatus;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,6 +15,7 @@ class AiReplyJobTest {
     private static final String LOCK_TOKEN = "lock-token-1";
     private static final String NEW_LOCK_TOKEN = "lock-token-2";
     private static final String ERROR_CODE = "AICHAT_REQUEST_TIMEOUT";
+    private static final String STREAM_ENTRY_ID = "1730000000000-0";
     private static final LocalDateTime FINISHED_AT = LocalDateTime.of(2026, 11, 3, 12, 0);
 
     @Test
@@ -48,6 +48,64 @@ class AiReplyJobTest {
         AiReplyJob job = runningJob();
 
         assertThatThrownBy(job::start).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void queuedJob_take_becomesRunningWithFirstAttemptAndStreamEntryId() {
+        AiReplyJob job = queuedJob();
+
+        job.take(STREAM_ENTRY_ID);
+
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
+        assertThat(job.getAttempt()).isEqualTo(1);
+        assertThat(job.getStreamEntryId()).isEqualTo(STREAM_ENTRY_ID);
+    }
+
+    @Test
+    void runningJob_take_raisesAttempt() {
+        AiReplyJob job = runningJob();
+
+        job.take(STREAM_ENTRY_ID);
+
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
+        assertThat(job.getAttempt()).isEqualTo(2);
+    }
+
+    @Test
+    void succeededJob_take_throwsAndKeepsAttempt() {
+        AiReplyJob job = succeededJob();
+
+        assertThatThrownBy(() -> job.take(STREAM_ENTRY_ID)).isInstanceOf(IllegalStateException.class);
+        assertThat(job.getAttempt()).isEqualTo(1);
+    }
+
+    @Test
+    void failedJob_take_throws() {
+        AiReplyJob job = failedJob();
+
+        assertThatThrownBy(() -> job.take(STREAM_ENTRY_ID)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void runningJobWithSameAttempt_isOwnedBy_returnsTrue() {
+        AiReplyJob job = runningJob();
+
+        assertThat(job.isOwnedBy(1)).isTrue();
+    }
+
+    @Test
+    void runningJobTakenAgain_isOwnedBy_returnsFalseForPreviousAttempt() {
+        AiReplyJob job = runningJob();
+        job.take(STREAM_ENTRY_ID);
+
+        assertThat(job.isOwnedBy(1)).isFalse();
+    }
+
+    @Test
+    void succeededJob_isOwnedBy_returnsFalse() {
+        AiReplyJob job = succeededJob();
+
+        assertThat(job.isOwnedBy(1)).isFalse();
     }
 
     @Test
@@ -137,9 +195,9 @@ class AiReplyJobTest {
 
     @Test
     void failedJobWithAttempts_restart_keepsAttempt() {
-        AiReplyJob job = failedJob();
-        // 가져가기(attempt 증가)는 다음 작업에서 추가되므로 이미 두 번 가져간 상태를 직접 만든다
-        ReflectionTestUtils.setField(job, "attempt", 2);
+        AiReplyJob job = runningJob();
+        job.take(STREAM_ENTRY_ID);
+        job.fail(ERROR_CODE, FINISHED_AT);
 
         job.restart(NEW_LOCK_TOKEN);
 
@@ -167,7 +225,7 @@ class AiReplyJobTest {
 
     private static AiReplyJob runningJob() {
         AiReplyJob job = queuedJob();
-        job.start();
+        job.take(null);
         return job;
     }
 
