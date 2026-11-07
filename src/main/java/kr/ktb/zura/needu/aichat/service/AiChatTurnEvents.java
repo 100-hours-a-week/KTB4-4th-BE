@@ -28,6 +28,13 @@ public class AiChatTurnEvents {
         this.conversationId = conversationId;
     }
 
+    public static AiChatTurnEvents ofAcceptedTurn(AiChatEventPublisher publisher, Long conversationId,
+                                                  Long userMessageId) {
+        AiChatTurnEvents turnEvents = new AiChatTurnEvents(publisher, conversationId);
+        turnEvents.userMessageId = userMessageId;
+        return turnEvents;
+    }
+
     public void accept(Long userMessageId, UUID clientMessageId) {
         this.userMessageId = userMessageId;
         this.nextDeltaIndex = 0;
