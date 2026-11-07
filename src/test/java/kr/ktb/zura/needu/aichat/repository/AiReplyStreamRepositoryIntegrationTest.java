@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 // Lua와 스트림 명령의 실제 동작(처리 중 목록, 배달 횟수, 대기 시간)은 대역으로 검증할 수 없어 실제 Redis에서 확인한다
 @DataRedisTest
-@Import({AiReplyStreamRepository.class, RedisKeyGenerator.class})
+@Import({AiReplyStreamRepository.class, RedisKeyGenerator.class, StreamRedisConfig.class})
 class AiReplyStreamRepositoryIntegrationTest {
 
     private static final String KEY = "backend:test:aichat:reply-jobs";

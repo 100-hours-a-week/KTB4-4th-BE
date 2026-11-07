@@ -3,8 +3,10 @@ package kr.ktb.zura.needu.common.redis;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import kr.ktb.zura.needu.aichat.config.AiConversationLockConfig;
+import kr.ktb.zura.needu.aichat.config.AiReplyQueueConfig;
 import kr.ktb.zura.needu.aichat.repository.AiConversationLockRepository;
 import kr.ktb.zura.needu.aichat.repository.AiGenerationStateRepository;
+import kr.ktb.zura.needu.aichat.repository.AiReplyPermitRepository;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamRepository;
 import kr.ktb.zura.needu.aichat.service.AiChatEventPublisher;
 import kr.ktb.zura.needu.anonymouschat.service.AnonymousMessageEventPublisher;
@@ -34,12 +36,13 @@ class StreamRedisConfigTest {
                     PropertyPlaceholderAutoConfiguration.class,
                     DataRedisAutoConfiguration.class
             ))
-            .withUserConfiguration(StreamRedisConfig.class, AiConversationLockConfig.class)
+            .withUserConfiguration(StreamRedisConfig.class, AiConversationLockConfig.class, AiReplyQueueConfig.class)
             .withBean(JsonMapper.class, JsonMapper::new)
             .withBean(RedisKeyGenerator.class, () -> new RedisKeyGenerator("backend:test"))
             .withBean(AiReplyStreamRepository.class)
             .withBean(AiGenerationStateRepository.class)
             .withBean(AiConversationLockRepository.class)
+            .withBean(AiReplyPermitRepository.class)
             .withBean(AiChatEventPublisher.class)
             .withBean(NotificationEventPublisher.class)
             .withBean(AnonymousMessageEventPublisher.class)
@@ -51,7 +54,9 @@ class StreamRedisConfigTest {
                     "needu.stream-redis.timeout=2s",
                     "ai.chat.generation-ttl=120s",
                     "ai.chat.lock.ttl=120s",
-                    "ai.chat.lock.key-prefix=backend:test:aichat:lock"
+                    "ai.chat.lock.key-prefix=backend:test:aichat:lock",
+                    "ai.chat.reply-queue.global-max-concurrency=96",
+                    "ai.chat.reply-queue.permit-ttl=30s"
             );
 
     @Test
@@ -83,6 +88,7 @@ class StreamRedisConfigTest {
             assertThat(injectedHost(context, AiReplyStreamRepository.class)).isEqualTo(STREAM_HOST);
             assertThat(injectedHost(context, AiGenerationStateRepository.class)).isEqualTo(STREAM_HOST);
             assertThat(injectedHost(context, AiConversationLockRepository.class)).isEqualTo(STREAM_HOST);
+            assertThat(injectedHost(context, AiReplyPermitRepository.class)).isEqualTo(STREAM_HOST);
             assertThat(injectedHost(context, AiChatEventPublisher.class)).isEqualTo(STREAM_HOST);
             assertThat(injectedHost(context, NotificationEventPublisher.class)).isEqualTo(STREAM_HOST);
         });

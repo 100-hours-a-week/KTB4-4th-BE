@@ -4,6 +4,8 @@ import java.util.List;
 
 import kr.ktb.zura.needu.aichat.config.AiReplyQueueProperties;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
@@ -35,8 +37,11 @@ public class AiReplyPermitRepository {
     private final AiReplyQueueProperties properties;
     private final String key;
 
-    public AiReplyPermitRepository(StringRedisTemplate redisTemplate, RedisKeyGenerator keyGenerator,
-                                   AiReplyQueueProperties properties) {
+    public AiReplyPermitRepository(
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
+            RedisKeyGenerator keyGenerator,
+            AiReplyQueueProperties properties
+    ) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
         this.key = keyGenerator.generate("aichat", "reply-permits");
