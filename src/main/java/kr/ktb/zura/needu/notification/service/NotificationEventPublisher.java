@@ -1,7 +1,9 @@
 package kr.ktb.zura.needu.notification.service;
 
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
 import kr.ktb.zura.needu.notification.sse.NotificationRedisEvent;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -16,7 +18,7 @@ public class NotificationEventPublisher {
     private final RedisKeyGenerator keyGenerator;
 
     public NotificationEventPublisher(
-            StringRedisTemplate redisTemplate,
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
             JsonMapper jsonMapper,
             RedisKeyGenerator keyGenerator
     ) {
