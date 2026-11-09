@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.aichat.facade;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -892,6 +893,80 @@ class AiChatFacadeTest {
                 .isInstanceOf(TooManyRequestsException.class);
         verify(aiConversationLock).unlock(LOCK_HANDLE);
         verifyNoInteractions(aiReplyQueueService);
+    }
+
+    @Test
+    void jobTaken_replyToJob_attachesLeaseTargetAndReturnsFinished() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
+        given(aiReplyJobService.commitReply(JOB_ID, ATTEMPT, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(AiReplyCommitResult.saved(message(AI_MESSAGE_ID, USER_MESSAGE_ID)));
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.FINISHED);
+        assertThat(lease.target()).contains(new AiReplyLease.Target(ROOM_ID, USER_MESSAGE_ID, LOCK_TOKEN));
+    }
+
+    @Test
+    void leaseLostDuringReply_replyToJob_stopsWithoutRecordingFailureOrUnlock() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+        given(streamMessageCall()).willAnswer(invocation -> {
+            lease.markLost();
+            invocation.<Consumer<String>>getArgument(4).accept(AI_CONTENT);
+            return sendMessageResponse(AI_CONTENT);
+        });
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+        verify(aiReplyJobService, never()).commitReply(anyLong(), anyInt(), any(), anyInt(), anyBoolean(), any());
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.DELTA), any());
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+        verify(aiConversationLock, never()).unlock(any());
+    }
+
+    @Test
+    void commitRejectedByNewerAttempt_replyToJob_returnsOwnershipLost() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
+        given(aiReplyJobService.commitReply(JOB_ID, ATTEMPT, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(new AiReplyCommitResult(null));
+
+        assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
+                .isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+    }
+
+    @Test
+    void failureRecordRejected_replyToJob_returnsOwnershipLost() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+        given(aiReplyJobService.failTakenJob(JOB_ID, ATTEMPT, AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE.name()))
+                .willReturn(false);
+
+        assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
+                .isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+    }
+
+    @Test
+    void replyFailedAndRecorded_replyToJob_returnsFinished() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willThrow(new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE));
+
+        assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
+                .isEqualTo(AiReplyJobOutcome.FINISHED);
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
+    }
+
+    @Test
+    void staleJob_replyToJob_returnsFinished() {
+        givenTakeResult(finishedTakeResult(AiReplyJobTakeResult.Outcome.STALE));
+
+        assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
+                .isEqualTo(AiReplyJobOutcome.FINISHED);
     }
 
     @Test
