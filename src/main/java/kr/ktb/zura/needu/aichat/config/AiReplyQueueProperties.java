@@ -17,6 +17,7 @@ public record AiReplyQueueProperties(
         @NotNull Duration heartbeatInterval,
         @NotNull Duration claimMinIdle,
         @NotNull Duration claimInterval,
-        @NotNull Duration pollInterval
+        @NotNull Duration pollInterval,
+        @NotNull Duration turnInProgressRetryDelay
 ) {
 }

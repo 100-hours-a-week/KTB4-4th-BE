@@ -64,7 +64,8 @@ class AiReplyJobServiceTest {
         @Bean
         AiReplyQueueProperties aiReplyQueueProperties() {
             return new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), MAX_DELIVERIES,
-                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200));
+                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
+                    Duration.ofSeconds(2));
         }
     }
 
@@ -231,6 +232,22 @@ class AiReplyJobServiceTest {
         aiReplyJobService.recordStreamEntry(dispatch.jobId(), dispatch.dispatchToken(), STREAM_ENTRY_ID);
 
         assertThat(findJob(dispatch.userMessage().getId()).getStreamEntryId()).isNull();
+    }
+
+    @Test
+    void currentAttempt_isOwnedBy_returnsTrue() {
+        AiReplyJobTakeResult taken = takeNewJob();
+
+        assertThat(aiReplyJobService.isOwnedBy(taken.jobId(), taken.attempt())).isTrue();
+    }
+
+    @Test
+    void jobTakenByAnotherAttempt_isOwnedBy_returnsFalseForPreviousAttempt() {
+        AiReplyJobDispatch dispatch = createJob();
+        AiReplyJobTakeResult previous = take(dispatch, 1);
+        take(dispatch, 2);
+
+        assertThat(aiReplyJobService.isOwnedBy(previous.jobId(), previous.attempt())).isFalse();
     }
 
     @Test

@@ -251,7 +251,7 @@ class AiReplyWorkerTest {
 
     private AiReplyWorker createWorker(boolean enabled) {
         AiReplyQueueProperties properties = new AiReplyQueueProperties(enabled, 96, Duration.ofSeconds(30), 3,
-                HEARTBEAT_INTERVAL, CLAIM_MIN_IDLE, CLAIM_INTERVAL, Duration.ofMillis(200));
+                HEARTBEAT_INTERVAL, CLAIM_MIN_IDLE, CLAIM_INTERVAL, Duration.ofMillis(200), Duration.ofSeconds(2));
         return new AiReplyWorker(aiChatFacade, aiReplyQueueService, aiReplyTaskExecutor, aiConversationLock,
                 aiGenerationStateService, properties, new AiReplyConsumerName(CONSUMER), clock);
     }
