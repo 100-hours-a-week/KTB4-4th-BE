@@ -139,6 +139,15 @@ public class AiReplyJob {
         this.finishedAt = null;
     }
 
+    public void redispatch() {
+        if (isFinished()) {
+            throw invalidTransition("redispatch");
+        }
+        this.status = AiReplyJobStatus.QUEUED;
+        this.dispatchToken = newDispatchToken();
+        this.streamEntryId = null;
+    }
+
     public boolean isFinished() {
         return status == AiReplyJobStatus.SUCCEEDED || status == AiReplyJobStatus.FAILED;
     }

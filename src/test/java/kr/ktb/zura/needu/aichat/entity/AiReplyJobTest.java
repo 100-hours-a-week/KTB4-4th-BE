@@ -203,6 +203,49 @@ class AiReplyJobTest {
         assertThatThrownBy(() -> job.restart(NEW_LOCK_TOKEN)).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void runningJob_redispatch_becomesQueuedWithNewDispatchTokenAndKeepsAttempt() {
+        AiReplyJob job = queuedJob();
+        job.take(STREAM_ENTRY_ID);
+        String previousDispatchToken = job.getDispatchToken();
+
+        job.redispatch();
+
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
+        assertThat(job.getDispatchToken()).isNotBlank().isNotEqualTo(previousDispatchToken);
+        assertThat(job.getStreamEntryId()).isNull();
+        assertThat(job.getAttempt()).isEqualTo(1);
+    }
+
+    @Test
+    void queuedJob_redispatch_changesDispatchToken() {
+        AiReplyJob job = queuedJob();
+        String previousDispatchToken = job.getDispatchToken();
+
+        job.redispatch();
+
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
+        assertThat(job.getDispatchToken()).isNotEqualTo(previousDispatchToken);
+    }
+
+    @Test
+    void succeededJob_redispatch_throwsAndKeepsDispatchToken() {
+        AiReplyJob job = succeededJob();
+        String dispatchToken = job.getDispatchToken();
+
+        assertThatThrownBy(job::redispatch).isInstanceOf(IllegalStateException.class);
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.SUCCEEDED);
+        assertThat(job.getDispatchToken()).isEqualTo(dispatchToken);
+    }
+
+    @Test
+    void failedJob_redispatch_throws() {
+        AiReplyJob job = failedJob();
+
+        assertThatThrownBy(job::redispatch).isInstanceOf(IllegalStateException.class);
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.FAILED);
+    }
+
     private static AiReplyJob queuedJob() {
         return AiReplyJob.create(AiChatRoom.reserve(USER_ID), USER_MESSAGE_ID, USER_ID, LOCK_TOKEN);
     }
