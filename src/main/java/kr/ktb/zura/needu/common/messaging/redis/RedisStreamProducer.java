@@ -7,6 +7,7 @@ import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.RedisStreamCommands.TrimOptions;
 import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -47,13 +48,13 @@ public class RedisStreamProducer implements MessageProducer {
         RecordId recordId = redisTemplate.opsForStream().add(
                 streamKey,
                 Map.of(PAYLOAD_FIELD, serialize(payload)),
-                XAddOptions.maxlen(maxLength).approximateTrimming(true)
+                XAddOptions.trim(TrimOptions.maxLen(maxLength).approximate())
         );
         log.debug("Stream message published. topic={}, recordId={}", topic, recordId);
     }
 
     private String toStreamKey(String topic) {
-        return keyGenerator.generate("messaging", "stream", topic);
+        return RedisStreamNames.toStreamKey(keyGenerator, topic);
     }
 
     private String serialize(Object payload) {
