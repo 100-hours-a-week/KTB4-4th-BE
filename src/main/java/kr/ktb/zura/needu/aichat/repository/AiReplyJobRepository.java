@@ -31,8 +31,7 @@ public interface AiReplyJobRepository extends JpaRepository<AiReplyJob, Long> {
 
     boolean existsByAiChatRoomIdAndStatusIn(Long aiChatRoomId, Collection<AiReplyJobStatus> statuses);
 
-    boolean existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
-            Long aiChatRoomId, Collection<AiReplyJobStatus> statuses, LocalDateTime updatedAt);
+    List<AiReplyJob> findAllByAiChatRoomIdAndStatusIn(Long aiChatRoomId, Collection<AiReplyJobStatus> statuses);
 
     List<AiReplyJob> findAllByStatusInAndUpdatedAtBeforeOrderByIdAsc(
             Collection<AiReplyJobStatus> statuses, LocalDateTime updatedAt, Limit limit);

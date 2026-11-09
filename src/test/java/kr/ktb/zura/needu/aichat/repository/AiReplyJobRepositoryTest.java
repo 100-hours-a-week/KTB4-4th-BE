@@ -103,19 +103,18 @@ class AiReplyJobRepositoryTest {
     }
 
     @Test
-    void unfinishedJobUpdatedAfterTime_existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter_returnsTrue() {
-        AiReplyJob job = aiReplyJobRepository.saveAndFlush(AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN));
+    void unfinishedAndFinishedJobsInRooms_findAllByAiChatRoomIdAndStatusIn_returnsOnlyUnfinishedJobsInRoom() {
+        AiReplyJob queued = AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN);
+        AiReplyJob succeeded = AiReplyJob.create(room, 202L, USER_ID, LOCK_TOKEN);
+        succeeded.take(null);
+        succeeded.succeed(FINISHED_AT);
+        AiChatRoom otherRoom = entityManager.persistAndFlush(AiChatRoom.reserve(OTHER_USER_ID));
+        AiReplyJob otherRoomJob = AiReplyJob.create(otherRoom, 301L, OTHER_USER_ID, LOCK_TOKEN);
+        aiReplyJobRepository.saveAllAndFlush(List.of(queued, succeeded, otherRoomJob));
 
-        assertThat(aiReplyJobRepository.existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
-                room.getId(), UNFINISHED, job.getUpdatedAt().minusSeconds(1))).isTrue();
-    }
-
-    @Test
-    void unfinishedJobNotUpdatedAfterTime_existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter_returnsFalse() {
-        AiReplyJob job = aiReplyJobRepository.saveAndFlush(AiReplyJob.create(room, 201L, USER_ID, LOCK_TOKEN));
-
-        assertThat(aiReplyJobRepository.existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
-                room.getId(), UNFINISHED, job.getUpdatedAt())).isFalse();
+        assertThat(aiReplyJobRepository.findAllByAiChatRoomIdAndStatusIn(room.getId(), UNFINISHED))
+                .extracting(AiReplyJob::getUserMessageId)
+                .containsExactly(201L);
     }
 
     @Test
