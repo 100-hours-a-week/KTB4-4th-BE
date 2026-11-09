@@ -39,6 +39,14 @@ ai:
       permit-ttl: ${AI_CHAT_REPLY_PERMIT_TTL:30s}
       # 같은 작업을 이 횟수보다 많이 할당받으면 더 처리하지 않고 실패로 닫는다. 처리할 때마다 서버를 죽이는 작업이 계속 돌지 않게 한다.
       max-deliveries: ${AI_CHAT_REPLY_MAX_DELIVERIES:3}
+      # 처리 중인 워커가 작업·대화방 락·생성 중 표시·전역 허가를 연장하는 주기다. 회수 기준의 1/6로 둬 한두 번 늦어도 회수되지 않게 한다.
+      heartbeat-interval: ${AI_CHAT_REPLY_HEARTBEAT_INTERVAL:5s}
+      # 이 시간 동안 하트비트가 없는 작업은 처리하던 워커가 멈춘 것으로 보고 다른 워커가 회수한다.
+      claim-min-idle: ${AI_CHAT_REPLY_CLAIM_MIN_IDLE:30s}
+      # 워커가 멈춘 작업을 회수하러 확인하는 주기다.
+      claim-interval: ${AI_CHAT_REPLY_CLAIM_INTERVAL:5s}
+      # 꺼낼 작업이나 처리할 자리가 없을 때 다시 확인하기까지 쉬는 시간이다.
+      poll-interval: ${AI_CHAT_REPLY_POLL_INTERVAL:200ms}
 
 needu:
   messaging:

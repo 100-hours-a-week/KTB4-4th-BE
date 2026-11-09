@@ -63,7 +63,8 @@ class AiReplyJobServiceTest {
 
         @Bean
         AiReplyQueueProperties aiReplyQueueProperties() {
-            return new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), MAX_DELIVERIES);
+            return new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), MAX_DELIVERIES,
+                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200));
         }
     }
 
