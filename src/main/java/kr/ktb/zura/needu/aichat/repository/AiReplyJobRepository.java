@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.entity.AiReplyJob;
 import kr.ktb.zura.needu.aichat.type.AiReplyJobStatus;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -32,6 +33,9 @@ public interface AiReplyJobRepository extends JpaRepository<AiReplyJob, Long> {
 
     boolean existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
             Long aiChatRoomId, Collection<AiReplyJobStatus> statuses, LocalDateTime updatedAt);
+
+    List<AiReplyJob> findAllByStatusInAndUpdatedAtBeforeOrderByIdAsc(
+            Collection<AiReplyJobStatus> statuses, LocalDateTime updatedAt, Limit limit);
 
     @Modifying
     @Query("delete from AiReplyJob j where j.aiChatRoom.id in :aiChatRoomIds")

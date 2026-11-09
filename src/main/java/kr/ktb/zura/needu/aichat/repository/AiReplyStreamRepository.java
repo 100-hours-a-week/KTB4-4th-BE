@@ -159,7 +159,14 @@ public class AiReplyStreamRepository {
     }
 
     public boolean isPending(String entryId) {
-        return !redisTemplate.opsForStream().pending(key, GROUP, Range.closed(entryId, entryId), 1).isEmpty();
+        try {
+            return !redisTemplate.opsForStream().pending(key, GROUP, Range.closed(entryId, entryId), 1).isEmpty();
+        } catch (DataAccessException e) {
+            if (!isRedisError(e, NO_GROUP_ERROR)) {
+                throw e;
+            }
+            return false;
+        }
     }
 
     public boolean exists(String entryId) {

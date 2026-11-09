@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.aichat.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 
@@ -47,6 +48,7 @@ class AiReplyJobServiceTest {
     private static final LocalDateTime LONG_AGO = LocalDateTime.of(2026, 1, 1, 0, 0);
     private static final int MAX_DELIVERIES = 3;
     private static final String STREAM_ENTRY_ID = "1730000000000-0";
+    private static final Duration STALE_AFTER = Duration.ofSeconds(15);
 
     @TestConfiguration
     static class Config {
@@ -435,6 +437,78 @@ class AiReplyJobServiceTest {
 
     private Long createUserMessageAndJob() {
         return createJob().userMessage().getId();
+    }
+
+    @Test
+    void staleAndFreshJobs_findAllStaleJobs_returnsOnlyStaleUnfinishedJobsInIdOrder() {
+        AiReplyJobDispatch staleQueued = createJob();
+        AiReplyJobDispatch staleRunning = createJob();
+        take(staleRunning, 1);
+        AiReplyJobDispatch staleSucceeded = createJob();
+        commit(take(staleSucceeded, 1));
+        createJob();
+        markUpdatedLongAgo(staleQueued.userMessage().getId());
+        markUpdatedLongAgo(staleRunning.userMessage().getId());
+        markUpdatedLongAgo(staleSucceeded.userMessage().getId());
+
+        assertThat(aiReplyJobService.findAllStaleJobs(STALE_AFTER))
+                .extracting(AiReplyJob::getId)
+                .containsExactly(staleQueued.jobId(), staleRunning.jobId());
+    }
+
+    @Test
+    void runningJobUnchangedSinceLookup_redispatch_queuesWithNewDispatchTokenAndKeepsAttempt() {
+        AiReplyJobDispatch dispatch = createJob();
+        take(dispatch, 1);
+
+        Optional<String> dispatchToken = aiReplyJobService.redispatch(
+                dispatch.jobId(), dispatch.dispatchToken(), AiReplyJobStatus.RUNNING);
+
+        AiReplyJob job = findJob(dispatch.userMessage().getId());
+        assertThat(dispatchToken).contains(job.getDispatchToken());
+        assertThat(job.getDispatchToken()).isNotEqualTo(dispatch.dispatchToken());
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
+        assertThat(job.getStreamEntryId()).isNull();
+        assertThat(job.getAttempt()).isEqualTo(1);
+    }
+
+    @Test
+    void jobTakenAfterLookup_redispatch_keepsRunningJob() {
+        AiReplyJobDispatch dispatch = createJob();
+        take(dispatch, 1);
+
+        Optional<String> dispatchToken = aiReplyJobService.redispatch(
+                dispatch.jobId(), dispatch.dispatchToken(), AiReplyJobStatus.QUEUED);
+
+        assertThat(dispatchToken).isEmpty();
+        AiReplyJob job = findJob(dispatch.userMessage().getId());
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
+        assertThat(job.getDispatchToken()).isEqualTo(dispatch.dispatchToken());
+    }
+
+    @Test
+    void jobAlreadyRedispatched_redispatch_keepsLatestDispatchToken() {
+        AiReplyJobDispatch dispatch = createJob();
+        String latestToken = aiReplyJobService.redispatch(
+                dispatch.jobId(), dispatch.dispatchToken(), AiReplyJobStatus.QUEUED).orElseThrow();
+
+        Optional<String> dispatchToken = aiReplyJobService.redispatch(
+                dispatch.jobId(), dispatch.dispatchToken(), AiReplyJobStatus.QUEUED);
+
+        assertThat(dispatchToken).isEmpty();
+        assertThat(findJob(dispatch.userMessage().getId()).getDispatchToken()).isEqualTo(latestToken);
+    }
+
+    @Test
+    void jobFinishedAfterLookup_redispatch_keepsSucceededJob() {
+        AiReplyJobDispatch dispatch = createJob();
+        commit(take(dispatch, 1));
+
+        Optional<String> dispatchToken = aiReplyJobService.redispatch(
+                dispatch.jobId(), dispatch.dispatchToken(), AiReplyJobStatus.RUNNING);
+
+        assertThat(dispatchToken).isEmpty();
+        assertThat(findJob(dispatch.userMessage().getId()).getStatus()).isEqualTo(AiReplyJobStatus.SUCCEEDED);
     }
 
     private AiReplyJobDispatch createJob() {

@@ -80,6 +80,16 @@ class AiReplyStreamRepositoryIntegrationTest {
     }
 
     @Test
+    void groupLostWithRedisData_isPending_returnsFalse() {
+        String entryId = repository.add(42L, DISPATCH_TOKEN);
+        repository.readNew(WORKER_A);
+        redisTemplate.delete(KEY);
+
+        assertThat(repository.isPending(entryId)).isFalse();
+        assertThat(repository.exists(entryId)).isFalse();
+    }
+
+    @Test
     void groupLostWithRedisData_readNew_recreatesGroupAndReturnsEmpty() {
         redisTemplate.delete(KEY);
 
