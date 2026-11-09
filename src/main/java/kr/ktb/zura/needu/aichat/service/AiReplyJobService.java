@@ -95,6 +95,13 @@ public class AiReplyJobService {
         aiReplyJobRepository.updateStreamEntryId(jobId, dispatchToken, streamEntryId);
     }
 
+    @Transactional(readOnly = true)
+    public boolean isOwnedBy(Long jobId, int attempt) {
+        return aiReplyJobRepository.findById(jobId)
+                .filter(job -> job.isOwnedBy(attempt))
+                .isPresent();
+    }
+
     @Transactional
     public AiReplyJobTakeResult take(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId) {
         Optional<AiReplyJob> found = aiReplyJobRepository.findByIdForUpdate(jobId);
