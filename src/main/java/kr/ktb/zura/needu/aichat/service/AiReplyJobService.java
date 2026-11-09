@@ -15,6 +15,7 @@ import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiReplyJobRepository;
 import kr.ktb.zura.needu.aichat.type.AiReplyJobStatus;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,7 @@ public class AiReplyJobService {
     static final String MAX_DELIVERIES_EXCEEDED_ERROR_CODE = "AICHAT_REPLY_MAX_DELIVERIES_EXCEEDED";
     private static final List<AiReplyJobStatus> UNFINISHED_STATUSES =
             List.of(AiReplyJobStatus.QUEUED, AiReplyJobStatus.RUNNING);
+    private static final Limit RECONCILE_BATCH_LIMIT = Limit.of(100);
 
     private final AiReplyJobRepository aiReplyJobRepository;
     private final AiChatRoomRepository aiChatRoomRepository;
@@ -93,6 +95,26 @@ public class AiReplyJobService {
     @Transactional
     public void recordStreamEntry(Long jobId, String dispatchToken, String streamEntryId) {
         aiReplyJobRepository.updateStreamEntryId(jobId, dispatchToken, streamEntryId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AiReplyJob> findAllStaleJobs(Duration staleAfter) {
+        return aiReplyJobRepository.findAllByStatusInAndUpdatedAtBeforeOrderByIdAsc(
+                UNFINISHED_STATUSES, now().minus(staleAfter), RECONCILE_BATCH_LIMIT);
+    }
+
+    // 조회한 뒤 워커가 가져가거나 끝냈으면 그 처리를 그대로 둔다
+    @Transactional
+    public Optional<String> redispatch(Long jobId, String dispatchToken, AiReplyJobStatus status) {
+        Optional<AiReplyJob> found = aiReplyJobRepository.findByIdForUpdate(jobId);
+        if (found.isEmpty() || !found.get().isDispatchedWith(dispatchToken) || found.get().getStatus() != status) {
+            return Optional.empty();
+        }
+        AiReplyJob job = found.get();
+        job.redispatch();
+        log.warn("AI reply job redispatched. jobId={}, attempt={}, conversationId={}, userMessageId={}, previousStatus={}",
+                jobId, job.getAttempt(), job.getAiChatRoom().getId(), job.getUserMessageId(), status);
+        return Optional.of(job.getDispatchToken());
     }
 
     @Transactional(readOnly = true)
