@@ -1,13 +1,16 @@
 package kr.ktb.zura.needu.aichat.service;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.aichat.config.AiReplyQueueProperties;
+import kr.ktb.zura.needu.aichat.entity.AiReplyJob;
 import kr.ktb.zura.needu.aichat.repository.AiReplyHeartbeatResult;
 import kr.ktb.zura.needu.aichat.repository.AiReplyPermitRepository;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamClaimResult;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamEntry;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamRepository;
+import kr.ktb.zura.needu.aichat.type.AiReplyJobStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,31 @@ public class AiReplyQueueService {
         } catch (RuntimeException e) {
             log.warn("AI reply stream entry record failed. jobId={}, streamEntryId={}", jobId, streamEntryId, e);
         }
+    }
+
+    public void redispatchLostJobs(Duration staleAfter) {
+        try {
+            for (AiReplyJob job : aiReplyJobService.findAllStaleJobs(staleAfter)) {
+                if (isLostFromStream(job)) {
+                    redispatch(job);
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("AI reply job reconcile stopped.", e);
+        }
+    }
+
+    private boolean isLostFromStream(AiReplyJob job) {
+        String streamEntryId = job.getStreamEntryId();
+        if (job.getStatus() == AiReplyJobStatus.QUEUED) {
+            return streamEntryId == null || !aiReplyStreamRepository.exists(streamEntryId);
+        }
+        return streamEntryId != null && !aiReplyStreamRepository.isPending(streamEntryId);
+    }
+
+    private void redispatch(AiReplyJob job) {
+        aiReplyJobService.redispatch(job.getId(), job.getDispatchToken(), job.getStatus())
+                .ifPresent(dispatchToken -> enqueue(job.getId(), dispatchToken));
     }
 
     public void createGroupIfAbsent() {
