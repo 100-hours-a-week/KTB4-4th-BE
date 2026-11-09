@@ -34,8 +34,20 @@ needu:
   messaging:
     stream:
       # 스트림 하나에 남겨 두는 최대 엔트리 수다(근사값). 넘으면 오래된 것부터 지워지고, ACK 전 메시지도 함께 지워진다.
-      # 생일 배치 하루치(수신자 89만 명 / 500명 묶음 = 약 1,800개)보다 넉넉히 둔다
-      max-length: ${MESSAGING_STREAM_MAX_LENGTH:100000}
+      # 처리된 메시지는 ACK와 함께 지우므로 남는 건 밀린 메시지뿐이다.
+      # 생일 배치 하루치(수신자 89만 명 / 500명 묶음 = 약 1,800개)의 5배 정도로 둔다
+      max-length: ${MESSAGING_STREAM_MAX_LENGTH:10000}
+      worker:
+        # 이 인스턴스에서 스트림 메시지를 읽어 처리할지 정한다. 끄면 발행만 하고 소비하지 않는다.
+        enabled: ${MESSAGING_STREAM_WORKER_ENABLED:true}
+        # topic 하나당 동시에 처리하는 메시지 수다. 비어 있는 슬롯 수만큼만 읽어 와 처리하지 못할 만큼 가져가지 않는다.
+        concurrency: ${MESSAGING_STREAM_WORKER_CONCURRENCY:8}
+        # 한 번에 읽어 오는 최대 메시지 수다. 실제로는 비어 있는 슬롯 수와 이 값 중 작은 만큼 읽는다.
+        max-read-count: ${MESSAGING_STREAM_WORKER_MAX_READ_COUNT:10}
+        # 읽을 메시지가 없거나 Redis 오류가 났을 때 다시 읽기 전까지 쉬는 시간이다.
+        poll-interval: ${MESSAGING_STREAM_WORKER_POLL_INTERVAL:500ms}
+        # 서버 종료 시 처리 중인 메시지를 기다리는 시간이다. 지나면 중단하고, 중단된 메시지는 ACK 전이라 다시 처리된다. ECS stopTimeout보다 짧게 둔다.
+        shutdown-timeout: ${MESSAGING_STREAM_WORKER_SHUTDOWN_TIMEOUT:20s}
   user:
     withdrawal:
       lock-ttl: ${USER_WITHDRAWAL_LOCK_TTL:120s}
