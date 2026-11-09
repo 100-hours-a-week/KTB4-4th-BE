@@ -136,12 +136,15 @@ class AiChatFacadeTest {
     private static final Long JOB_ID = 301L;
     private static final String DISPATCH_TOKEN = "dispatch-token";
     private static final int ATTEMPT = 1;
+    private static final Duration TURN_RETRY_DELAY = Duration.ofMillis(10);
     private static final AiReplyQueueProperties QUEUE_DISABLED =
             new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), 3,
-                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200));
+                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
+                    TURN_RETRY_DELAY);
     private static final AiReplyQueueProperties QUEUE_ENABLED =
             new AiReplyQueueProperties(true, 96, Duration.ofSeconds(30), 3,
-                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200));
+                    Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
+                    TURN_RETRY_DELAY);
 
     @Mock
     private AiChatRoomService aiChatRoomService;

@@ -61,7 +61,8 @@ class StreamRedisConfigTest {
                     "ai.chat.reply-queue.heartbeat-interval=5s",
                     "ai.chat.reply-queue.claim-min-idle=30s",
                     "ai.chat.reply-queue.claim-interval=5s",
-                    "ai.chat.reply-queue.poll-interval=200ms"
+                    "ai.chat.reply-queue.poll-interval=200ms",
+                    "ai.chat.reply-queue.turn-in-progress-retry-delay=2s"
             );
 
     @Test
