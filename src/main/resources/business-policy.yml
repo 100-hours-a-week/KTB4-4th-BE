@@ -49,6 +49,12 @@ ai:
       poll-interval: ${AI_CHAT_REPLY_POLL_INTERVAL:200ms}
       # 회수한 작업을 AI 서버가 "같은 대화 처리 중"으로 거절하면 이만큼 기다렸다 다시 부른다. 다시 부를 때마다 두 배로 늘린다.
       turn-in-progress-retry-delay: ${AI_CHAT_REPLY_TURN_IN_PROGRESS_RETRY_DELAY:2s}
+      # 스트림에서 빠진 작업을 DB 기준으로 다시 넣는 스케줄러의 실행 주기다. 인스턴스 하나에서만 돈다.
+      reconcile-interval: ${AI_CHAT_REPLY_RECONCILE_INTERVAL:10s}
+      # 이 시간 넘게 갱신이 없는 대기·처리 중 작업만 스트림에 남아 있는지 확인한다. 접수 직후 기록 전인 작업을 건드리지 않게 한다.
+      reconcile-stale-after: ${AI_CHAT_REPLY_RECONCILE_STALE_AFTER:15s}
+      reconcile-lock-at-most-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_MOST_FOR:1m}
+      reconcile-lock-at-least-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_LEAST_FOR:5s}
 
 needu:
   messaging:
