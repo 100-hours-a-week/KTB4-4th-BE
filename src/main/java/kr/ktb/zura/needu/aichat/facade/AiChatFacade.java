@@ -283,7 +283,7 @@ public class AiChatFacade {
     // 지금 경로는 접수한 서버가 바로 첫 할당으로 처리
     private void replyInBackground(Long conversationId, AiReplyJobDispatch dispatch, AiConversationLock.Handle lock) {
         try {
-            replyToJob(dispatch.jobId(), dispatch.dispatchToken(), FIRST_DELIVERY, null);
+            replyToJob(dispatch.jobId(), dispatch.dispatchToken(), FIRST_DELIVERY, null, AiReplyLease.unmanaged());
         } catch (RuntimeException e) {
             Long userMessageId = dispatch.userMessage().getId();
             log.error("AI reply job take failed. conversationId={}, userMessageId={}", conversationId, userMessageId, e);
@@ -293,14 +293,27 @@ public class AiChatFacade {
     }
 
     // 큐 워커도 이 메서드로 작업 하나를 처리 => 두 경로가 같은 저장 규칙을 사용하도록
-    private void replyToJob(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId) {
+    public AiReplyJobOutcome replyToJob(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId,
+                                        AiReplyLease lease) {
         AiReplyJobTakeResult job = aiReplyJobService.take(jobId, dispatchToken, deliveryCount, streamEntryId);
-        switch (job.outcome()) {
-            case STALE -> log.info("AI reply job stale. jobId={}", jobId);
-            case ALREADY_SUCCEEDED -> finishSucceededJob(job);
-            case GAVE_UP -> finishGivenUpJob(job);
-            case TAKEN -> generateJobReply(job);
-        }
+        return switch (job.outcome()) {
+            case STALE -> {
+                log.info("AI reply job stale. jobId={}", jobId);
+                yield AiReplyJobOutcome.FINISHED;
+            }
+            case ALREADY_SUCCEEDED -> {
+                finishSucceededJob(job);
+                yield AiReplyJobOutcome.FINISHED;
+            }
+            case GAVE_UP -> {
+                finishGivenUpJob(job);
+                yield AiReplyJobOutcome.FINISHED;
+            }
+            case TAKEN -> {
+                lease.attach(job.conversationId(), job.userMessageId(), job.lockToken());
+                yield generateJobReply(job, lease);
+            }
+        };
     }
 
     private void finishSucceededJob(AiReplyJobTakeResult job) {
@@ -318,7 +331,7 @@ public class AiChatFacade {
                 .fail(new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE));
     }
 
-    private void generateJobReply(AiReplyJobTakeResult job) {
+    private AiReplyJobOutcome generateJobReply(AiReplyJobTakeResult job, AiReplyLease lease) {
         Long conversationId = job.conversationId();
         Long userMessageId = job.userMessageId();
         AiConversationLock.Handle lock = toLock(job);
@@ -329,24 +342,39 @@ public class AiChatFacade {
                 // 다른 턴이 대화방 락을 잡음 => 그 턴의 락과 생성 중 표시는 건드리지 않는다
                 log.info("AI reply lock held by another turn. jobId={}, conversationId={}, userMessageId={}",
                         job.jobId(), conversationId, userMessageId);
-                recordTakenJobFailure(job, LOCK_LOST_ERROR_CODE);
-                return;
+                return toOutcome(recordTakenJobFailure(job, LOCK_LOST_ERROR_CODE));
             }
             turnEvents.accept(userMessageId, job.userMessage().getClientMessageId());
             aiChatRoomService.validateMessageSendableRoom(job.userId(), conversationId);
-            AiServerSendMessageResponse response = requestReply(
-                    job.userId(), conversationId, job.userMessage(), turnEvents::publishDelta);
+            AiServerSendMessageResponse response = requestReply(job.userId(), conversationId, job.userMessage(),
+                    text -> publishDeltaWhileLeased(turnEvents, lease, text));
             committed = commitReply(job, response);
         } catch (RuntimeException e) {
             Thread.interrupted();
-            failJobReply(job, lock, turnEvents, e);
-            return;
+            if (lease.isLost()) {
+                log.info("AI reply stopped after lease lost. jobId={}, attempt={}, conversationId={}",
+                        job.jobId(), job.attempt(), conversationId);
+                return AiReplyJobOutcome.OWNERSHIP_LOST;
+            }
+            return failJobReply(job, lock, turnEvents, e);
         }
         if (committed.isRejected()) {
-            return;
+            return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
         finishReply(conversationId, userMessageId, lock);
         turnEvents.complete(AiChatCompletedEvent.from(committed.reply()));
+        return AiReplyJobOutcome.FINISHED;
+    }
+
+    private void publishDeltaWhileLeased(AiChatTurnEvents turnEvents, AiReplyLease lease, String text) {
+        if (lease.isLost()) {
+            throw new IllegalStateException("AI reply lease lost");
+        }
+        turnEvents.publishDelta(text);
+    }
+
+    private AiReplyJobOutcome toOutcome(boolean failureRecorded) {
+        return failureRecorded ? AiReplyJobOutcome.FINISHED : AiReplyJobOutcome.OWNERSHIP_LOST;
     }
 
     private AiReplyCommitResult commitReply(AiReplyJobTakeResult job, AiServerSendMessageResponse response) {
@@ -367,14 +395,15 @@ public class AiChatFacade {
         }
     }
 
-    private void failJobReply(AiReplyJobTakeResult job, AiConversationLock.Handle lock,
-                              AiChatTurnEvents turnEvents, RuntimeException cause) {
+    private AiReplyJobOutcome failJobReply(AiReplyJobTakeResult job, AiConversationLock.Handle lock,
+                                           AiChatTurnEvents turnEvents, RuntimeException cause) {
         logReplyFailure(job.userId(), job.conversationId(), job.userMessageId(), cause);
         if (!recordTakenJobFailure(job, toErrorCode(cause))) {
-            return;
+            return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
         finishReply(job.conversationId(), job.userMessageId(), lock);
         turnEvents.fail(cause);
+        return AiReplyJobOutcome.FINISHED;
     }
 
     // 기록이 실패하면(DB 장애) 처리 권한을 확인할 수 없다 => 사용자가 계속 기다리지 않도록 마무리는 진행한다

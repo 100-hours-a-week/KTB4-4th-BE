@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AiReplyTaskExecutor implements SmartLifecycle {
 
-    private static final int PHASE = SmartLifecycle.DEFAULT_PHASE - 4096;
+    public static final int PHASE = SmartLifecycle.DEFAULT_PHASE - 4096;
     private static final Duration INTERRUPTED_TASK_GRACE = Duration.ofSeconds(2);
 
     private final int maxConcurrency;

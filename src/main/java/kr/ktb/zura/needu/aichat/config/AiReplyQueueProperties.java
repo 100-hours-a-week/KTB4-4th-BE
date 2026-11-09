@@ -13,6 +13,10 @@ public record AiReplyQueueProperties(
         boolean enabled,
         @Positive int globalMaxConcurrency,
         @NotNull Duration permitTtl,
-        @Positive int maxDeliveries
+        @Positive int maxDeliveries,
+        @NotNull Duration heartbeatInterval,
+        @NotNull Duration claimMinIdle,
+        @NotNull Duration claimInterval,
+        @NotNull Duration pollInterval
 ) {
 }
