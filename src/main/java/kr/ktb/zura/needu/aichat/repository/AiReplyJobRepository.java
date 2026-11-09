@@ -22,6 +22,12 @@ public interface AiReplyJobRepository extends JpaRepository<AiReplyJob, Long> {
     @Query("select j from AiReplyJob j where j.id = :id")
     Optional<AiReplyJob> findByIdForUpdate(@Param("id") Long id);
 
+    @Modifying
+    @Query("update AiReplyJob j set j.streamEntryId = :streamEntryId "
+            + "where j.id = :id and j.dispatchToken = :dispatchToken")
+    int updateStreamEntryId(@Param("id") Long id, @Param("dispatchToken") String dispatchToken,
+                            @Param("streamEntryId") String streamEntryId);
+
     boolean existsByAiChatRoomIdAndStatusIn(Long aiChatRoomId, Collection<AiReplyJobStatus> statuses);
 
     boolean existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
