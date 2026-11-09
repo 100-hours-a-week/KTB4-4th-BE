@@ -902,6 +902,21 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void replyQueueEnabledAndQueueFull_sendMessage_throwsServiceUnavailableWithoutSavingMessage() {
+        aiChatFacade = createFacade(QUEUE_ENABLED, Set.of());
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiReplyQueueService.isFull()).willReturn(true);
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyJobService, never()).createUserMessageAndJob(any(), any(), any(), any(), any());
+        verify(aiReplyQueueService, never()).enqueue(any(), any());
+        verify(aiGenerationStateService, never()).startGenerating(any(), any());
+    }
+
+    @Test
     void jobTaken_replyToJob_attachesLeaseTargetAndReturnsFinished() {
         givenJobTaken(message(USER_MESSAGE_ID, null));
         given(streamMessageCall()).willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
