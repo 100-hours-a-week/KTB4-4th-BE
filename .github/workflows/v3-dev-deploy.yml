@@ -146,7 +146,7 @@ jobs:
             - 대상 환경: V3 Dev
             - 대상 서비스: auth-api, recommendation-api, social-api, ai-api
             - GitOps PR 병합 후 Argo CD Auto Sync로 EKS 배포
-            - 기존 V2 ECS 배포에는 영향 없음
+            - Dev ECS에는 배포하지 않음
 
             ## 검증
             - [ ] GitOps 설정 검증
