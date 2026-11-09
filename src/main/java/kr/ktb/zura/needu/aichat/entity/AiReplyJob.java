@@ -111,6 +111,10 @@ public class AiReplyJob {
         return status == AiReplyJobStatus.RUNNING && this.attempt == attempt;
     }
 
+    public boolean isRunningWithoutStreamEntry() {
+        return status == AiReplyJobStatus.RUNNING && streamEntryId == null;
+    }
+
     public boolean isDispatchedWith(String dispatchToken) {
         return this.dispatchToken.equals(dispatchToken);
     }
