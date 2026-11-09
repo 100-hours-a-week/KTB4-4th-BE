@@ -39,6 +39,11 @@ ai:
       max-deliveries: ${AI_CHAT_REPLY_MAX_DELIVERIES:3}
 
 needu:
+  messaging:
+    stream:
+      # 스트림 하나에 남겨 두는 최대 엔트리 수다(근사값). 넘으면 오래된 것부터 지워지고, ACK 전 메시지도 함께 지워진다.
+      # 생일 배치 하루치(수신자 89만 명 / 500명 묶음 = 약 1,800개)보다 넉넉히 둔다
+      max-length: ${MESSAGING_STREAM_MAX_LENGTH:100000}
   user:
     withdrawal:
       lock-ttl: ${USER_WITHDRAWAL_LOCK_TTL:120s}
