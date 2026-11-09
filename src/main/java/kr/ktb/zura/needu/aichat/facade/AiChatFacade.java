@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerCloseSessionResponse;
+import kr.ktb.zura.needu.aichat.config.AiReplyQueueProperties;
 import kr.ktb.zura.needu.aichat.dto.request.PatchAnalyzeMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.request.SendMessageRequest;
 import kr.ktb.zura.needu.aichat.dto.response.AiConversationResponse;
@@ -44,6 +45,7 @@ import kr.ktb.zura.needu.aichat.service.AiReplyCommitResult;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobDispatch;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobTakeResult;
+import kr.ktb.zura.needu.aichat.service.AiReplyQueueService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -79,6 +81,8 @@ public class AiChatFacade {
     private final AiChatStreamService aiChatStreamService;
     private final AiChatEventPublisher aiChatEventPublisher;
     private final AiReplyTaskExecutor aiReplyTaskExecutor;
+    private final AiReplyQueueService aiReplyQueueService;
+    private final AiReplyQueueProperties replyQueueProperties;
     private final UserService userService;
     private final ConsentService consentService;
     private final ProductActivityService productActivityService;
@@ -96,6 +100,8 @@ public class AiChatFacade {
                         AiChatStreamService aiChatStreamService,
                         AiChatEventPublisher aiChatEventPublisher,
                         AiReplyTaskExecutor aiReplyTaskExecutor,
+                        AiReplyQueueService aiReplyQueueService,
+                        AiReplyQueueProperties replyQueueProperties,
                         UserService userService,
                         ConsentService consentService,
                         ProductActivityService productActivityService,
@@ -112,6 +118,8 @@ public class AiChatFacade {
         this.aiChatStreamService = aiChatStreamService;
         this.aiChatEventPublisher = aiChatEventPublisher;
         this.aiReplyTaskExecutor = aiReplyTaskExecutor;
+        this.aiReplyQueueService = aiReplyQueueService;
+        this.replyQueueProperties = replyQueueProperties;
         this.userService = userService;
         this.productActivityService = productActivityService;
         this.consentService = consentService;
@@ -230,6 +238,12 @@ public class AiChatFacade {
             log.info("AI reply job already in progress. userId={}, conversationId={}", userId, conversationId);
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
         }
+        if (replyQueueProperties.enabled()) {
+            AiReplyJobDispatch dispatch = sentMessage.isPresent()
+                    ? restartReply(userId, conversationId, sentMessage.get(), lock)
+                    : createUserMessage(userId, conversationId, request, lock);
+            return enqueueReply(conversationId, dispatch);
+        }
         AiReplyTaskExecutor.Slot slot = aiReplyTaskExecutor.tryReserve().orElseThrow(() -> {
             log.info("AI reply capacity exceeded. userId={}, conversationId={}", userId, conversationId);
             return new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
@@ -244,6 +258,13 @@ public class AiChatFacade {
             slot.release();
             throw e;
         }
+    }
+
+    // 대화방 락은 워커가 작업 행의 락 토큰으로 이어받아 답변을 끝낸 뒤 푼다
+    private AiMessageSendResult enqueueReply(Long conversationId, AiReplyJobDispatch dispatch) {
+        aiGenerationStateService.startGenerating(conversationId, dispatch.userMessage().getId());
+        aiReplyQueueService.enqueue(dispatch.jobId(), dispatch.dispatchToken());
+        return AiMessageSendResult.accepted(AiMessageAcceptedResponse.from(dispatch.userMessage()));
     }
 
     private void startReply(Long conversationId, AiReplyJobDispatch dispatch,
