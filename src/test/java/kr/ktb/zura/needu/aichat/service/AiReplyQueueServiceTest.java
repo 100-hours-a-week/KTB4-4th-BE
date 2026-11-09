@@ -37,6 +37,7 @@ class AiReplyQueueServiceTest {
     private static final String CONSUMER = "worker-a";
     private static final Duration CLAIM_MIN_IDLE = Duration.ofSeconds(30);
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
+    private static final int MAX_LENGTH = 800;
     private static final Long OTHER_JOB_ID = 302L;
     private static final String NEW_DISPATCH_TOKEN = "new-dispatch-token";
     private static final String NEW_STREAM_ENTRY_ID = "1730000000100-0";
@@ -57,7 +58,7 @@ class AiReplyQueueServiceTest {
         AiReplyQueueProperties properties = new AiReplyQueueProperties(true, 96, Duration.ofSeconds(30), 3,
                 Duration.ofSeconds(5), CLAIM_MIN_IDLE, Duration.ofSeconds(5), Duration.ofMillis(200), Duration.ofSeconds(2));
         aiReplyQueueService = new AiReplyQueueService(
-                aiReplyStreamRepository, aiReplyPermitRepository, aiReplyJobService, properties);
+                aiReplyStreamRepository, aiReplyPermitRepository, aiReplyJobService, properties, MAX_LENGTH);
     }
 
     @Test
@@ -85,6 +86,27 @@ class AiReplyQueueServiceTest {
                 .given(aiReplyJobService).recordStreamEntry(JOB_ID, DISPATCH_TOKEN, STREAM_ENTRY_ID);
 
         assertThatCode(() -> aiReplyQueueService.enqueue(JOB_ID, DISPATCH_TOKEN)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void queueBelowMaxLength_isFull_returnsFalse() {
+        given(aiReplyStreamRepository.size()).willReturn((long) MAX_LENGTH - 1);
+
+        assertThat(aiReplyQueueService.isFull()).isFalse();
+    }
+
+    @Test
+    void queueReachedMaxLength_isFull_returnsTrue() {
+        given(aiReplyStreamRepository.size()).willReturn((long) MAX_LENGTH);
+
+        assertThat(aiReplyQueueService.isFull()).isTrue();
+    }
+
+    @Test
+    void streamUnavailable_isFull_returnsFalse() {
+        given(aiReplyStreamRepository.size()).willThrow(new RedisConnectionFailureException("redis down"));
+
+        assertThat(aiReplyQueueService.isFull()).isFalse();
     }
 
     @Test

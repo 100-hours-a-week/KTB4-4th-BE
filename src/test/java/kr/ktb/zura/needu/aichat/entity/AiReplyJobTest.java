@@ -71,6 +71,24 @@ class AiReplyJobTest {
     }
 
     @Test
+    void jobTakenWithoutStreamEntry_isRunningWithoutStreamEntry_returnsTrue() {
+        assertThat(runningJob().isRunningWithoutStreamEntry()).isTrue();
+    }
+
+    @Test
+    void jobTakenWithStreamEntry_isRunningWithoutStreamEntry_returnsFalse() {
+        AiReplyJob job = queuedJob();
+        job.take(STREAM_ENTRY_ID);
+
+        assertThat(job.isRunningWithoutStreamEntry()).isFalse();
+    }
+
+    @Test
+    void queuedJob_isRunningWithoutStreamEntry_returnsFalse() {
+        assertThat(queuedJob().isRunningWithoutStreamEntry()).isFalse();
+    }
+
+    @Test
     void runningJobWithSameAttempt_isOwnedBy_returnsTrue() {
         AiReplyJob job = runningJob();
 

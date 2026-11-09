@@ -11,19 +11,40 @@ import kr.ktb.zura.needu.aichat.repository.AiReplyStreamClaimResult;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamEntry;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamRepository;
 import kr.ktb.zura.needu.aichat.type.AiReplyJobStatus;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AiReplyQueueService {
 
     private final AiReplyStreamRepository aiReplyStreamRepository;
     private final AiReplyPermitRepository aiReplyPermitRepository;
     private final AiReplyJobService aiReplyJobService;
     private final AiReplyQueueProperties properties;
+    private final int maxLength;
+
+    public AiReplyQueueService(AiReplyStreamRepository aiReplyStreamRepository,
+                               AiReplyPermitRepository aiReplyPermitRepository,
+                               AiReplyJobService aiReplyJobService,
+                               AiReplyQueueProperties properties,
+                               @Value("${ai.chat.reply-queue.max-length}") int maxLength) {
+        this.aiReplyStreamRepository = aiReplyStreamRepository;
+        this.aiReplyPermitRepository = aiReplyPermitRepository;
+        this.aiReplyJobService = aiReplyJobService;
+        this.properties = properties;
+        this.maxLength = maxLength;
+    }
+
+    public boolean isFull() {
+        try {
+            return aiReplyStreamRepository.size() >= maxLength;
+        } catch (RuntimeException e) {
+            log.warn("AI reply queue length check failed.", e);
+            return false;
+        }
+    }
 
     // 작업은 DB에 저장돼 있음 => 스트림에 넣지 못해도 사용자 접수는 성공으로, 빠진 작업은 재투입 스케줄러가 다시 넣는다
     public void enqueue(Long jobId, String dispatchToken) {

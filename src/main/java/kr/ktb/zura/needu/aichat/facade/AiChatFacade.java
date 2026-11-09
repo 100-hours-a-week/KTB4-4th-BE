@@ -251,6 +251,10 @@ public class AiChatFacade {
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
         }
         if (replyQueueProperties.enabled()) {
+            if (aiReplyQueueService.isFull()) {
+                log.info("AI reply queue full. userId={}, conversationId={}", userId, conversationId);
+                throw new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+            }
             AiReplyJobDispatch dispatch = sentMessage.isPresent()
                     ? restartReply(userId, conversationId, sentMessage.get(), lock)
                     : createUserMessage(userId, conversationId, request, lock);
