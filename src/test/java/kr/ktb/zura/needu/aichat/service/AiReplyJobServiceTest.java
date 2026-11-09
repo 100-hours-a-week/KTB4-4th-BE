@@ -63,7 +63,7 @@ class AiReplyJobServiceTest {
 
         @Bean
         AiReplyQueueProperties aiReplyQueueProperties() {
-            return new AiReplyQueueProperties(96, Duration.ofSeconds(30), MAX_DELIVERIES);
+            return new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), MAX_DELIVERIES);
         }
     }
 
@@ -210,6 +210,26 @@ class AiReplyJobServiceTest {
         assertThat(dispatch.jobId()).isEqualTo(job.getId());
         assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
         assertThat(job.getLockToken()).isEqualTo(NEW_LOCK_TOKEN);
+    }
+
+    @Test
+    void sameDispatchToken_recordStreamEntry_savesStreamEntryId() {
+        AiReplyJobDispatch dispatch = createJob();
+
+        aiReplyJobService.recordStreamEntry(dispatch.jobId(), dispatch.dispatchToken(), STREAM_ENTRY_ID);
+
+        assertThat(findJob(dispatch.userMessage().getId()).getStreamEntryId()).isEqualTo(STREAM_ENTRY_ID);
+    }
+
+    @Test
+    void dispatchTokenChangedByRestart_recordStreamEntry_keepsJobUnchanged() {
+        AiReplyJobDispatch dispatch = createJob();
+        aiReplyJobService.failJob(dispatch.userMessage().getId(), ERROR_CODE);
+        aiReplyJobService.restartJob(roomId, dispatch.userMessage(), USER_ID, NEW_LOCK_TOKEN);
+
+        aiReplyJobService.recordStreamEntry(dispatch.jobId(), dispatch.dispatchToken(), STREAM_ENTRY_ID);
+
+        assertThat(findJob(dispatch.userMessage().getId()).getStreamEntryId()).isNull();
     }
 
     @Test

@@ -91,6 +91,11 @@ public class AiReplyJobService {
     }
 
     @Transactional
+    public void recordStreamEntry(Long jobId, String dispatchToken, String streamEntryId) {
+        aiReplyJobRepository.updateStreamEntryId(jobId, dispatchToken, streamEntryId);
+    }
+
+    @Transactional
     public AiReplyJobTakeResult take(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId) {
         Optional<AiReplyJob> found = aiReplyJobRepository.findByIdForUpdate(jobId);
         if (found.isEmpty()
