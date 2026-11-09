@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.aichat.facade;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -86,6 +88,10 @@ public class AiChatFacade {
     private final UserService userService;
     private final ConsentService consentService;
     private final ProductActivityService productActivityService;
+    private final Clock clock;
+    private final Duration turnTimeout;
+    // 하트비트를 두 번 넘게 놓치면 곧 회수될 수 있다 => 이보다 오래 확인되지 않았으면 AI를 부르지 않는다
+    private final Duration maxLeaseSilence;
     private final Duration messageRetryAfter;
     private final Duration shortCompletionCooldown;
     private final Set<Long> shortCooldownExternalIds;
@@ -105,6 +111,8 @@ public class AiChatFacade {
                         UserService userService,
                         ConsentService consentService,
                         ProductActivityService productActivityService,
+                        Clock clock,
+                        @Value("${ai.server.message-read-timeout}") Duration turnTimeout,
                         @Value("${ai.chat.message-retry-after:10s}") Duration messageRetryAfter,
                         @Value("${ai.chat.short-completion-cooldown:5m}") Duration shortCompletionCooldown,
                         @Value("${ai.chat.short-cooldown-external-ids:}") Set<Long> shortCooldownExternalIds) {
@@ -123,6 +131,10 @@ public class AiChatFacade {
         this.userService = userService;
         this.productActivityService = productActivityService;
         this.consentService = consentService;
+        this.clock = clock;
+        this.turnTimeout = turnTimeout;
+        this.maxLeaseSilence = replyQueueProperties.claimMinIdle()
+                .minus(replyQueueProperties.heartbeatInterval().multipliedBy(2));
         this.messageRetryAfter = messageRetryAfter;
         this.shortCompletionCooldown = shortCompletionCooldown;
         this.shortCooldownExternalIds = shortCooldownExternalIds;
@@ -346,7 +358,7 @@ public class AiChatFacade {
             }
             turnEvents.accept(userMessageId, job.userMessage().getClientMessageId());
             aiChatRoomService.validateMessageSendableRoom(job.userId(), conversationId);
-            AiServerSendMessageResponse response = requestReply(job.userId(), conversationId, job.userMessage(),
+            AiServerSendMessageResponse response = requestLeasedReply(job, lease,
                     text -> publishDeltaWhileLeased(turnEvents, lease, text));
             committed = commitReply(job, response);
         } catch (RuntimeException e) {
@@ -371,6 +383,56 @@ public class AiChatFacade {
             throw new IllegalStateException("AI reply lease lost");
         }
         turnEvents.publishDelta(text);
+    }
+
+    // 회수한 워커가 부를 때 앞 워커의 턴이 아직 열려 있으면 AI 서버가 바로 거절한다 => 앞 턴이 끝날 때까지 다시 부른다
+    private AiServerSendMessageResponse requestLeasedReply(AiReplyJobTakeResult job, AiReplyLease lease,
+                                                           Consumer<String> onDelta) {
+        Instant deadline = clock.instant().plus(turnTimeout);
+        Duration delay = replyQueueProperties.turnInProgressRetryDelay();
+        for (int retry = 1; ; retry++) {
+            validateLeaseHeld(job, lease);
+            try {
+                return requestReply(job.userId(), job.conversationId(), job.userMessage(), onDelta);
+            } catch (BusinessException e) {
+                if (!isRetryableTurnInProgress(e, lease, deadline, delay)) {
+                    throw e;
+                }
+                log.info("AI reply turn in progress, retrying. jobId={}, attempt={}, retry={}",
+                        job.jobId(), job.attempt(), retry);
+                sleepBeforeRetry(delay, e);
+                delay = delay.multipliedBy(2);
+            }
+        }
+    }
+
+    // 멈췄다 깨어난 워커가 이미 회수된 작업으로 AI를 부르지 않게
+    private void validateLeaseHeld(AiReplyJobTakeResult job, AiReplyLease lease) {
+        if (!lease.isManaged()) {
+            return;
+        }
+        if (lease.isLost()
+                || !lease.isConfirmedWithin(maxLeaseSilence)
+                || !aiReplyJobService.isOwnedBy(job.jobId(), job.attempt())) {
+            lease.markLost();
+            throw new IllegalStateException("AI reply lease lost");
+        }
+    }
+
+    private boolean isRetryableTurnInProgress(BusinessException e, AiReplyLease lease, Instant deadline,
+                                              Duration delay) {
+        return lease.isManaged()
+                && e.getErrorCode() == AiChatErrorCode.AICHAT_TURN_IN_PROGRESS
+                && !clock.instant().plus(delay).isAfter(deadline);
+    }
+
+    private void sleepBeforeRetry(Duration delay, BusinessException cause) {
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw cause;
+        }
     }
 
     private AiReplyJobOutcome toOutcome(boolean failureRecorded) {

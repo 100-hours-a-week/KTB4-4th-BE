@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.aichat.facade;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -137,6 +138,7 @@ class AiChatFacadeTest {
     private static final String DISPATCH_TOKEN = "dispatch-token";
     private static final int ATTEMPT = 1;
     private static final Duration TURN_RETRY_DELAY = Duration.ofMillis(10);
+    private static final Duration TURN_TIMEOUT = Duration.ofMillis(100);
     private static final AiReplyQueueProperties QUEUE_DISABLED =
             new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), 3,
                     Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
@@ -200,6 +202,7 @@ class AiChatFacadeTest {
         lenient().when(aiReplyTaskExecutor.tryReserve()).thenReturn(Optional.of(replySlot));
         lenient().when(aiConversationLock.ensure(LOCK_HANDLE)).thenReturn(true);
         lenient().when(aiReplyJobService.failTakenJob(anyLong(), anyInt(), any())).thenReturn(true);
+        lenient().when(aiReplyJobService.isOwnedBy(anyLong(), anyInt())).thenReturn(true);
         // 백그라운드 답변 생성을 호출한 스레드에서 바로 실행해 결과를 확인한다
         lenient().doAnswer(invocation -> {
             invocation.<Runnable>getArgument(0).run();
@@ -965,6 +968,89 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void workerJobTurnInProgressThenAvailable_replyToJob_retriesAndSavesReply() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall())
+                .willThrow(new BusinessException(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS))
+                .willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
+        given(aiReplyJobService.commitReply(JOB_ID, ATTEMPT, AI_CONTENT, 5, false, PURGE_AT))
+                .willReturn(AiReplyCommitResult.saved(message(AI_MESSAGE_ID, USER_MESSAGE_ID)));
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(
+                JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.start(Clock.systemUTC()));
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.FINISHED);
+        verify(aiChatClient, times(2)).streamMessage(anyLong(), anyLong(), anyLong(), any(), any());
+        verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+    }
+
+    @Test
+    void workerJobTurnInProgressUntilTurnTimeout_replyToJob_recordsFailure() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willThrow(new BusinessException(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS));
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(
+                JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.start(Clock.systemUTC()));
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.FINISHED);
+        verify(aiReplyJobService).failTakenJob(JOB_ID, ATTEMPT, AiChatErrorCode.AICHAT_TURN_IN_PROGRESS.name());
+        verify(aiChatEventPublisher).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+    }
+
+    @Test
+    void directReplyTurnInProgress_replyToJob_failsWithoutRetry() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willThrow(new BusinessException(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS));
+
+        aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged());
+
+        verify(aiChatClient, times(1)).streamMessage(anyLong(), anyLong(), anyLong(), any(), any());
+        verify(aiReplyJobService, never()).isOwnedBy(anyLong(), anyInt());
+    }
+
+    @Test
+    void jobTakenByNewerAttemptBeforeAiCall_replyToJob_stopsWithoutCallingAi() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(aiReplyJobService.isOwnedBy(JOB_ID, ATTEMPT)).willReturn(false);
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        assertThat(lease.isLost()).isTrue();
+        verifyNoInteractions(aiChatClient);
+        verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+        verify(aiConversationLock, never()).unlock(any());
+    }
+
+    @Test
+    void heartbeatSilentTooLong_replyToJob_stopsWithoutCallingAi() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        AiReplyLeaseTest.MutableClock leaseClock = new AiReplyLeaseTest.MutableClock(Instant.now());
+        AiReplyLease lease = AiReplyLease.start(leaseClock);
+        leaseClock.advance(Duration.ofSeconds(21));
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        verifyNoInteractions(aiChatClient);
+    }
+
+    @Test
+    void jobTakenByNewerAttemptWhileRetrying_replyToJob_stopsRetrying() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        given(streamMessageCall()).willThrow(new BusinessException(AiChatErrorCode.AICHAT_TURN_IN_PROGRESS));
+        given(aiReplyJobService.isOwnedBy(JOB_ID, ATTEMPT)).willReturn(true, false);
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(
+                JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.start(Clock.systemUTC()));
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        verify(aiChatClient, times(1)).streamMessage(anyLong(), anyLong(), anyLong(), any(), any());
+        verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+    }
+
+    @Test
     void staleJob_replyToJob_returnsFinished() {
         givenTakeResult(finishedTakeResult(AiReplyJobTakeResult.Outcome.STALE));
 
@@ -1597,8 +1683,8 @@ class AiChatFacadeTest {
         return new AiChatFacade(aiChatRoomService, aiMessageService, aiReplyJobService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
                 aiChatEventPublisher, aiReplyTaskExecutor, aiReplyQueueService, replyQueueProperties, userService,
-                consentService, productActivityService, MESSAGE_RETRY_AFTER, SHORT_COMPLETION_COOLDOWN,
-                shortCooldownExternalIds);
+                consentService, productActivityService, Clock.systemUTC(), TURN_TIMEOUT, MESSAGE_RETRY_AFTER,
+                SHORT_COMPLETION_COOLDOWN, shortCooldownExternalIds);
     }
 
     private void givenNewMessage() {
