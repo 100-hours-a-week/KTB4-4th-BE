@@ -27,6 +27,10 @@ public class AiGenerationStateService {
         }
     }
 
+    public void extendGenerating(Long conversationId, Long userMessageId) {
+        aiGenerationStateRepository.extend(conversationId, userMessageId);
+    }
+
     public Optional<Long> findGeneratingUserMessageId(Long conversationId) {
         return aiGenerationStateRepository.findUserMessageId(conversationId);
     }
