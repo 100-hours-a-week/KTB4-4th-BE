@@ -59,6 +59,8 @@ ai:
       reconcile-stale-after: ${AI_CHAT_REPLY_RECONCILE_STALE_AFTER:15s}
       reconcile-lock-at-most-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_MOST_FOR:1m}
       reconcile-lock-at-least-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_LEAST_FOR:5s}
+      # 대기열 길이·처리 중 수·가장 오래 기다린 시간·전역 허가 사용 수를 Redis에서 읽어 지표에 반영하는 주기다. 인스턴스마다 읽는다.
+      metrics-interval: ${AI_CHAT_REPLY_METRICS_INTERVAL:5s}
 
 needu:
   messaging:
