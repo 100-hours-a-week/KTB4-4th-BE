@@ -28,6 +28,11 @@ public class AiConversationLock {
         return aiConversationLockRepository.exists(conversationId);
     }
 
+    public boolean ensure(Handle handle) {
+        return aiConversationLockRepository.ensure(handle.conversationId(), handle.ownerToken())
+                != AiConversationLockRepository.EnsureResult.HELD_BY_OTHER;
+    }
+
     // 해제에 실패해도 TTL이 지나면 풀리기에, 원래 처리 결과나 예외를 가리지 않도록 로그만
     public void unlock(Handle handle) {
         try {

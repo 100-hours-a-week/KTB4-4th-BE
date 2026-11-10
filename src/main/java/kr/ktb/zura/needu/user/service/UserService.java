@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,7 @@ import kr.ktb.zura.needu.user.type.Gender;
 import kr.ktb.zura.needu.user.type.TasteProfileStatus;
 import kr.ktb.zura.needu.user.type.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -42,12 +45,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserTasteProfileRepository userTasteProfileRepository;
     private final JsonMapper jsonMapper;
+    private final Clock clock;
 
     @Transactional
     public UserResponse findOrCreateKakaoUser(Long kakaoId, String nickname, String profileImageUrl) {
         User user = userRepository.findByExternalId(kakaoId)
                 .orElseGet(() -> userRepository.save(new User(
                         kakaoId, normalizeNickname(nickname), profileImageUrl, Gender.NONE, null)));
+        user.releaseExpiredBlock(LocalDateTime.now(clock));
         validateLoginAvailableUser(user);
         user.recordLogin();
 
@@ -66,6 +71,13 @@ public class UserService {
 
     public void validateActiveUser(Long userId) {
         validateActiveUser(findUser(userId));
+    }
+
+    @Transactional
+    public void validateActiveUserForUpdate(Long userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+        validateActiveUser(user);
     }
 
     public UserSummaryResponse findUserSummary(Long userId) {
@@ -93,6 +105,12 @@ public class UserService {
         return UserAiProfileResponse.from(user, GiftPreference.fromOnboardingTastes(onboardingTastes));
     }
 
+    public Map<String, Object> findAiMemory(Long userId) {
+        return userTasteProfileRepository.findById(userId)
+                .map(UserTasteProfile::getAiMemory)
+                .orElse(Map.of());
+    }
+
     public boolean isOnboardingCompleted(Long userId) {
         User user = findUser(userId);
         validateLoginAvailableUser(user);
@@ -110,6 +128,15 @@ public class UserService {
                 .filter(User::isActive)
                 .map(UserDetailResponse::from)
                 .toList();
+    }
+
+    // 생일 월·일(예: 11월 9일 → 1109)이 맞는 활성 사용자를 id 순서로 cursorUserId 다음부터 limit명 조회한다
+    public List<UserSummaryResponse> findAllActiveUsersByBirthMonthDays(
+            Collection<Integer> birthMonthDays,
+            Long cursorUserId,
+            int limit
+    ) {
+        return userRepository.findAllActiveByBirthMonthDaysAfterId(birthMonthDays, cursorUserId, Limit.of(limit));
     }
 
     public Map<Long, Long> findUserIdsByExternalIds(Collection<Long> externalIds) {
@@ -132,6 +159,20 @@ public class UserService {
         findUser(userId).completeKakaoFriendSync();
     }
 
+    public Optional<LocalDateTime> findLastBlockedAt(Long userId) {
+        return Optional.ofNullable(findUser(userId).getBlockedAt());
+    }
+
+    @Transactional
+    public boolean blockUntil(Long userId, LocalDateTime blockedAt, LocalDateTime blockedUntil) {
+        User user = findUser(userId);
+        if (user.getStatus() == UserStatus.WITHDRAWN || user.isBlockedAt(blockedAt)) {
+            return false;
+        }
+        user.blockUntil(blockedAt, blockedUntil);
+        return true;
+    }
+
     @Transactional
     public void withdraw(Long userId) {
         userTasteProfileRepository.deleteById(userId);
@@ -149,12 +190,16 @@ public class UserService {
     }
 
     @Transactional
-    public void completeTasteAnalysis(
-            Long userId, String summary, List<String> tastes, List<String> interests) {
+    public void completeTasteAnalysis(Long userId, String summary, List<String> tastes,
+                                      List<String> interests, Map<String, Object> aiMemory) {
         User user = findUser(userId);
         UserTasteProfile profile = userTasteProfileRepository.findById(userId)
                 .orElseGet(() -> new UserTasteProfile(user, Map.of()));
         profile.updateAnalysis(summary, toJson(tastes), toJson(interests));
+
+        if (aiMemory != null && !aiMemory.isEmpty()) {
+            profile.updateAiMemory(aiMemory);
+        }
         userTasteProfileRepository.save(profile);
         user.completeTasteAnalysis();
     }

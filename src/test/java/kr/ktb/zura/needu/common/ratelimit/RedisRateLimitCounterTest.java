@@ -20,6 +20,9 @@ class RedisRateLimitCounterTest {
     private static final String USER_ID = "1";
     private static final String KEY = "backend:test:ratelimit:usage:friend-list:1";
     private static final Duration WINDOW = Duration.ofMinutes(1);
+    private static final String EVENT_NAME = "anonymous-chat-message-send";
+    private static final String EVENT_KEY = "backend:test:ratelimit:usage:anonymous-chat-message-send:1";
+    private static final Duration EVENT_WINDOW = Duration.ofSeconds(1);
 
     private final RateLimitRedisRepository repository = mock(RateLimitRedisRepository.class);
     private final RedisKeyGenerator keyGenerator = mock(RedisKeyGenerator.class);
@@ -27,6 +30,8 @@ class RedisRateLimitCounterTest {
             new RateLimitProperties(Map.of(
                     POLICY_NAME, new RateLimitProperties.Policy(
                             HttpMethod.GET, "/api/v1/friends", 10, WINDOW)
+            ), Map.of(
+                    EVENT_NAME, new RateLimitProperties.EventPolicy(10, EVENT_WINDOW)
             )),
             repository,
             keyGenerator
@@ -42,6 +47,18 @@ class RedisRateLimitCounterTest {
 
         assertThat(usage).isEqualTo(expected);
         verify(repository).increment(KEY, WINDOW);
+    }
+
+    @Test
+    void knownEventPolicy_increment_usesEventWindow() {
+        RateLimitUsage expected = new RateLimitUsage(1, EVENT_WINDOW);
+        given(keyGenerator.generate("ratelimit", "usage", EVENT_NAME, USER_ID)).willReturn(EVENT_KEY);
+        given(repository.increment(EVENT_KEY, EVENT_WINDOW)).willReturn(expected);
+
+        RateLimitUsage usage = rateLimitCounter.increment(EVENT_NAME, USER_ID);
+
+        assertThat(usage).isEqualTo(expected);
+        verify(repository).increment(EVENT_KEY, EVENT_WINDOW);
     }
 
     @Test

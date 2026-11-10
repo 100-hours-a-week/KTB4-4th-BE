@@ -71,6 +71,12 @@ public class AuthSessionService {
     }
 
     @Transactional
+    public void revokeAllByUserId(Long userId, RevokeReason reason) {
+        authSessionRepository.findAllByUserIdAndRevokedAtIsNull(userId)
+                .forEach(session -> session.revoke(reason));
+    }
+
+    @Transactional
     public void deleteAllByUserId(Long userId) {
         authSessionRepository.deleteAllByUserId(userId);
     }

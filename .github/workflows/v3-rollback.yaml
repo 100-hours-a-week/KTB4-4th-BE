@@ -1,0 +1,318 @@
+
+name: Backend V3 GitOps Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "롤백 대상 환경"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      revert_commit:
+        description: "되돌릴 GitOps 배포 Commit SHA (40자리)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v3-backend-gitops-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback-pr:
+    name: Create V3 Backend Rollback PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ap-northeast-2
+      AWS_ACCOUNT_ID: "919551759796"
+      ECR_REPOSITORY: need-u/backend
+      GITOPS_REPOSITORY: 100-hours-a-week/KTB4-4th-GITOPS
+      GITOPS_FILE: environments/${{ inputs.environment }}/backend-image.yaml
+
+    steps:
+      - name: Validate Rollback Input
+        env:
+          REVERT_COMMIT: ${{ inputs.revert_commit }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$REVERT_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "40자리 Git Commit SHA를 입력해야 합니다."
+            exit 1
+          fi
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          owner: 100-hours-a-week
+          repositories: KTB4-4th-GITOPS
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPOSITORY }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: main
+          fetch-depth: 0
+          path: gitops
+          persist-credentials: false
+
+      - name: Validate Rollback Target
+        id: validate
+        env:
+          REVERT_COMMIT: ${{ inputs.revert_commit }}
+        run: |
+          set -euo pipefail
+          cd gitops
+
+          test -f "$GITOPS_FILE"
+
+          git cat-file -e "${REVERT_COMMIT}^{commit}"
+
+          if ! git merge-base --is-ancestor "$REVERT_COMMIT" HEAD; then
+            echo "GitOps main에 포함되지 않은 Commit입니다."
+            exit 1
+          fi
+
+          PARENT_COUNT=$(
+            git rev-list --parents -n 1 "$REVERT_COMMIT" |
+            awk '{print NF-1}'
+          )
+
+          if [ "$PARENT_COUNT" -eq 2 ]; then
+            BASE="${REVERT_COMMIT}^1"
+          elif [ "$PARENT_COUNT" -eq 1 ]; then
+            BASE="${REVERT_COMMIT}^"
+          else
+            echo "지원하지 않는 Commit 구조입니다."
+            exit 1
+          fi
+
+          CHANGED_FILES=$(
+            git diff --name-only "$BASE" "$REVERT_COMMIT"
+          )
+
+          if [ "$CHANGED_FILES" != "$GITOPS_FILE" ]; then
+            echo "선택한 Commit은 해당 환경의 Backend 이미지 파일만 변경해야 합니다."
+            echo "실제 변경 파일:"
+            echo "$CHANGED_FILES"
+            exit 1
+          fi
+
+          # Merge Commit과 Squash Commit 모두 지원하도록
+          # 대상 커밋 이후 해당 파일의 변경 여부를 검사한다.
+          if [ "$PARENT_COUNT" -eq 2 ]; then
+            LATER_CHANGES=$(
+              git log --first-parent --format=%H \
+                "${REVERT_COMMIT}..HEAD" -- "$GITOPS_FILE"
+            )
+          else
+            LATER_CHANGES=$(
+              git log --format=%H \
+                "${REVERT_COMMIT}..HEAD" -- "$GITOPS_FILE"
+            )
+          fi
+
+          if [ -n "$LATER_CHANGES" ]; then
+            echo "선택한 Commit 이후 Backend 이미지 변경이 존재합니다."
+            echo "$LATER_CHANGES"
+            exit 1
+          fi
+
+          # 현재 파일이 롤백 대상 커밋의 결과와 같은지 확인한다.
+          CURRENT_BLOB=$(git rev-parse "HEAD:$GITOPS_FILE")
+          TARGET_BLOB=$(git rev-parse "${REVERT_COMMIT}:$GITOPS_FILE")
+
+          if [ "$CURRENT_BLOB" != "$TARGET_BLOB" ]; then
+            echo "현재 Backend 이미지 설정이 롤백 대상 배포 상태와 다릅니다."
+            exit 1
+          fi
+
+          echo "Rollback 대상 검증 완료"
+
+      - name: Revert GitOps Commit
+        env:
+          REVERT_COMMIT: ${{ inputs.revert_commit }}
+        run: |
+          set -euo pipefail
+          cd gitops
+
+          PARENT_COUNT=$(
+            git rev-list --parents -n 1 "$REVERT_COMMIT" |
+            awk '{print NF-1}'
+          )
+
+          if [ "$PARENT_COUNT" -eq 2 ]; then
+            git revert -m 1 --no-commit "$REVERT_COMMIT"
+          else
+            git revert --no-commit "$REVERT_COMMIT"
+          fi
+
+          CHANGED_FILES=$(git diff --cached --name-only)
+
+          if [ "$CHANGED_FILES" != "$GITOPS_FILE" ]; then
+            echo "Rollback 결과에 예상하지 않은 파일 변경이 있습니다."
+            echo "$CHANGED_FILES"
+            exit 1
+          fi
+
+          git diff --cached --check
+          git diff --cached -- "$GITOPS_FILE"
+
+      - name: Install yq
+        run: |
+          set -euo pipefail
+
+          YQ_VERSION=v4.45.4
+
+          curl -fsSL \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+            -o /tmp/yq
+
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
+          yq --version
+
+      - name: Validate Rollback Image
+        id: image
+        run: |
+          set -euo pipefail
+          cd gitops
+
+          DIGEST=$(yq -r '.image.digest' "$GITOPS_FILE")
+          TAG=$(yq -r '.image.tag' "$GITOPS_FILE")
+          REPOSITORY=$(yq -r '.image.repository' "$GITOPS_FILE")
+
+          EXPECTED_REPOSITORY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+
+          if [ "$REPOSITORY" != "$EXPECTED_REPOSITORY" ]; then
+            echo "예상하지 않은 ECR Repository입니다."
+            exit 1
+          fi
+
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "유효하지 않은 Rollback Image Digest입니다."
+            exit 1
+          fi
+
+          CURRENT_DIGEST=$(
+            git show "HEAD:$GITOPS_FILE" |
+            yq -r '.image.digest'
+          )
+
+          if [ "$CURRENT_DIGEST" = "$DIGEST" ]; then
+            echo "현재 이미지와 Rollback 이미지가 동일합니다."
+            exit 1
+          fi
+
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          echo "Current Digest: $CURRENT_DIGEST"
+          echo "Rollback Digest: $DIGEST"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Account
+        run: |
+          set -euo pipefail
+
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity \
+            --query Account --output text)
+
+          if [ "$ACTUAL_ACCOUNT" != "$AWS_ACCOUNT_ID" ]; then
+            echo "예상하지 않은 AWS Account입니다."
+            exit 1
+          fi
+
+      - name: Verify Rollback Image Exists in ECR
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          RESULT=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageDigest="$IMAGE_DIGEST" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [ "$RESULT" != "$IMAGE_DIGEST" ]; then
+            echo "Rollback 이미지가 ECR에 존재하지 않습니다."
+            exit 1
+          fi
+
+          echo "ECR Rollback Image 확인 완료"
+
+      - name: Create Rollback Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          path: gitops
+          base: main
+          branch: automation/v3-${{ inputs.environment }}-backend-rollback
+          delete-branch: true
+          add-paths: ${{ env.GITOPS_FILE }}
+          commit-message: "revert(v3-${{ inputs.environment }}): 백엔드 이미지 롤백"
+          title: "revert(v3-${{ inputs.environment }}): 백엔드 이미지 롤백"
+          body: |
+            ## 변경 내용
+            - V3 백엔드 GitOps 이미지 롤백
+            - 대상 환경: `${{ inputs.environment }}`
+            - 롤백 대상 Commit: `${{ inputs.revert_commit }}`
+            - 복구 이미지 Tag: `${{ steps.image.outputs.tag }}`
+            - 복구 이미지 Digest: `${{ steps.image.outputs.digest }}`
+
+            ## 배포 영향
+            - auth-api
+            - recommendation-api
+            - social-api
+            - ai-api
+
+            ## 배포 방식
+            - GitOps PR 승인 및 병합
+            - Argo CD Auto Sync
+            - Kubernetes Rolling Update
+
+            ## 검증
+            - [ ] 롤백 대상 Commit 확인
+            - [ ] 이전 정상 이미지 Digest 확인
+            - [ ] GitOps CI 통과
+            - [ ] 백엔드 4개 Deployment Rolling Update 확인
+            - [ ] Readiness Probe 정상
+            - [ ] 주요 API Smoke Test 통과
+
+            ## 주의 사항
+            - 이 PR은 자동 병합하지 않습니다.
+            - PR 병합 전 다른 백엔드 배포 PR이 없는지 확인합니다.
+            - Production은 승인 후 복구합니다.
+
+      - name: Print Rollback PR Result
+        if: steps.create-pr.outputs.pull-request-number != ''
+        env:
+          PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
+        run: |
+          echo "Rollback PR 생성 완료"
+          echo "$PR_URL"
+          echo "PR 검토 및 병합 후 Argo CD가 이전 이미지로 복구합니다."

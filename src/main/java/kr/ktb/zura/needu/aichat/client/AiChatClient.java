@@ -1,7 +1,9 @@
 package kr.ktb.zura.needu.aichat.client;
 
+import java.util.Map;
 import java.util.function.Consumer;
 
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisResponse;
@@ -12,7 +14,8 @@ import kr.ktb.zura.needu.aichat.client.dto.response.AiServerStartSessionResponse
 public interface AiChatClient {
 
     AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId,
-                                              AiServerUserProfileRequest userProfile);
+                                              AiServerUserProfileRequest userProfile,
+                                              Map<String, Object> memory);
 
     AiServerSendMessageResponse sendMessage(Long userId, Long conversationRoomId, String message);
 
@@ -23,5 +26,6 @@ public interface AiChatClient {
 
     AiServerAnalysisResponse patchAnalyze(Long conversationRoomId, AiServerPatchAnalysisRequest request);
 
-    AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId);
+    AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId,
+                                                 AiServerFeedbackRequest feedback);
 }

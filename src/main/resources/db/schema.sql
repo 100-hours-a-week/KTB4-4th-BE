@@ -26,17 +26,21 @@ CREATE TABLE IF NOT EXISTS users (
     profile_image_url        VARCHAR(2048) NULL,
     gender                   VARCHAR(255)  NOT NULL COMMENT 'MALE, FEMALE, NONE',
     birth_date               DATE          NULL,
+    -- 연도와 무관한 생일 조회용 (예: 11월 9일 → 1109). VIRTUAL이라 컬럼 추가 시 테이블을 다시 쓰지 않는다
+    birth_month_day          SMALLINT      GENERATED ALWAYS AS (MONTH(birth_date) * 100 + DAY(birth_date)) VIRTUAL,
     onboarding_completed     TINYINT(1)    NOT NULL,
     taste_analysis_completed TINYINT(1)    NOT NULL,
     status                   VARCHAR(30)   NOT NULL COMMENT 'ONBOARDING, ACTIVE, BLOCKED, WITHDRAWN',
     blocked_at               DATETIME(6)   NULL,
+    blocked_until            DATETIME(6)   NULL COMMENT '정지 해제 시각. BLOCKED인데 NULL이면 기간 없는 정지',
     last_login_at            DATETIME(6)   NULL,
     kakao_friend_synced_at   DATETIME(6)   NULL,
     created_at               DATETIME(6)   NOT NULL,
     updated_at               DATETIME(6)   NOT NULL,
     deleted_at               DATETIME(6)   NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_users_external_id (external_id)
+    UNIQUE KEY uk_users_external_id (external_id),
+    KEY idx_users_birth_month_day_status (birth_month_day, status)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- users와 1:1 (@MapsId). PK가 곧 users.id
@@ -46,6 +50,7 @@ CREATE TABLE IF NOT EXISTS user_taste_profiles (
     recent_interests  TEXT        NULL,
     ai_summary        TEXT        NULL,
     onboarding_tastes JSON        NOT NULL,
+    ai_memory         JSON        NULL COMMENT 'AI 서버가 대화 종료 시 돌려준 장기 기억. 다음 대화 시작 때 그대로 보낸다',
     created_at        DATETIME(6) NOT NULL,
     updated_at        DATETIME(6) NOT NULL,
     PRIMARY KEY (user_id),
@@ -79,7 +84,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     refresh_expires_at DATETIME(6)   NOT NULL,
     last_used_at       DATETIME(6)   NULL,
     revoked_at         DATETIME(6)   NULL,
-    revoke_reason      VARCHAR(255)  NULL COMMENT 'LOGOUT, WITHDRAWN, SECURITY, EXPIRED',
+    revoke_reason      VARCHAR(255)  NULL COMMENT 'LOGOUT, WITHDRAWN, SECURITY, EXPIRED, BLOCKED',
     created_at         DATETIME(6)   NOT NULL,
     updated_at         DATETIME(6)   NOT NULL,
     PRIMARY KEY (id),
@@ -139,7 +144,8 @@ CREATE TABLE IF NOT EXISTS friends (
     PRIMARY KEY (id),
     -- owner_user_id 단독 조회도 이 인덱스의 선두 컬럼으로 처리된다
     UNIQUE KEY uk_friends_owner_friend (owner_user_id, friend_user_id),
-    KEY idx_friends_friend_user_id (friend_user_id)
+    -- 생일 알림 대상 조회가 friend_user_id로 찾고 owner_user_id만 읽으므로 owner_user_id까지 넣어 커버링 인덱스로 둔다
+    KEY idx_friends_friend_user_id_owner_user_id (friend_user_id, owner_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS friend_sync_requests (
@@ -317,8 +323,9 @@ CREATE TABLE IF NOT EXISTS ai_messages (
     UNIQUE KEY uk_ai_messages_room_client_message_id (ai_chat_room_id, client_message_id),
     -- 메시지 목록 커서 조회(where ai_chat_room_id = ? and id < ? order by id desc)
     KEY idx_ai_messages_room_id_id (ai_chat_room_id, id),
-    -- 중복 요청 시 저장된 답변 재조회(findByReplyToMessageId)
-    KEY idx_ai_messages_reply_to_message_id (reply_to_message_id),
+    -- 사용자 메시지 하나에 답변은 하나만 저장한다. 중복 요청 시 저장된 답변 재조회(findByReplyToMessageId)에도 쓴다.
+    -- 사용자 메시지와 인사말은 NULL이고, 유일 인덱스는 NULL을 여러 개 허용한다.
+    UNIQUE KEY uk_ai_messages_reply_to_message_id (reply_to_message_id),
     CONSTRAINT fk_ai_messages_room FOREIGN KEY (ai_chat_room_id) REFERENCES ai_chat_rooms (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
@@ -348,6 +355,280 @@ SET @add_input_locked = (
 PREPARE add_input_locked_statement FROM @add_input_locked;
 EXECUTE add_input_locked_statement;
 DEALLOCATE PREPARE add_input_locked_statement;
+
+-- 기존 테이블의 답변 인덱스를 유일 인덱스로 바꾼다.
+-- 유일 인덱스를 먼저 만들고 기존 인덱스를 지워서, 중복 답변이 있어 생성이 실패해도 조회 인덱스는 남긴다.
+SET @add_reply_to_message_unique = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE ai_messages ADD UNIQUE INDEX uk_ai_messages_reply_to_message_id (reply_to_message_id)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_messages'
+      AND index_name = 'uk_ai_messages_reply_to_message_id'
+);
+PREPARE add_reply_to_message_unique_statement FROM @add_reply_to_message_unique;
+EXECUTE add_reply_to_message_unique_statement;
+DEALLOCATE PREPARE add_reply_to_message_unique_statement;
+
+SET @drop_reply_to_message_index = (
+    SELECT IF(COUNT(*) > 0,
+              'ALTER TABLE ai_messages DROP INDEX idx_ai_messages_reply_to_message_id',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_messages'
+      AND index_name = 'idx_ai_messages_reply_to_message_id'
+);
+PREPARE drop_reply_to_message_index_statement FROM @drop_reply_to_message_index;
+EXECUTE drop_reply_to_message_index_statement;
+DEALLOCATE PREPARE drop_reply_to_message_index_statement;
+
+-- 사용자 메시지마다 AI 답변을 만들어야 하는 작업. 처리하던 서버가 죽거나 Redis가 대기열을 잃어도 작업을 이어갈 수 있도록 원본을 DB에 둔다.
+-- 사용자 메시지와 같은 트랜잭션에서 생성한다. 사용자 메시지·사용자는 FK 없이 ID만 저장한다.
+CREATE TABLE IF NOT EXISTS ai_reply_jobs (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    ai_chat_room_id BIGINT       NOT NULL,
+    user_message_id BIGINT       NOT NULL,
+    user_id         BIGINT       NOT NULL,
+    status          VARCHAR(20)  NOT NULL COMMENT 'QUEUED, RUNNING, SUCCEEDED, FAILED',
+    -- 작업을 가져갈 때마다 1씩 오르는 처리 권한 번호. 가장 최근에 가져간 서버만 답변을 저장할 수 있다
+    attempt         INT          NOT NULL DEFAULT 0,
+    -- 지금 유효한 배달. 재배달하면 바뀌어 이전 대기열 항목을 무시한다
+    dispatch_token  VARCHAR(36)  NOT NULL,
+    stream_entry_id VARCHAR(40)  NULL COMMENT '마지막 배달의 대기열 항목 ID',
+    -- 대화방 락 토큰. 작업을 회수한 서버가 이어받아 락을 풀어 준다
+    lock_token      VARCHAR(36)  NOT NULL,
+    last_error_code VARCHAR(100) NULL,
+    created_at      DATETIME(6)  NOT NULL,
+    updated_at      DATETIME(6)  NOT NULL,
+    finished_at     DATETIME(6)  NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_reply_jobs_user_message_id (user_message_id),
+    -- 오래 멈춘 작업 찾기(유실 복구)
+    KEY idx_ai_reply_jobs_status_updated_at (status, updated_at),
+    -- 대화방에 끝나지 않은 작업이 있는지 확인
+    KEY idx_ai_reply_jobs_room_status (ai_chat_room_id, status),
+    CONSTRAINT fk_ai_reply_jobs_room FOREIGN KEY (ai_chat_room_id) REFERENCES ai_chat_rooms (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- anonymouschat
+-- ---------------------------------------------------------------------------
+
+-- 익명대화. 상품과 사용자는 다른 도메인이므로 ID만 저장한다.
+CREATE TABLE IF NOT EXISTS anonymous_rooms (
+    id                 BIGINT      NOT NULL AUTO_INCREMENT,
+    product_id         BIGINT      NOT NULL,
+    questioner_user_id BIGINT      NOT NULL,
+    recipient_user_id  BIGINT      NOT NULL,
+    questioner_status  VARCHAR(20) NOT NULL DEFAULT 'JOINED' COMMENT 'JOINED, LEFT',
+    recipient_status   VARCHAR(20) NOT NULL DEFAULT 'JOINED' COMMENT 'JOINED, LEFT',
+    questioner_alias   VARCHAR(20) NOT NULL COMMENT '질문받은 사용자에게 보여주는 질문자 익명 별칭',
+    questioner_avatar_animal VARCHAR(30) NOT NULL COMMENT '질문자 익명 아바타 동물 키. FE 아이콘 파일명과 같음',
+    questioner_avatar_color  VARCHAR(20) NOT NULL COMMENT '질문자 익명 아바타 배경색 키',
+    last_activity_at   DATETIME(6) NOT NULL,
+    questioner_last_read_message_id BIGINT NULL COMMENT '질문자가 마지막으로 읽은 메시지 ID',
+    recipient_last_read_message_id  BIGINT NULL COMMENT '응답자가 마지막으로 읽은 메시지 ID',
+    created_at         DATETIME(6) NOT NULL,
+    opened_at          DATETIME(6) NULL COMMENT '질문받은 사용자의 최초 방 확인 시각',
+    expires_at         DATETIME(6) NULL,
+    status             VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE, EXPIRED, ENDED',
+    ended_at           DATETIME(6) NULL,
+    ended_by_user_id   BIGINT      NULL COMMENT '방을 종료한 참여자. 나가기 또는 정지된 사용자',
+    PRIMARY KEY (id),
+    KEY idx_anonymous_rooms_questioner_activity (questioner_user_id, last_activity_at DESC, id DESC),
+    KEY idx_anonymous_rooms_recipient_activity (recipient_user_id, last_activity_at DESC, id DESC),
+    CONSTRAINT ck_anonymous_rooms_distinct_users CHECK (questioner_user_id <> recipient_user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS anonymous_messages (
+    id                BIGINT        NOT NULL AUTO_INCREMENT,
+    room_id           BIGINT        NOT NULL,
+    sender_user_id    BIGINT        NOT NULL,
+    client_message_id VARCHAR(36)   NOT NULL,
+    content           VARCHAR(1000) NOT NULL,
+    created_at        DATETIME(6)   NOT NULL,
+    deleted_at        DATETIME(6)   NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_anonymous_messages_room_sender_client_message (room_id, sender_user_id, client_message_id),
+    KEY idx_anonymous_messages_room_id_id (room_id, id),
+    CONSTRAINT fk_anonymous_messages_room FOREIGN KEY (room_id) REFERENCES anonymous_rooms (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS anonymous_reports (
+    id               BIGINT       NOT NULL AUTO_INCREMENT,
+    reporter_user_id BIGINT       NOT NULL,
+    reported_user_id BIGINT       NOT NULL COMMENT '신고당한 사용자. 대화방의 상대 참여자',
+    room_id          BIGINT       NOT NULL,
+    reason           VARCHAR(20)  NOT NULL COMMENT 'ABUSE, SEXUAL, SPAM, PERSONAL_INFO, OTHER',
+    description      VARCHAR(500) NULL,
+    created_at       DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_anonymous_reports_reporter_room (reporter_user_id, room_id),
+    KEY idx_anonymous_reports_reported_user_id (reported_user_id),
+    CONSTRAINT fk_anonymous_reports_room FOREIGN KEY (room_id) REFERENCES anonymous_rooms (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+SET @add_anonymous_room_last_activity_at = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN last_activity_at DATETIME(6) NULL AFTER questioner_alias',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'last_activity_at'
+);
+PREPARE add_anonymous_room_last_activity_at_statement FROM @add_anonymous_room_last_activity_at;
+EXECUTE add_anonymous_room_last_activity_at_statement;
+DEALLOCATE PREPARE add_anonymous_room_last_activity_at_statement;
+
+UPDATE anonymous_rooms room
+LEFT JOIN (
+    SELECT room_id, MAX(created_at) AS last_message_at
+    FROM anonymous_messages
+    WHERE deleted_at IS NULL
+    GROUP BY room_id
+) message ON message.room_id = room.id
+SET room.last_activity_at = COALESCE(message.last_message_at, room.created_at)
+WHERE room.last_activity_at IS NULL;
+
+ALTER TABLE anonymous_rooms
+    MODIFY COLUMN last_activity_at DATETIME(6) NOT NULL;
+
+SET @add_anonymous_room_questioner_activity_index = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD INDEX idx_anonymous_rooms_questioner_activity (questioner_user_id, last_activity_at DESC, id DESC)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND index_name = 'idx_anonymous_rooms_questioner_activity'
+);
+PREPARE add_anonymous_room_questioner_activity_index_statement
+    FROM @add_anonymous_room_questioner_activity_index;
+EXECUTE add_anonymous_room_questioner_activity_index_statement;
+DEALLOCATE PREPARE add_anonymous_room_questioner_activity_index_statement;
+
+SET @add_anonymous_room_recipient_activity_index = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD INDEX idx_anonymous_rooms_recipient_activity (recipient_user_id, last_activity_at DESC, id DESC)',
+              'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND index_name = 'idx_anonymous_rooms_recipient_activity'
+);
+PREPARE add_anonymous_room_recipient_activity_index_statement
+    FROM @add_anonymous_room_recipient_activity_index;
+EXECUTE add_anonymous_room_recipient_activity_index_statement;
+DEALLOCATE PREPARE add_anonymous_room_recipient_activity_index_statement;
+
+SET @add_anonymous_room_questioner_status = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN questioner_status VARCHAR(20) NOT NULL DEFAULT ''JOINED'' COMMENT ''JOINED, LEFT'' AFTER recipient_user_id',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'questioner_status'
+);
+PREPARE add_anonymous_room_questioner_status_statement FROM @add_anonymous_room_questioner_status;
+EXECUTE add_anonymous_room_questioner_status_statement;
+DEALLOCATE PREPARE add_anonymous_room_questioner_status_statement;
+
+SET @add_anonymous_room_recipient_status = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN recipient_status VARCHAR(20) NOT NULL DEFAULT ''JOINED'' COMMENT ''JOINED, LEFT'' AFTER questioner_status',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'recipient_status'
+);
+PREPARE add_anonymous_room_recipient_status_statement FROM @add_anonymous_room_recipient_status;
+EXECUTE add_anonymous_room_recipient_status_statement;
+DEALLOCATE PREPARE add_anonymous_room_recipient_status_statement;
+
+SET @add_anonymous_room_avatar_animal = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN questioner_avatar_animal VARCHAR(30) NULL AFTER questioner_alias',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'questioner_avatar_animal'
+);
+PREPARE add_anonymous_room_avatar_animal_statement FROM @add_anonymous_room_avatar_animal;
+EXECUTE add_anonymous_room_avatar_animal_statement;
+DEALLOCATE PREPARE add_anonymous_room_avatar_animal_statement;
+
+SET @add_anonymous_room_avatar_color = (
+    SELECT IF(COUNT(*) = 0,
+              'ALTER TABLE anonymous_rooms ADD COLUMN questioner_avatar_color VARCHAR(20) NULL AFTER questioner_avatar_animal',
+              'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'anonymous_rooms'
+      AND column_name = 'questioner_avatar_color'
+);
+PREPARE add_anonymous_room_avatar_color_statement FROM @add_anonymous_room_avatar_color;
+EXECUTE add_anonymous_room_avatar_color_statement;
+DEALLOCATE PREPARE add_anonymous_room_avatar_color_statement;
+
+-- 기존 방은 별칭의 동물로 아바타를 채우고, 배경색은 모든 동물에 쓸 수 있는 mint/sage 중에서 고른다
+UPDATE anonymous_rooms
+SET questioner_avatar_animal = COALESCE(
+        CASE SUBSTRING_INDEX(questioner_alias, ' ', -1)
+        WHEN '수달' THEN 'otter'
+        WHEN '여우' THEN 'fox'
+        WHEN '토끼' THEN 'rabbit'
+        WHEN '다람쥐' THEN 'chipmunk'
+        WHEN '사슴' THEN 'deer'
+        WHEN '펭귄' THEN 'penguin'
+        WHEN '쿼카' THEN 'quokka'
+        WHEN '알파카' THEN 'alpaca'
+        WHEN '판다' THEN 'panda'
+        WHEN '해달' THEN 'sea-otter'
+        WHEN '고슴도치' THEN 'hedgehog'
+        WHEN '부엉이' THEN 'owl'
+        WHEN '카피바라' THEN 'capybara'
+        WHEN '코알라' THEN 'koala'
+        WHEN '라쿤' THEN 'raccoon'
+        WHEN '햄스터' THEN 'hamster'
+        WHEN '돌고래' THEN 'dolphin'
+        WHEN '참새' THEN 'sparrow'
+        WHEN '강아지' THEN 'dog'
+        WHEN '고양이' THEN 'cat'
+        WHEN '미어캣' THEN 'meerkat'
+        WHEN '친칠라' THEN 'chinchilla'
+        WHEN '왈라비' THEN 'wallaby'
+        WHEN '북극곰' THEN 'polar-bear'
+        WHEN '레서판다' THEN 'red-panda'
+        WHEN '오리' THEN 'duck'
+        WHEN '병아리' THEN 'chick'
+        WHEN '양' THEN 'sheep'
+        WHEN '염소' THEN 'goat'
+        WHEN '라마' THEN 'llama'
+        WHEN '기린' THEN 'giraffe'
+        WHEN '얼룩말' THEN 'zebra'
+        WHEN '코끼리' THEN 'elephant'
+        WHEN '하마' THEN 'hippo'
+        WHEN '물개' THEN 'seal'
+        WHEN '바다사자' THEN 'sea-lion'
+        WHEN '비버' THEN 'beaver'
+        WHEN '두더지' THEN 'mole'
+        WHEN '청설모' THEN 'red-squirrel'
+        WHEN '치타' THEN 'cheetah'
+        END,
+        'otter'),
+    questioner_avatar_color = IF(MOD(id, 2) = 0, 'mint', 'sage')
+WHERE questioner_avatar_animal IS NULL
+   OR questioner_avatar_color IS NULL;
+
+ALTER TABLE anonymous_rooms
+    MODIFY COLUMN questioner_avatar_animal VARCHAR(30) NOT NULL COMMENT '질문자 익명 아바타 동물 키. FE 아이콘 파일명과 같음',
+    MODIFY COLUMN questioner_avatar_color VARCHAR(20) NOT NULL COMMENT '질문자 익명 아바타 배경색 키';
 
 -- ---------------------------------------------------------------------------
 -- product
@@ -487,4 +768,26 @@ CREATE TABLE IF NOT EXISTS taste_analyses (
     created_at       DATETIME(6)  NOT NULL,
     updated_at       DATETIME(6)  NOT NULL,
     PRIMARY KEY (room_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- calendar
+-- ---------------------------------------------------------------------------
+
+-- NeedU 자체 캘린더. 카카오 톡캘린더와 연동하지 않는다
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id                   BIGINT      NOT NULL AUTO_INCREMENT,
+    user_id              BIGINT      NOT NULL,
+    title                VARCHAR(50) NOT NULL,
+    description          TEXT        NULL,
+    start_at             DATETIME(6) NOT NULL,
+    end_at               DATETIME(6) NOT NULL,
+    all_day              TINYINT(1)  NOT NULL,
+    color                VARCHAR(20) NULL COMMENT 'RED, ORANGE, BLUE, PINK. NULL이면 FE 기본 색상',
+    notification_enabled TINYINT(1)  NOT NULL COMMENT 'true면 7일·3일·1일 전 알림',
+    created_at           DATETIME(6) NOT NULL,
+    updated_at           DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    -- 월·일 조회의 기간 겹침 조건(user_id = ? and start_at < ? and end_at > ?)
+    KEY idx_calendar_events_user_id_start_at (user_id, start_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

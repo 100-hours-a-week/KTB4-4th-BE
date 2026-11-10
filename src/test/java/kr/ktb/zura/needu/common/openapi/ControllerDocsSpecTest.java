@@ -28,6 +28,60 @@ class ControllerDocsSpecTest {
     }
 
     @Test
+    void calendarMonthlySummary_documentsParametersResponsesAndRateLimits() throws Exception {
+        String operation = "$.paths['/api/v1/calendar/events'].get";
+        requestSpec()
+                .andExpect(jsonPath(operation + ".operationId").exists())
+                .andExpect(jsonPath(operation + ".responses['200']").exists())
+                .andExpect(jsonPath(operation + ".responses['400']").exists())
+                .andExpect(jsonPath(operation + ".responses['401']").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_BLOCKED").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_ONBOARDING_REQUIRED").exists())
+                .andExpect(jsonPath(operation + ".responses['429'].content['application/json'].examples.COMMON_TOO_MANY_REQUESTS.value.data.retryAfterSeconds").value(60))
+                .andExpect(jsonPath(operation + ".responses['500']").exists())
+                .andExpect(jsonPath(operation + ".responses['503']").exists())
+                .andExpect(jsonPath(operation + ".parameters[?(@.name == 'targetMonth')].required").value(contains(true)))
+                .andExpect(jsonPath(operation + ".parameters[?(@.name == 'targetMonth')].schema.type").value(contains("string")));
+    }
+
+    @Test
+    void calendarDailyEvents_documentsParametersResponsesAndRateLimits() throws Exception {
+        String operation = "$.paths['/api/v1/calendar/events/daily'].get";
+        requestSpec()
+                .andExpect(jsonPath(operation + ".operationId").exists())
+                .andExpect(jsonPath(operation + ".responses['200']").exists())
+                .andExpect(jsonPath(operation + ".responses['400']").exists())
+                .andExpect(jsonPath(operation + ".responses['401']").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_BLOCKED").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_ONBOARDING_REQUIRED").exists())
+                .andExpect(jsonPath(operation + ".responses['429'].content['application/json'].examples.COMMON_TOO_MANY_REQUESTS.value.data.retryAfterSeconds").value(60))
+                .andExpect(jsonPath(operation + ".responses['500']").exists())
+                .andExpect(jsonPath(operation + ".responses['503']").exists())
+                .andExpect(jsonPath(operation + ".parameters[?(@.name == 'date')].required").value(contains(true)));
+    }
+
+    @Test
+    void calendarEventDetail_documentsParametersResponsesAndRateLimits() throws Exception {
+        String operation = "$.paths['/api/v1/calendar/events/{eventId}'].get";
+        requestSpec()
+                .andExpect(jsonPath(operation + ".operationId").exists())
+                .andExpect(jsonPath(operation + ".responses['200']").exists())
+                .andExpect(jsonPath(operation + ".responses['400']").exists())
+                .andExpect(jsonPath(operation + ".responses['401']").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_BLOCKED").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json'].examples.USER_ONBOARDING_REQUIRED").exists())
+                .andExpect(jsonPath(operation + ".responses['429'].content['application/json'].examples.COMMON_TOO_MANY_REQUESTS.value.data.retryAfterSeconds").value(60))
+                .andExpect(jsonPath(operation + ".responses['500']").exists())
+                .andExpect(jsonPath(operation + ".responses['503']").exists())
+                .andExpect(jsonPath(operation + ".responses['422']").exists())
+                .andExpect(jsonPath(operation + ".responses['404'].content['application/json'].examples.CALENDAR_EVENT_NOT_FOUND").exists())
+                .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.eventId.type").value("integer"))
+                .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.isAllDay.type").value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.isNotificationEnabled.type").value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.CalendarEventDetailResponse.properties.startAt.format").value("date-time"));
+    }
+
+    @Test
     void successStatus_replacesDefault200() throws Exception {
         requestSpec()
                 .andExpect(jsonPath("$.paths['/api/v1/error-reports'].post.responses['201']").exists())
@@ -66,6 +120,22 @@ class ControllerDocsSpecTest {
                         .value(containsInAnyOrder("favorite", "keyword", "cursor", "size")))
                 .andExpect(jsonPath("$.paths['/api/v1/friends'].get.parameters[?(@.name == 'size')].required")
                         .value(contains(true)));
+    }
+
+    @Test
+    void upcomingFriendEvents_documentsResponseAndRateLimit() throws Exception {
+        String operation = "$.paths['/api/v1/friends/upcoming-events'].get";
+        requestSpec()
+                .andExpect(jsonPath(operation + ".responses['200']").exists())
+                .andExpect(jsonPath(operation + ".responses['401']").exists())
+                .andExpect(jsonPath(operation + ".responses['403'].content['application/json']"
+                        + ".examples.USER_BLOCKED").exists())
+                .andExpect(jsonPath(operation + ".responses['429'].content['application/json']"
+                        + ".examples.COMMON_TOO_MANY_REQUESTS.value.data.retryAfterSeconds").value(60))
+                .andExpect(jsonPath("$.components.schemas.UpcomingFriendEventResponse"
+                        + ".properties.eventType.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.UpcomingFriendEventResponse"
+                        + ".properties.eventDate.format").value("date"));
     }
 
     @Test

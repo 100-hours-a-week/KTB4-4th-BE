@@ -79,14 +79,22 @@ public class NotificationStreamService {
     }
 
     public void sendNotification(NotificationRedisEvent event) {
-        // notificationId를 가진 JSON 객체인지는 NotificationEventSubscriber에서 검증한다.
-        ObjectNode responseData = ((ObjectNode) event.data()).deepCopy();
-        responseData.put("unreadCount", event.unreadCount());
-        String notificationId = responseData.get("notificationId").asString();
-        sendToUser(event.receiverUserId(), () -> SseEmitter.event()
-                .id(notificationId)
-                .name("notification.created")
-                .data(responseData));
+        // data와 받는 사용자별 data가 JSON 객체이고 notificationId를 가졌는지는 NotificationEventSubscriber에서 검증한다.
+        ObjectNode commonData = (ObjectNode) event.data();
+        event.recipients().forEach(recipient -> {
+            // 다른 인스턴스에 연결된 사용자 몫까지 응답을 만들지 않는다
+            if (!emittersByUserId.containsKey(recipient.receiverUserId())) {
+                return;
+            }
+            ObjectNode responseData = commonData.deepCopy();
+            responseData.setAll((ObjectNode) recipient.data());
+            responseData.put("unreadCount", recipient.unreadCount());
+            String notificationId = responseData.get("notificationId").asString();
+            sendToUser(recipient.receiverUserId(), () -> SseEmitter.event()
+                    .id(notificationId)
+                    .name("notification.created")
+                    .data(responseData));
+        });
     }
 
     @Scheduled(fixedRateString = "${needu.notification.heartbeat-interval}")

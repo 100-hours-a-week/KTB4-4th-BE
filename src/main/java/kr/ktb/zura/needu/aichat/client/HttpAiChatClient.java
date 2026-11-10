@@ -5,11 +5,13 @@ import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import jakarta.annotation.PreDestroy;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerCloseSessionRequest;
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerSendMessageStreamRequest;
@@ -44,6 +46,8 @@ public class HttpAiChatClient implements AiChatClient {
 
     private static final String SESSION_CLOSED_CODE = "SESSION_CLOSED";
     private static final String PROFILE_TOO_SPARSE_CODE = "PROFILE_TOO_SPARSE";
+    private static final String INVALID_REQUEST_CODE = "INVALID_REQUEST";
+    private static final Set<String> MEMORY_REJECTED_CODES = Set.of("MEMORY_USER_MISMATCH", INVALID_REQUEST_CODE);
 
     private final RestClient restClient;
     private final RestClient messageRestClient;
@@ -73,10 +77,18 @@ public class HttpAiChatClient implements AiChatClient {
 
     @Override
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId,
-                                                     AiServerUserProfileRequest userProfile) {
-        return request(AiChatEndpoint.START_SESSION, Map.of(),
-                new AiServerStartSessionRequest(userId, conversationRoomId, userProfile),
-                AiServerStartSessionResponse.class);
+                                                     AiServerUserProfileRequest userProfile,
+                                                     Map<String, Object> memory) {
+        try {
+            return request(AiChatEndpoint.START_SESSION, Map.of(),
+                    new AiServerStartSessionRequest(userId, conversationRoomId, userProfile, memory),
+                    AiServerStartSessionResponse.class);
+        } catch (BusinessException e) {
+            if (memory == null && e.getErrorCode() == AiChatErrorCode.AICHAT_MEMORY_REJECTED) {
+                throw new BusinessException(AiChatErrorCode.AICHAT_REQUEST_REJECTED, null, e);
+            }
+            throw e;
+        }
     }
 
     @Override
@@ -129,9 +141,17 @@ public class HttpAiChatClient implements AiChatClient {
     }
 
     @Override
-    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId) {
-        return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationRoomId),
-                new AiServerCloseSessionRequest(userId), AiServerCloseSessionResponse.class);
+    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId,
+                                                        AiServerFeedbackRequest feedback) {
+        try {
+            return request(AiChatEndpoint.CONFIRM_ANALYSIS, pathVariables(conversationRoomId),
+                    new AiServerCloseSessionRequest(userId, feedback), AiServerCloseSessionResponse.class);
+        } catch (BusinessException e) {
+            if (feedback == null && e.getErrorCode() == AiChatErrorCode.AICHAT_FEEDBACK_REJECTED) {
+                throw new BusinessException(AiChatErrorCode.AICHAT_REQUEST_REJECTED, null, e);
+            }
+            throw e;
+        }
     }
 
     private Map<String, Long> pathVariables(Long conversationRoomId) {
@@ -201,6 +221,14 @@ public class HttpAiChatClient implements AiChatClient {
                 && isSessionClosed(errorReader.get())) {
             return AiChatErrorCode.AICHAT_SESSION_CLOSED;
         }
+        if (endpoint == AiChatEndpoint.START_SESSION && status == HttpStatus.BAD_REQUEST.value()
+                && isMemoryRejected(errorReader.get())) {
+            return AiChatErrorCode.AICHAT_MEMORY_REJECTED;
+        }
+        if (endpoint == AiChatEndpoint.CONFIRM_ANALYSIS && status == HttpStatus.BAD_REQUEST.value()
+                && isInvalidRequest(errorReader.get())) {
+            return AiChatErrorCode.AICHAT_FEEDBACK_REJECTED;
+        }
         if (!isMessageEndpoint(endpoint)) {
             return AiChatErrorCode.AICHAT_REQUEST_REJECTED;
         }
@@ -223,6 +251,14 @@ public class HttpAiChatClient implements AiChatClient {
 
     private boolean isSessionClosed(AiServerErrorResponse error) {
         return error != null && SESSION_CLOSED_CODE.equals(error.code());
+    }
+
+    private boolean isMemoryRejected(AiServerErrorResponse error) {
+        return error != null && MEMORY_REJECTED_CODES.contains(error.code());
+    }
+
+    private boolean isInvalidRequest(AiServerErrorResponse error) {
+        return error != null && INVALID_REQUEST_CODE.equals(error.code());
     }
 
     private AiChatErrorCode toUnprocessableAnalysisErrorCode(AiServerErrorResponse error) {

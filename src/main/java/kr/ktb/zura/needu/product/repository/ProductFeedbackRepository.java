@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.product.repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -7,6 +8,7 @@ import java.util.Optional;
 import kr.ktb.zura.needu.product.entity.ProductFeedback;
 import kr.ktb.zura.needu.product.type.ProductContext;
 import kr.ktb.zura.needu.product.type.ProductFeedbackType;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -31,4 +33,17 @@ public interface ProductFeedbackRepository extends JpaRepository<ProductFeedback
             """)
     List<Long> findAllDislikedProductIds(
             @Param("userId") Long userId, @Param("productIds") Collection<Long> productIds);
+
+    @Query("""
+            select new kr.ktb.zura.needu.product.repository.ProductFeedbackActivity(
+                p.platformType, p.externalId, pf.feedbackType, pf.context, pf.updatedAt)
+            from ProductFeedback pf
+            join pf.product p
+            where pf.userId = :userId
+              and pf.deletedAt is null
+              and pf.updatedAt >= :since
+            order by pf.updatedAt desc, pf.id desc
+            """)
+    List<ProductFeedbackActivity> findAllActivitiesByUserIdSince(
+            @Param("userId") Long userId, @Param("since") LocalDateTime since, Limit limit);
 }

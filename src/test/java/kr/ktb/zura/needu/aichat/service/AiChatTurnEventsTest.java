@@ -130,6 +130,18 @@ class AiChatTurnEventsTest {
     }
 
     @Test
+    void turnAcceptedByPreviousDelivery_ofAcceptedTurn_publishesCompletedAndDoneWithoutAccepted() {
+        AiChatCompletedEvent completed = new AiChatCompletedEvent(USER_MESSAGE_ID, 202L, "좋아요", 10, false);
+
+        AiChatTurnEvents.ofAcceptedTurn(publisher, CONVERSATION_ID, USER_MESSAGE_ID).complete(completed);
+
+        InOrder order = inOrder(publisher);
+        order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.COMPLETED, completed);
+        order.verify(publisher).publish(CONVERSATION_ID, AiChatEventType.DONE, new AiChatDoneEvent(USER_MESSAGE_ID));
+        verify(publisher, times(2)).publish(eq(CONVERSATION_ID), any(), any());
+    }
+
+    @Test
     void publishFailsMidReply_publishDelta_skipsRemainingEventsWithoutThrowing() {
         doThrow(new IllegalStateException("redis down"))
                 .when(publisher).publish(eq(CONVERSATION_ID), eq(AiChatEventType.DELTA), any());

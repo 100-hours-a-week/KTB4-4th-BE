@@ -6,6 +6,7 @@ import java.util.Optional;
 import kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget;
 import kr.ktb.zura.needu.friend.dto.response.FriendJoinedNotificationTarget;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendBirthdayTarget;
 import kr.ktb.zura.needu.friend.entity.Friend;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -46,23 +47,29 @@ public interface FriendRepository extends JpaRepository<Friend, Long> {
 
     @Query("""
             select new kr.ktb.zura.needu.friend.dto.response.FriendBirthdayNotificationTarget(
-                f.ownerUserId, friendUser.id, friendUser.nickname)
+                f.ownerUserId, f.friendUserId)
             from Friend f
-            join User friendUser on friendUser.id = f.friendUserId
             join User ownerUser on ownerUser.id = f.ownerUserId
-            where friendUser.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
+            where f.friendUserId in :birthdayFriendUserIds
               and ownerUser.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
-              and (
-                  (month(friendUser.birthDate) = :month and day(friendUser.birthDate) = :day)
-                  or (:includeLeapDay = true
-                      and month(friendUser.birthDate) = 2
-                      and day(friendUser.birthDate) = 29)
-              )
             """)
     List<FriendBirthdayNotificationTarget> findAllBirthdayNotificationTargets(
-            @Param("month") int month,
-            @Param("day") int day,
-            @Param("includeLeapDay") boolean includeLeapDay
+            @Param("birthdayFriendUserIds") Collection<Long> birthdayFriendUserIds
+    );
+
+    @Query("""
+            select new kr.ktb.zura.needu.friend.dto.response.UpcomingFriendBirthdayTarget(
+                friendUser.id, friendUser.nickname, friendUser.profileImageUrl, friendUser.birthDate)
+            from Friend f
+            join User friendUser on friendUser.id = f.friendUserId
+            where f.ownerUserId = :ownerUserId
+              and friendUser.status = kr.ktb.zura.needu.user.type.UserStatus.ACTIVE
+              and friendUser.birthDate is not null
+              and (month(friendUser.birthDate) * 100 + day(friendUser.birthDate)) in :monthDays
+            """)
+    List<UpcomingFriendBirthdayTarget> findAllActiveFriendBirthdays(
+            @Param("ownerUserId") Long ownerUserId,
+            @Param("monthDays") Collection<Integer> monthDays
     );
 
     @Query("""

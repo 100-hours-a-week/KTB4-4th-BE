@@ -1,0 +1,176 @@
+package kr.ktb.zura.needu.anonymouschat.entity;
+
+import jakarta.persistence.CheckConstraint;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomParticipantStatus;
+import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+
+import static lombok.AccessLevel.PROTECTED;
+
+@Getter
+@Entity
+@Table(name = "anonymous_rooms",
+        indexes = {
+                @Index(name = "idx_anonymous_rooms_questioner_activity",
+                        columnList = "questioner_user_id, last_activity_at DESC, id DESC"),
+                @Index(name = "idx_anonymous_rooms_recipient_activity",
+                        columnList = "recipient_user_id, last_activity_at DESC, id DESC")
+        },
+        check = @CheckConstraint(name = "ck_anonymous_rooms_distinct_users",
+                constraint = "questioner_user_id <> recipient_user_id")
+)
+@NoArgsConstructor(access = PROTECTED)
+public class AnonymousRoom {
+
+    public static final int QUESTIONER_ALIAS_MAX_LENGTH = 20;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Long productId;
+
+    @Column(nullable = false)
+    private Long questionerUserId;
+
+    @Column(nullable = false)
+    private Long recipientUserId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomParticipantStatus questionerStatus = AnonymousRoomParticipantStatus.JOINED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomParticipantStatus recipientStatus = AnonymousRoomParticipantStatus.JOINED;
+
+    @Column(nullable = false, length = QUESTIONER_ALIAS_MAX_LENGTH)
+    private String questionerAlias;
+
+    // 질문받은 사용자에게 보여주는 질문자 익명 아바타. FE 아이콘 파일명과 같은 키
+    @Column(nullable = false, length = 30)
+    private String questionerAvatarAnimal;
+
+    @Column(nullable = false, length = 20)
+    private String questionerAvatarColor;
+
+    private Long questionerLastReadMessageId;
+
+    private Long recipientLastReadMessageId;
+
+    @CreationTimestamp
+    @Column(nullable = false)
+    private LocalDateTime lastActivityAt;
+
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    // 질문받은 사용자가 방을 최초로 확인한 시각
+    private LocalDateTime openedAt;
+
+    private LocalDateTime expiresAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AnonymousRoomStatus status = AnonymousRoomStatus.ACTIVE;
+
+    private LocalDateTime endedAt;
+
+    private Long endedByUserId;
+
+    public AnonymousRoom(
+            Long productId,
+            Long questionerUserId,
+            Long recipientUserId,
+            String questionerAlias,
+            String questionerAvatarAnimal,
+            String questionerAvatarColor
+    ) {
+        this.productId = productId;
+        this.questionerUserId = questionerUserId;
+        this.recipientUserId = recipientUserId;
+        this.questionerAlias = questionerAlias;
+        this.questionerAvatarAnimal = questionerAvatarAnimal;
+        this.questionerAvatarColor = questionerAvatarColor;
+    }
+
+    public boolean isQuestioner(Long userId) {
+        return questionerUserId.equals(userId);
+    }
+
+    public boolean isParticipant(Long userId) {
+        return isQuestioner(userId) || recipientUserId.equals(userId);
+    }
+
+    public boolean isJoined(Long userId) {
+        return isQuestioner(userId)
+                ? questionerStatus == AnonymousRoomParticipantStatus.JOINED
+                : recipientStatus == AnonymousRoomParticipantStatus.JOINED;
+    }
+
+    public boolean isPartnerJoined(Long userId) {
+        return isQuestioner(userId)
+                ? recipientStatus == AnonymousRoomParticipantStatus.JOINED
+                : questionerStatus == AnonymousRoomParticipantStatus.JOINED;
+    }
+
+    public Long getPartnerUserId(Long userId) {
+        return isQuestioner(userId) ? recipientUserId : questionerUserId;
+    }
+
+    public boolean isEnded() {
+        return status == AnonymousRoomStatus.ENDED;
+    }
+
+    public boolean isActive() {
+        return status == AnonymousRoomStatus.ACTIVE;
+    }
+
+    public boolean leave(Long userId, LocalDateTime expiresAt) {
+        if (isQuestioner(userId)) {
+            if (questionerStatus == AnonymousRoomParticipantStatus.LEFT) {
+                return false;
+            }
+            questionerStatus = AnonymousRoomParticipantStatus.LEFT;
+        } else {
+            if (recipientStatus == AnonymousRoomParticipantStatus.LEFT) {
+                return false;
+            }
+            recipientStatus = AnonymousRoomParticipantStatus.LEFT;
+        }
+        expire(expiresAt);
+        return true;
+    }
+
+    private void expire(LocalDateTime expiresAt) {
+        if (!isActive()) {
+            return;
+        }
+        status = AnonymousRoomStatus.EXPIRED;
+        this.expiresAt = expiresAt;
+    }
+
+    public boolean end(Long endedByUserId, LocalDateTime endedAt) {
+        if (isEnded()) {
+            return false;
+        }
+        this.status = AnonymousRoomStatus.ENDED;
+        this.endedByUserId = endedByUserId;
+        this.endedAt = endedAt;
+        return true;
+    }
+}

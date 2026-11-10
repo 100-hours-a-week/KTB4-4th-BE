@@ -14,6 +14,7 @@ import kr.ktb.zura.needu.aichat.sse.AiChatEventType;
 import kr.ktb.zura.needu.aichat.sse.AiChatRedisEvent;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedConstruction;
@@ -171,6 +172,60 @@ class AiChatStreamServiceTest {
             assertThat(sentEventParts(emitter)).extracting(part -> part.getData().toString())
                     .anyMatch(part -> part.contains(":ping"));
         }
+    }
+
+    @Test
+    void connectedConversations_closeAllConnections_completesEmittersAndRemovesConnections() {
+        try (MockedConstruction<SseEmitter> emitters = mockConstruction(SseEmitter.class)) {
+            SseEmitter firstEmitter = connectEmitter(emitters);
+            SseEmitter secondEmitter = connectEmitter(emitters);
+
+            aiChatStreamService.closeAllConnections();
+
+            verify(firstEmitter).complete();
+            verify(secondEmitter).complete();
+            assertThat(connectionsByConversationId()).isEmpty();
+        }
+    }
+
+    @Test
+    void oneEmitterFailsToComplete_closeAllConnections_stillCompletesOtherEmitters() {
+        try (MockedConstruction<SseEmitter> emitters = mockConstruction(SseEmitter.class)) {
+            SseEmitter failingEmitter = connectEmitter(emitters);
+            SseEmitter healthyEmitter = connectEmitter(emitters);
+            doThrow(new IllegalStateException("already completed")).when(failingEmitter).complete();
+
+            aiChatStreamService.closeAllConnections();
+
+            verify(healthyEmitter).complete();
+            assertThat(connectionsByConversationId()).isEmpty();
+        }
+    }
+
+    @Test
+    void connectionsClosedOnShutdown_sendEvent_doesNotSend() throws Exception {
+        try (MockedConstruction<SseEmitter> emitters = mockConstruction(SseEmitter.class)) {
+            SseEmitter emitter = connectEmitter(emitters);
+            aiChatStreamService.closeAllConnections();
+
+            aiChatStreamService.sendEvent(new AiChatRedisEvent(
+                    CONVERSATION_ID, AiChatEventType.DONE, jsonMapper.createObjectNode()));
+
+            verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
+        }
+    }
+
+    @Test
+    void shuttingDown_connect_throwsServiceUnavailableWithoutOpeningStream() {
+        aiChatStreamService.closeAllConnections();
+
+        try (MockedConstruction<SseEmitter> emitters = mockConstruction(SseEmitter.class)) {
+            assertThatThrownBy(() -> aiChatStreamService.connect(activeRoom()))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE));
+            assertThat(emitters.constructed()).isEmpty();
+        }
+        assertThat(connectionsByConversationId()).doesNotContainKey(CONVERSATION_ID);
     }
 
     // connected 전송까지 끝낸 뒤 이후 전송만 검증할 수 있게 호출 기록을 비운다

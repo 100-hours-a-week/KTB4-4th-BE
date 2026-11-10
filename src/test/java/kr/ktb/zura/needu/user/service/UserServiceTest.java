@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.user.service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -42,6 +44,8 @@ import static org.mockito.Mockito.when;
 
 class UserServiceTest {
 
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 27, 1, 0);
+
     private UserRepository userRepository;
     private UserTasteProfileRepository userTasteProfileRepository;
     private UserService userService;
@@ -50,7 +54,8 @@ class UserServiceTest {
     void setUp() {
         userRepository = mock(UserRepository.class);
         userTasteProfileRepository = mock(UserTasteProfileRepository.class);
-        userService = new UserService(userRepository, userTasteProfileRepository, JsonMapper.builder().build());
+        userService = new UserService(userRepository, userTasteProfileRepository, JsonMapper.builder().build(),
+                Clock.fixed(Instant.parse("2026-10-27T01:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test
@@ -183,6 +188,15 @@ class UserServiceTest {
     }
 
     @Test
+    void activeUser_validateActiveUserForUpdate_locksUser() {
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(createActiveUser("니듀")));
+
+        assertDoesNotThrow(() -> userService.validateActiveUserForUpdate(1L));
+
+        verify(userRepository).findByIdForUpdate(1L);
+    }
+
+    @Test
     void sameKakaoAccount_validateKakaoIdentity_passes() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(new User(42L, "니듀", null, Gender.NONE, null)));
 
@@ -245,7 +259,8 @@ class UserServiceTest {
                 1L,
                 "캠핑과 핸드드립을 즐기는 분입니다.",
                 List.of("취향1", "취향2", "취향3"),
-                List.of("캠핑", "자전거타기", "여행"));
+                List.of("캠핑", "자전거타기", "여행"),
+                null);
 
         assertTrue(user.isTasteAnalysisCompleted());
         ArgumentCaptor<UserTasteProfile> profileCaptor = ArgumentCaptor.forClass(UserTasteProfile.class);
@@ -380,6 +395,59 @@ class UserServiceTest {
     }
 
     @Test
+    void memoryInCloseResult_completeTasteAnalysis_replacesStoredMemory() {
+        User user = createActiveUser("니듀");
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        profile.updateAiMemory(Map.of("schemaVersion", "1.0", "sessionCount", 1));
+        Map<String, Object> newMemory = Map.of("schemaVersion", "1.0", "sessionCount", 2);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        userService.completeTasteAnalysis(1L, "요약", List.of("취향"), List.of("관심사"), newMemory);
+
+        assertEquals(newMemory, profile.getAiMemory());
+    }
+
+    @Test
+    void noMemoryInCloseResult_completeTasteAnalysis_keepsStoredMemory() {
+        User user = createActiveUser("니듀");
+        UserTasteProfile profile = new UserTasteProfile(user, Map.of());
+        Map<String, Object> storedMemory = Map.of("schemaVersion", "1.0", "sessionCount", 1);
+        profile.updateAiMemory(storedMemory);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        userService.completeTasteAnalysis(1L, "요약", List.of("취향"), List.of("관심사"), null);
+
+        assertEquals(storedMemory, profile.getAiMemory());
+    }
+
+    @Test
+    void storedMemory_findAiMemory_returnsMemory() {
+        UserTasteProfile profile = new UserTasteProfile(createActiveUser("니듀"), Map.of());
+        Map<String, Object> storedMemory = Map.of("schemaVersion", "1.0", "sessionCount", 1);
+        profile.updateAiMemory(storedMemory);
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        assertEquals(storedMemory, userService.findAiMemory(1L));
+    }
+
+    @Test
+    void profileWithoutMemory_findAiMemory_returnsEmpty() {
+        UserTasteProfile profile = new UserTasteProfile(createActiveUser("니듀"), Map.of());
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        assertTrue(userService.findAiMemory(1L).isEmpty());
+    }
+
+    @Test
+    void userWithoutTasteProfile_findAiMemory_returnsEmpty() {
+        when(userTasteProfileRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertTrue(userService.findAiMemory(1L).isEmpty());
+    }
+
+    @Test
     void missingUser_findUserAiProfile_throwsUserNotFound() {
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -443,6 +511,105 @@ class UserServiceTest {
         assertFalse(user.isTasteAnalysisCompleted());
         assertNull(user.getLastLoginAt());
         assertNull(user.getKakaoFriendSyncedAt());
+    }
+
+    @Test
+    void activeUser_blockUntil_blocksUntilGivenTime() {
+        User user = createActiveUser("회원");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime now = LocalDateTime.of(2026, 10, 27, 1, 0);
+
+        boolean blocked = userService.blockUntil(1L, now, now.plusDays(3));
+
+        assertTrue(blocked);
+        assertEquals(UserStatus.BLOCKED, user.getStatus());
+        assertEquals(now, user.getBlockedAt());
+        assertEquals(now.plusDays(3), user.getBlockedUntil());
+    }
+
+    @Test
+    void blockedUser_blockUntil_keepsExistingBlock() {
+        User user = createActiveUser("회원");
+        LocalDateTime firstBlockedAt = LocalDateTime.of(2026, 10, 27, 1, 0);
+        user.blockUntil(firstBlockedAt, firstBlockedAt.plusDays(3));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        boolean blocked = userService.blockUntil(1L, firstBlockedAt.plusDays(1), firstBlockedAt.plusDays(4));
+
+        assertFalse(blocked);
+        assertEquals(firstBlockedAt, user.getBlockedAt());
+        assertEquals(firstBlockedAt.plusDays(3), user.getBlockedUntil());
+    }
+
+    @Test
+    void expiredBlockUser_blockUntil_blocksAgain() {
+        User user = createActiveUser("회원");
+        LocalDateTime firstBlockedAt = LocalDateTime.of(2026, 10, 20, 1, 0);
+        user.blockUntil(firstBlockedAt, firstBlockedAt.plusDays(3));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime now = LocalDateTime.of(2026, 10, 27, 1, 0);
+
+        boolean blocked = userService.blockUntil(1L, now, now.plusDays(3));
+
+        assertTrue(blocked);
+        assertEquals(now, user.getBlockedAt());
+        assertEquals(now.plusDays(3), user.getBlockedUntil());
+    }
+
+    @Test
+    void withdrawnUser_blockUntil_returnsFalse() {
+        User user = createActiveUser("회원");
+        user.withdraw();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        LocalDateTime now = LocalDateTime.of(2026, 10, 27, 1, 0);
+
+        boolean blocked = userService.blockUntil(1L, now, now.plusDays(3));
+
+        assertFalse(blocked);
+        assertEquals(UserStatus.WITHDRAWN, user.getStatus());
+    }
+
+    @Test
+    void neverBlockedUser_findLastBlockedAt_returnsEmpty() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(createActiveUser("회원")));
+
+        assertTrue(userService.findLastBlockedAt(1L).isEmpty());
+    }
+
+    @Test
+    void blockedUserBeforeBlockedUntil_findOrCreateKakaoUser_throwsBlocked() {
+        User user = createActiveUser("회원");
+        user.blockUntil(NOW.minusDays(1), NOW.plusDays(2));
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(user));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.findOrCreateKakaoUser(42L, "회원", null));
+
+        assertEquals(UserErrorCode.USER_BLOCKED, exception.getErrorCode());
+        assertEquals(UserStatus.BLOCKED, user.getStatus());
+    }
+
+    @Test
+    void blockedUserAfterBlockedUntil_findOrCreateKakaoUser_releasesBlock() {
+        User user = createActiveUser("회원");
+        user.blockUntil(NOW.minusDays(3), NOW);
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(user));
+
+        userService.findOrCreateKakaoUser(42L, "회원", null);
+
+        assertEquals(UserStatus.ACTIVE, user.getStatus());
+        assertNull(user.getBlockedUntil());
+        assertEquals(NOW.minusDays(3), user.getBlockedAt());
+    }
+
+    @Test
+    void blockedUserWithoutBlockedUntil_findOrCreateKakaoUser_keepsBlock() {
+        User user = createActiveUser("회원");
+        user.block();
+        when(userRepository.findByExternalId(42L)).thenReturn(Optional.of(user));
+
+        assertThrows(BusinessException.class, () -> userService.findOrCreateKakaoUser(42L, "회원", null));
+        assertEquals(UserStatus.BLOCKED, user.getStatus());
     }
 
     private User createOnboardingUser() {

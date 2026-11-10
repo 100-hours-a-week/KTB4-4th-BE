@@ -38,6 +38,10 @@ public enum AiChatErrorCode implements ErrorCode {
     // 서비스 토큰 설정 문제라 사용자가 할 수 있는 일이 없음 => 내부 원인을 드러내지 않고 공통 500 문구를 쓴다
     AICHAT_AUTHENTICATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "요청을 처리하지 못했습니다."),
     AICHAT_REQUEST_REJECTED(HttpStatus.SERVICE_UNAVAILABLE, "AI가 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    // AI 서버가 저장된 장기 기억을 받지 않음 => 기억 없이 다시 시작하므로 보통 사용자에게 드러나지 않는다
+    AICHAT_MEMORY_REJECTED(HttpStatus.SERVICE_UNAVAILABLE, "지난 대화 기록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."),
+    // AI 서버가 추천 피드백을 받지 않음(피드백을 모르는 버전 등) => 피드백 없이 다시 닫으므로 보통 사용자에게 드러나지 않는다
+    AICHAT_FEEDBACK_REJECTED(HttpStatus.SERVICE_UNAVAILABLE, "상품 반응을 추천에 반영하지 못했습니다. 잠시 후 다시 시도해 주세요."),
     AICHAT_CONVERSATION_STARTING(HttpStatus.SERVICE_UNAVAILABLE, "AI 대화를 준비하고 있습니다. 잠시 후 다시 시도해 주세요."),
     AICHAT_CONVERSATION_EXPIRED(HttpStatus.GONE,"AI 대화 세션이 만료되었습니다." );
 

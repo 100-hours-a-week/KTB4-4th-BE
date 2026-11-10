@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
+import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerPatchAnalysisRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerUserProfileRequest;
 import kr.ktb.zura.needu.aichat.client.dto.response.AiServerAnalysisKeywordResponse;
@@ -66,7 +67,8 @@ public class FakeAiChatClient implements AiChatClient {
 
     @Override
     public AiServerStartSessionResponse startSession(Long userId, Long conversationRoomId,
-                                                     AiServerUserProfileRequest userProfile) {
+                                                     AiServerUserProfileRequest userProfile,
+                                                     Map<String, Object> memory) {
         pause();
         mockTurns.put(conversationRoomId, 0);
         return new AiServerStartSessionResponse(
@@ -135,7 +137,8 @@ public class FakeAiChatClient implements AiChatClient {
     }
 
     @Override
-    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId) {
+    public AiServerCloseSessionResponse confirmAnalysis(Long userId, Long conversationRoomId,
+                                                        AiServerFeedbackRequest feedback) {
         pause();
         AiServerAnalysisProfileResponse profile = mockAnalyses.getOrDefault(
                 conversationRoomId, createMockAnalysis(userId)).profile();
@@ -156,7 +159,20 @@ public class FakeAiChatClient implements AiChatClient {
                                 PlatformType.COUPANG,
                                 MOCK_GIFT_PRODUCT_ID,
                                 new BigDecimal("8.0"),
-                                "캠핑을 좋아하는 분에게 선물하기 좋은 상품이에요.")))));
+                                "캠핑을 좋아하는 분에게 선물하기 좋은 상품이에요.")))),
+                createMockMemory(userId));
+    }
+
+    // 로컬에서도 기억 저장 흐름을 확인할 수 있게 AI 명세의 최소 구조를 돌려준다
+    private Map<String, Object> createMockMemory(Long userId) {
+        return Map.of(
+                "schemaVersion", "1.0",
+                "userId", userId,
+                "sessionCount", 1,
+                "updatedAt", OffsetDateTime.now(ZoneOffset.UTC).toString(),
+                "signals", List.of(),
+                "axes", List.of(),
+                "recalled", List.of());
     }
 
     private AiServerAnalysisResponse createMockAnalysis(Long userId) {

@@ -3,5 +3,6 @@ package kr.ktb.zura.needu.notification.type;
 public enum NotificationResourceType {
     USER,
     AI_CONVERSATION,
-    PURCHASE_CHECK
+    PURCHASE_CHECK,
+    ANONYMOUS_ROOM
 }

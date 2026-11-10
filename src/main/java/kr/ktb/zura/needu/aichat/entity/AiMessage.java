@@ -28,10 +28,16 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(
         name = "ai_messages",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_ai_messages_room_client_message_id",
-                columnNames = {"ai_chat_room_id", "client_message_id"}
-        )
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_ai_messages_room_client_message_id",
+                        columnNames = {"ai_chat_room_id", "client_message_id"}
+                ),
+                @UniqueConstraint(
+                        name = "uk_ai_messages_reply_to_message_id",
+                        columnNames = {"reply_to_message_id"}
+                )
+        }
 )
 @NoArgsConstructor(access = PROTECTED)
 public class AiMessage {

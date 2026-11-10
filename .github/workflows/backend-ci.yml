@@ -134,8 +134,8 @@ jobs:
           docker push \
             "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-  v2-ecr-push:
-    name: Build & Push V2 Image
+  dev-ecr-push:
+    name: Build & Push Dev Image
     needs: basic-check
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
@@ -176,16 +176,16 @@ jobs:
           docker push \
             "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-  deploy-dev:
-    name: Deploy V2 Dev
-    needs: v2-ecr-push
+  v3-dev-gitops:
+    name: Create V3 Dev GitOps PR
+    needs: dev-ecr-push
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy.yml
+    uses: ./.github/workflows/v3-dev-deploy.yml
     with:
-      environment: dev
-      github_environment: dev
       image_sha: ${{ github.sha }}
     secrets: inherit
+
+

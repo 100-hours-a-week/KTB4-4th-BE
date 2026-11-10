@@ -13,8 +13,13 @@ class NotificationCursorTest {
     void validCursor_encodeAndDecode_preservesNotificationId() {
         NotificationCursor cursor = new NotificationCursor(501L);
 
-        assertThat(cursor.encode()).isEqualTo("eyJpZCI6NTAxfQ==");
+        assertThat(cursor.encode()).isEqualTo("eyJpZCI6NTAxfQ");
         assertThat(NotificationCursor.decode(cursor.encode()).id()).isEqualTo(501L);
+    }
+
+    @Test
+    void paddedLegacyCursor_decode_preservesNotificationId() {
+        assertThat(NotificationCursor.decode("eyJpZCI6NTAxfQ==").id()).isEqualTo(501L);
     }
 
     @Test

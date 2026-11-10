@@ -38,7 +38,7 @@ class RateLimitFilterTest {
     void setUp() {
         RateLimitProperties properties = new RateLimitProperties(Map.of(
                 POLICY_NAME, new RateLimitProperties.Policy(HttpMethod.GET, PATH, LIMIT, WINDOW)
-        ));
+        ), Map.of());
         rateLimitCounter = mock(RateLimitCounter.class);
         rateLimitFilter = new RateLimitFilter(
                 properties,
@@ -128,7 +128,7 @@ class RateLimitFilterTest {
                         HttpMethod.GET, "/api/v1/users/{userId}/gift-recommendations", LIMIT + 10, WINDOW),
                 "my-gift-recommendations", new RateLimitProperties.Policy(
                         HttpMethod.GET, "/api/v1/users/me/gift-recommendations", LIMIT, WINDOW)
-        ));
+        ), Map.of());
         rateLimitFilter = new RateLimitFilter(
                 properties,
                 rateLimitCounter,

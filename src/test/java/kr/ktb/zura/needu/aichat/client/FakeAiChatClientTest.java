@@ -30,7 +30,7 @@ class FakeAiChatClientTest {
     void conversationFlow_returnsConsistentResponses() {
         AiChatClient client = new FakeAiChatClient(Duration.ZERO, 2, 20, Duration.ZERO);
 
-        AiServerStartSessionResponse session = client.startSession(1L, 101L, USER_PROFILE);
+        AiServerStartSessionResponse session = client.startSession(1L, 101L, USER_PROFILE, null);
         AiServerSendMessageResponse firstReply = client.sendMessage(1L, 101L, "캠핑을 좋아해요");
         AiServerSendMessageResponse secondReply = client.sendMessage(1L, 101L, "장비를 고르는 게 좋아요");
         AiServerAnalysisResponse analysis = client.createAnalysis(101L);
@@ -39,7 +39,7 @@ class FakeAiChatClientTest {
                         1L,
                         "주말마다 자연에서 쉬는 것을 좋아합니다.",
                         new AiServerAnalysisKeywordsRequest(List.of("가벼운 장비"), List.of("자연"))));
-        AiServerCloseSessionResponse closedSession = client.confirmAnalysis(1L, 101L);
+        AiServerCloseSessionResponse closedSession = client.confirmAnalysis(1L, 101L, null);
 
         assertEquals(101L, session.conversationRoomId());
         assertEquals(50, firstReply.progress());
@@ -65,7 +65,7 @@ class FakeAiChatClientTest {
     void configuredMaxTurns_locksInputOnLastTurn() {
         AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3, 20, Duration.ZERO);
 
-        client.startSession(1L, 101L, USER_PROFILE);
+        client.startSession(1L, 101L, USER_PROFILE, null);
         AiServerSendMessageResponse firstReply = client.sendMessage(1L, 101L, "first");
         AiServerSendMessageResponse secondReply = client.sendMessage(1L, 101L, "second");
         AiServerSendMessageResponse thirdReply = client.sendMessage(1L, 101L, "third");
@@ -82,7 +82,7 @@ class FakeAiChatClientTest {
         AiChatClient client = new FakeAiChatClient(Duration.ofMillis(30), 2, 20, Duration.ZERO);
 
         long startedAt = System.nanoTime();
-        client.startSession(1L, 101L, USER_PROFILE);
+        client.startSession(1L, 101L, USER_PROFILE, null);
 
         assertTrue(Duration.ofNanos(System.nanoTime() - startedAt).toMillis() >= 20);
     }
@@ -90,7 +90,7 @@ class FakeAiChatClientTest {
     @Test
     void configuredReplyChunks_streamMessage_passesReplyInChunksThenReturnsResponse() {
         AiChatClient client = new FakeAiChatClient(Duration.ZERO, 3, 2, Duration.ZERO);
-        client.startSession(1L, 101L, USER_PROFILE);
+        client.startSession(1L, 101L, USER_PROFILE, null);
         List<String> chunks = new ArrayList<>();
 
         AiServerSendMessageResponse response = client.streamMessage(1L, 101L, 701L, "first", chunks::add);

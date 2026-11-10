@@ -51,6 +51,13 @@ class AiGenerationStateServiceTest {
     }
 
     @Test
+    void replyInProgress_extendGenerating_extendsOnlyThatMessageState() {
+        aiGenerationStateService.extendGenerating(CONVERSATION_ID, USER_MESSAGE_ID);
+
+        verify(aiGenerationStateRepository).extend(CONVERSATION_ID, USER_MESSAGE_ID);
+    }
+
+    @Test
     void sameMessageGenerating_isGenerating_returnsTrue() {
         given(aiGenerationStateRepository.findUserMessageId(CONVERSATION_ID)).willReturn(Optional.of(USER_MESSAGE_ID));
 

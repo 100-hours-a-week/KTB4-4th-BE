@@ -27,24 +27,89 @@ ai:
     stream-max-pending-events: ${AI_CHAT_STREAM_MAX_PENDING_EVENTS:1000}
     # 인스턴스 하나가 동시에 만드는 AI 답변 수다. 넘으면 사용자 메시지를 저장하지 않고 503으로 거절해 AI 서버를 보호한다.
     reply-max-concurrency: ${AI_CHAT_REPLY_MAX_CONCURRENCY:200}
-    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 중단하고 error 이벤트를 보낸다. ECS stopTimeout보다 짧게 둔다.
-    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
+    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 큐를 쓰는 답변은 대기열로 돌려보내고, 받은 서버가 바로 처리하는 답변은 중단하고 error 이벤트를 보낸다.
+    # 웹 서버 종료 대기(최대 30초) + 이 값 + 5초가 Pod 종료 유예에서 preStop을 뺀 시간 안에 끝나야 한다. 유예 130초·preStop 10초 기준 30 + 80 + 5 ≤ 120.
+    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:80s}
+    reply-queue:
+      # 켜면 메시지를 받은 서버가 답변을 직접 만들지 않고 답변 작업 스트림에 넣는다. 끄면 지금처럼 받은 서버가 처리한다.
+      enabled: ${AI_CHAT_REPLY_QUEUE_ENABLED:false}
+      # AI 서버 전체에 동시에 보내는 답변 수다. BE 인스턴스 수와 상관없이 Redis에서 함께 센다.
+      # AI 서버 1대 한계 60(부하 테스트) × 0.8(임시) = 48, AI 서버 2대 기준. 운영 대수와 모델 쪽 한도를 확인해 조정
+      global-max-concurrency: ${AI_CHAT_REPLY_GLOBAL_MAX_CONCURRENCY:96}
+      # 스트림에 쌓인 답변 작업(처리 중 포함)이 이 수 이상이면 사용자 메시지를 저장하지 않고 503으로 거절한다. 대기열이 끝없이 쌓이지 않게 한다.
+      # 임시값이다. 부하 테스트 결과로 조정한다.
+      max-length: ${AI_CHAT_REPLY_MAX_LENGTH:800}
+      # 워커가 연장하지 않으면 허가가 풀리는 시간이다. 죽은 워커가 반납하지 못한 허가는 이 시간이 지나면 다시 쓸 수 있다.
+      permit-ttl: ${AI_CHAT_REPLY_PERMIT_TTL:30s}
+      # 같은 작업을 이 횟수보다 많이 할당받으면 더 처리하지 않고 실패로 닫는다. 처리할 때마다 서버를 죽이는 작업이 계속 돌지 않게 한다.
+      max-deliveries: ${AI_CHAT_REPLY_MAX_DELIVERIES:3}
+      # 처리 중인 워커가 작업·대화방 락·생성 중 표시·전역 허가를 연장하는 주기다. 회수 기준의 1/6로 둬 한두 번 늦어도 회수되지 않게 한다.
+      heartbeat-interval: ${AI_CHAT_REPLY_HEARTBEAT_INTERVAL:5s}
+      # 이 시간 동안 하트비트가 없는 작업은 처리하던 워커가 멈춘 것으로 보고 다른 워커가 회수한다.
+      claim-min-idle: ${AI_CHAT_REPLY_CLAIM_MIN_IDLE:30s}
+      # 워커가 멈춘 작업을 회수하러 확인하는 주기다.
+      claim-interval: ${AI_CHAT_REPLY_CLAIM_INTERVAL:5s}
+      # 꺼낼 작업이나 처리할 자리가 없을 때 다시 확인하기까지 쉬는 시간이다.
+      poll-interval: ${AI_CHAT_REPLY_POLL_INTERVAL:200ms}
+      # 회수한 작업을 AI 서버가 "같은 대화 처리 중"으로 거절하면 이만큼 기다렸다 다시 부른다. 다시 부를 때마다 두 배로 늘린다.
+      turn-in-progress-retry-delay: ${AI_CHAT_REPLY_TURN_IN_PROGRESS_RETRY_DELAY:2s}
+      # 스트림에서 빠진 작업을 DB 기준으로 다시 넣는 스케줄러의 실행 주기다. 인스턴스 하나에서만 돈다.
+      reconcile-interval: ${AI_CHAT_REPLY_RECONCILE_INTERVAL:10s}
+      # 이 시간 넘게 갱신이 없는 대기·처리 중 작업만 스트림에 남아 있는지 확인한다. 접수 직후 기록 전인 작업을 건드리지 않게 한다.
+      reconcile-stale-after: ${AI_CHAT_REPLY_RECONCILE_STALE_AFTER:15s}
+      reconcile-lock-at-most-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_MOST_FOR:1m}
+      reconcile-lock-at-least-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_LEAST_FOR:5s}
 
 needu:
+  messaging:
+    stream:
+      # 스트림 하나에 남겨 두는 최대 엔트리 수다(근사값). 넘으면 오래된 것부터 지워지고, ACK 전 메시지도 함께 지워진다.
+      # 처리된 메시지는 ACK와 함께 지우므로 남는 건 밀린 메시지뿐이다.
+      # 생일 배치 하루치(수신자 89만 명 / 500명 묶음 = 약 1,800개)의 5배 정도로 둔다
+      max-length: ${MESSAGING_STREAM_MAX_LENGTH:10000}
+      worker:
+        # 이 인스턴스에서 스트림 메시지를 읽어 처리할지 정한다. 끄면 발행만 하고 소비하지 않는다.
+        enabled: ${MESSAGING_STREAM_WORKER_ENABLED:true}
+        # topic 하나당 동시에 처리하는 메시지 수다. 비어 있는 슬롯 수만큼만 읽어 와 처리하지 못할 만큼 가져가지 않는다.
+        concurrency: ${MESSAGING_STREAM_WORKER_CONCURRENCY:8}
+        # 한 번에 읽어 오는 최대 메시지 수다. 실제로는 비어 있는 슬롯 수와 이 값 중 작은 만큼 읽는다.
+        max-read-count: ${MESSAGING_STREAM_WORKER_MAX_READ_COUNT:10}
+        # 읽을 메시지가 없거나 Redis 오류가 났을 때 다시 읽기 전까지 쉬는 시간이다.
+        poll-interval: ${MESSAGING_STREAM_WORKER_POLL_INTERVAL:500ms}
+        # 서버 종료 시 처리 중인 메시지를 기다리는 시간이다. 지나면 중단하고, 중단된 메시지는 ACK 전이라 다시 처리된다. ECS stopTimeout보다 짧게 둔다.
+        shutdown-timeout: ${MESSAGING_STREAM_WORKER_SHUTDOWN_TIMEOUT:20s}
   user:
     withdrawal:
       lock-ttl: ${USER_WITHDRAWAL_LOCK_TTL:120s}
   notification:
     stream-timeout: ${NOTIFICATION_STREAM_TIMEOUT:30m}
     heartbeat-interval: ${NOTIFICATION_HEARTBEAT_INTERVAL:25s}
+    # 같은 알림을 받는 사용자를 Redis 메시지 하나에 묶는 최대 인원이다
+    publish-chunk-size: ${NOTIFICATION_PUBLISH_CHUNK_SIZE:500}
+    # 한 알림 이벤트의 수신자 알림을 INSERT 한 문장에 묶는 최대 행 수다
+    insert-chunk-size: ${NOTIFICATION_INSERT_CHUNK_SIZE:1000}
     friend-birthday:
       cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
       zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}
-      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7}
+      # 생일 며칠 전에 알림을 보낼지 지정한다. 0은 생일 당일이다
+      reminder-days: ${FRIEND_BIRTHDAY_REMINDER_DAYS:7,5,3,1,0}
+      # 한 트랜잭션에서 알림을 만드는 생일 친구 수다. 실패하면 이 수만큼 함께 롤백된다
+      chunk-size: ${FRIEND_BIRTHDAY_NOTIFICATION_CHUNK_SIZE:100}
+      # 최초 실행 실패 후 전체 배치를 다시 실행하는 최대 횟수와 재시도 간격이다
+      max-retry-count: ${FRIEND_BIRTHDAY_NOTIFICATION_MAX_RETRY_COUNT:2}
+      retry-delay: ${FRIEND_BIRTHDAY_NOTIFICATION_RETRY_DELAY:5s}
       lock-at-most-for: ${FRIEND_BIRTHDAY_LOCK_AT_MOST_FOR:10m}
       lock-at-least-for: ${FRIEND_BIRTHDAY_LOCK_AT_LEAST_FOR:1m}
+  anonymous-chat:
+    notification-expiration: ${ANONYMOUS_CHAT_NOTIFICATION_EXPIRATION:30d}
+    report:
+      # 마지막 정지 이후 받은 신고가 이 수에 이르면 정지한다. 신고는 대화방마다 한 건이다
+      block-threshold: ${ANONYMOUS_CHAT_REPORT_BLOCK_THRESHOLD:5}
+      block-duration: ${ANONYMOUS_CHAT_REPORT_BLOCK_DURATION:3d}
   friend:
     poke-cooldown: ${FRIEND_POKE_COOLDOWN:1h}
+    # 다가오는 친구 이벤트 목록에 오늘부터 며칠 뒤까지 포함할지 지정한다
+    upcoming-event-days: ${FRIEND_UPCOMING_EVENT_DAYS:7}
     sync:
       fixed-delay: ${FRIEND_SYNC_FIXED_DELAY:1m}
       batch-size: ${FRIEND_SYNC_BATCH_SIZE:20}
@@ -56,6 +121,11 @@ needu:
     price-range-cache:
       ttl: ${PRODUCT_PRICE_RANGE_CACHE_TTL:10m}
       maximum-size: ${PRODUCT_PRICE_RANGE_CACHE_MAXIMUM_SIZE:100000}
+    activity:
+      # AI 대화를 닫을 때 추천 피드백으로 보내는 좋아요·싫어요·구매 기록의 범위다. 오래된 반응은 지금 취향과 다를 수 있어 뺀다
+      lookback: ${PRODUCT_ACTIVITY_LOOKBACK:90d}
+      # 보내는 기록의 최대 개수다. 최신순으로 자른다
+      max-items: ${PRODUCT_ACTIVITY_MAX_ITEMS:200}
     link-click:
       # 같은 사용자-상품-context의 클릭을 다시 기록하지 않는 기간
       duplicate-window: ${PRODUCT_LINK_CLICK_DUPLICATE_WINDOW:1h}

@@ -27,9 +27,6 @@ import org.springframework.web.util.pattern.PathPatternParser;
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private static final long MILLIS_PER_SECOND = 1_000L;
-    private static final long MIN_RETRY_AFTER_SECONDS = 1L;
-
     private final List<RateLimitRule> rules;
     private final RateLimitCounter rateLimitCounter;
     private final ErrorResponseWriter errorResponseWriter;
@@ -69,7 +66,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        long retryAfterSeconds = toRetryAfterSeconds(usage.remaining().toMillis());
+        long retryAfterSeconds = usage.retryAfterSeconds();
         log.info("Rate limit exceeded. policy={}, userId={}", rule.get().name(), userId);
         response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
         errorResponseWriter.write(response, CommonErrorCode.COMMON_TOO_MANY_REQUESTS,
@@ -87,11 +84,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return authentication != null
                 && authentication.isAuthenticated()
                 && !(authentication instanceof AnonymousAuthenticationToken);
-    }
-
-    private long toRetryAfterSeconds(long remainingMillis) {
-        long seconds = (remainingMillis + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND;
-        return Math.max(MIN_RETRY_AFTER_SECONDS, seconds);
     }
 
     private record RateLimitRule(String name, HttpMethod method, PathPattern pathPattern, long limit) {

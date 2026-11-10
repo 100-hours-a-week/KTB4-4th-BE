@@ -63,6 +63,12 @@ class AiChatStreamConnection {
         }
     }
 
+    // 보내지 못한 이벤트는 버리고, 클라이언트가 다시 연결해 목록으로 복구
+    void complete() {
+        close();
+        emitter.complete();
+    }
+
     private void sendPendingEvents() {
         SseEmitter.SseEventBuilder event;
         while (!closed.get() && (event = pendingEvents.poll()) != null) {

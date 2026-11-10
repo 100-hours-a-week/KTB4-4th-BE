@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
+import kr.ktb.zura.needu.common.redis.StreamRedisConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -19,12 +21,19 @@ public class AiGenerationStateRepository {
             return 0
             """, Long.class);
 
+    private static final DefaultRedisScript<Long> EXTEND_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('pexpire', KEYS[1], ARGV[2])
+            end
+            return 0
+            """, Long.class);
+
     private final StringRedisTemplate redisTemplate;
     private final RedisKeyGenerator keyGenerator;
     private final Duration ttl;
 
     public AiGenerationStateRepository(
-            StringRedisTemplate redisTemplate,
+            @Qualifier(StreamRedisConfig.STREAM_REDIS_TEMPLATE) StringRedisTemplate redisTemplate,
             RedisKeyGenerator keyGenerator,
             @Value("${ai.chat.generation-ttl}") Duration ttl
     ) {
@@ -44,6 +53,12 @@ public class AiGenerationStateRepository {
 
     public void delete(Long conversationId, Long userMessageId) {
         redisTemplate.execute(DELETE_SCRIPT, List.of(generateKey(conversationId)), String.valueOf(userMessageId));
+    }
+
+    public boolean extend(Long conversationId, Long userMessageId) {
+        Long result = redisTemplate.execute(EXTEND_SCRIPT, List.of(generateKey(conversationId)),
+                String.valueOf(userMessageId), String.valueOf(ttl.toMillis()));
+        return Long.valueOf(1).equals(result);
     }
 
     private String generateKey(Long conversationId) {

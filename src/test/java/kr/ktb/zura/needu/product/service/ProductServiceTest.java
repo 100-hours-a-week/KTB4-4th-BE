@@ -2,6 +2,7 @@ package kr.ktb.zura.needu.product.service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
@@ -10,6 +11,7 @@ import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.product.dto.response.ProductCategoryResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductDetailResponse;
 import kr.ktb.zura.needu.product.dto.response.ProductRecommendationResponse;
+import kr.ktb.zura.needu.product.dto.response.ProductSummaryResponse;
 import kr.ktb.zura.needu.product.entity.GiftProduct;
 import kr.ktb.zura.needu.product.entity.PersonalProduct;
 import kr.ktb.zura.needu.product.entity.Product;
@@ -18,6 +20,7 @@ import kr.ktb.zura.needu.product.exception.ProductErrorCode;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
 import kr.ktb.zura.needu.product.repository.ProductFeedbackRepository;
+import kr.ktb.zura.needu.product.repository.ProductRepository;
 import kr.ktb.zura.needu.product.type.PlatformType;
 import kr.ktb.zura.needu.product.type.ProductCategory;
 import kr.ktb.zura.needu.product.type.ProductContext;
@@ -59,8 +62,54 @@ class ProductServiceTest {
     @Mock
     private ProductFeedbackRepository productFeedbackRepository;
 
+    @Mock
+    private ProductRepository productRepository;
+
     @InjectMocks
     private ProductService productService;
+
+    @Test
+    void existingProduct_findProductSummary_returnsSummaryWithLongPrice() {
+        given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product()));
+
+        ProductSummaryResponse response = productService.findProductSummary(PRODUCT_ID);
+
+        assertThat(response.productId()).isEqualTo(PRODUCT_ID);
+        assertThat(response.name()).isEqualTo("섬유유연제");
+        assertThat(response.price()).isEqualTo(16500L);
+        assertThat(response.category()).isEqualTo(ProductCategory.LIVING);
+        assertThat(response.imageUrl()).isEqualTo("https://image.test/product.png");
+    }
+
+    @Test
+    void missingProduct_findProductSummary_throwsNotFound() {
+        given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.findProductSummary(PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    void productIds_findAllProductSummaries_returnsSummariesById() {
+        given(productRepository.findAllById(List.of(PRODUCT_ID))).willReturn(List.of(product()));
+
+        Map<Long, ProductSummaryResponse> response = productService.findAllProductSummaries(List.of(PRODUCT_ID));
+
+        assertThat(response).containsOnlyKeys(PRODUCT_ID);
+        assertThat(response.get(PRODUCT_ID).name()).isEqualTo("섬유유연제");
+    }
+
+    @Test
+    void missingProduct_findAllProductSummaries_throwsNotFound() {
+        given(productRepository.findAllById(List.of(PRODUCT_ID))).willReturn(List.of());
+
+        assertThatThrownBy(() -> productService.findAllProductSummaries(List.of(PRODUCT_ID)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND);
+    }
 
     @Test
     void categoriesDefined_findAllCategories_returnsAllInTabOrder() {
@@ -129,6 +178,25 @@ class ProductServiceTest {
         assertThat(response.recommendation().matchingKeywords()).containsExactly("향기", "홈케어");
         assertThat(response.myFeedback()).isNull();
         verifyNoInteractions(productFeedbackRepository, personalProductRepository);
+    }
+
+    @Test
+    void existingGiftProduct_validateGiftProduct_passes() {
+        given(giftProductRepository.findAllActiveByUserIdAndProductId(FRIEND_USER_ID, PRODUCT_ID))
+                .willReturn(List.of(giftProduct(FRIEND_USER_ID, 88L, product())));
+
+        productService.validateGiftProduct(FRIEND_USER_ID, PRODUCT_ID);
+    }
+
+    @Test
+    void missingGiftProduct_validateGiftProduct_throwsRecommendationNotFound() {
+        given(giftProductRepository.findAllActiveByUserIdAndProductId(FRIEND_USER_ID, PRODUCT_ID))
+                .willReturn(List.of());
+
+        assertThatThrownBy(() -> productService.validateGiftProduct(FRIEND_USER_ID, PRODUCT_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductErrorCode.PRODUCT_RECOMMENDATION_NOT_FOUND);
     }
 
     @Test

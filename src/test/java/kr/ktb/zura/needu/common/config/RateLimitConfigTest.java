@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.common.config;
 
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
+import kr.ktb.zura.needu.common.ratelimit.EventRateLimiter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitCounter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitRedisRepository;
 import kr.ktb.zura.needu.common.ratelimit.RedisRateLimitCounter;
@@ -10,6 +11,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class RateLimitConfigTest {
 
@@ -22,7 +24,9 @@ class RateLimitConfigTest {
                     "needu.rate-limit.policies.test.method=GET",
                     "needu.rate-limit.policies.test.path-pattern=/test",
                     "needu.rate-limit.policies.test.limit=1",
-                    "needu.rate-limit.policies.test.window=1m"
+                    "needu.rate-limit.policies.test.window=1m",
+                    "needu.rate-limit.events.test-event.limit=1",
+                    "needu.rate-limit.events.test-event.window=1s"
             );
 
     @Test
@@ -38,5 +42,14 @@ class RateLimitConfigTest {
         contextRunner.withPropertyValues("needu.rate-limit.enabled=false")
                 .run(context -> assertThat(context)
                         .doesNotHaveBean("rateLimitFilterRegistration"));
+    }
+
+    @Test
+    void disabled_validateWithinLimit_skipsCounting() {
+        contextRunner.withPropertyValues("needu.rate-limit.enabled=false")
+                .run(context -> {
+                    context.getBean(EventRateLimiter.class).validateWithinLimit("test-event", 1L);
+                    verifyNoInteractions(context.getBean(RateLimitRedisRepository.class));
+                });
     }
 }

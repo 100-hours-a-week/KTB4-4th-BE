@@ -1,5 +1,7 @@
 package kr.ktb.zura.needu.common.ratelimit;
 
+import java.time.Duration;
+
 import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 
 public class RedisRateLimitCounter implements RateLimitCounter {
@@ -20,12 +22,20 @@ public class RedisRateLimitCounter implements RateLimitCounter {
 
     @Override
     public RateLimitUsage increment(String policyName, String userId) {
-        RateLimitProperties.Policy policy = properties.policies().get(policyName);
-        if (policy == null) {
-            throw new IllegalArgumentException("Unknown rate limit policy: " + policyName);
-        }
-
+        Duration window = findWindow(policyName);
         String key = keyGenerator.generate("ratelimit", "usage", policyName, userId);
-        return repository.increment(key, policy.window());
+        return repository.increment(key, window);
+    }
+
+    private Duration findWindow(String policyName) {
+        RateLimitProperties.Policy policy = properties.policies().get(policyName);
+        if (policy != null) {
+            return policy.window();
+        }
+        RateLimitProperties.EventPolicy eventPolicy = properties.events().get(policyName);
+        if (eventPolicy != null) {
+            return eventPolicy.window();
+        }
+        throw new IllegalArgumentException("Unknown rate limit policy: " + policyName);
     }
 }

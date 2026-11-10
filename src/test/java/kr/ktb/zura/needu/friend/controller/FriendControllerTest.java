@@ -6,6 +6,7 @@ import java.util.List;
 
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
+import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
@@ -13,8 +14,11 @@ import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendSummaryResponse;
 import kr.ktb.zura.needu.friend.dto.response.PokeResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendEventResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
+import kr.ktb.zura.needu.friend.type.FriendEventType;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
 import kr.ktb.zura.needu.friend.service.PokeService;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
@@ -48,6 +52,7 @@ class FriendControllerTest {
     private static final Long FRIEND_USER_ID = 123L;
     private static final String URL = "/api/v1/friends/{userId}";
     private static final String LIST_URL = "/api/v1/friends";
+    private static final String UPCOMING_EVENTS_URL = "/api/v1/friends/upcoming-events";
     private static final String FAVORITE_URL = "/api/v1/friends/{userId}/favorite";
     private static final String POKE_URL = "/api/v1/friends/{userId}/pokes";
 
@@ -199,6 +204,29 @@ class FriendControllerTest {
                 .andExpect(status().isUnprocessableContent());
 
         verify(friendService, never()).findAllFriends(anyLong(), any());
+    }
+
+    @Test
+    void upcomingEventsExist_findAllUpcomingEvents_returnsEvents() throws Exception {
+        given(friendService.findAllUpcomingEvents(LOGIN_USER_ID)).willReturn(new ItemsResponse<>(List.of(
+                new UpcomingFriendEventResponse(
+                        FriendEventType.BIRTHDAY,
+                        LocalDate.of(2026, 10, 30),
+                        3,
+                        new UpcomingFriendResponse(FRIEND_USER_ID, "민지", "https://example.com/profile.png")
+                )
+        )));
+
+        mockMvc.perform(get(UPCOMING_EVENTS_URL).with(authenticatedUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("다가오는 친구 이벤트를 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].eventType").value("BIRTHDAY"))
+                .andExpect(jsonPath("$.data.items[0].eventDate").value("2026-10-30"))
+                .andExpect(jsonPath("$.data.items[0].daysRemaining").value(3))
+                .andExpect(jsonPath("$.data.items[0].friend.userId").value(FRIEND_USER_ID))
+                .andExpect(jsonPath("$.data.items[0].friend.nickname").value("민지"))
+                .andExpect(jsonPath("$.data.items[0].friend.profileImageUrl")
+                        .value("https://example.com/profile.png"));
     }
 
     @Test

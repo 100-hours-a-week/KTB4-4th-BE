@@ -5,6 +5,7 @@ import java.util.List;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
 import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
+import kr.ktb.zura.needu.aichat.repository.AiReplyJobRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ public class AiChatWithdrawalService {
 
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiMessageRepository aiMessageRepository;
+    private final AiReplyJobRepository aiReplyJobRepository;
 
     @Transactional
     public void deleteUserData(Long userId) {
@@ -23,6 +25,7 @@ public class AiChatWithdrawalService {
             return;
         }
         List<Long> roomIds = rooms.stream().map(AiChatRoom::getId).toList();
+        aiReplyJobRepository.deleteAllByAiChatRoomIdIn(roomIds);
         aiMessageRepository.deleteAllByAiChatRoomIdIn(roomIds);
         aiChatRoomRepository.deleteAll(rooms);
     }

@@ -3,10 +3,12 @@ package kr.ktb.zura.needu.friend.controller;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.Duration;
+
 import kr.ktb.zura.needu.auth.service.KakaoOAuthTransactionService;
 import kr.ktb.zura.needu.auth.type.KakaoOAuthContext;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.response.ApiResponse;
+import kr.ktb.zura.needu.common.response.ItemsResponse;
 import kr.ktb.zura.needu.common.security.AuthCookieNames;
 import kr.ktb.zura.needu.friend.dto.request.FriendSearchCondition;
 import kr.ktb.zura.needu.friend.dto.request.UpdateFavoriteRequest;
@@ -14,6 +16,7 @@ import kr.ktb.zura.needu.friend.dto.response.FriendDetailResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendFavoriteResponse;
 import kr.ktb.zura.needu.friend.dto.response.FriendListApiResponse;
 import kr.ktb.zura.needu.friend.dto.response.PokeResponse;
+import kr.ktb.zura.needu.friend.dto.response.UpcomingFriendEventResponse;
 import kr.ktb.zura.needu.friend.exception.FriendErrorCode;
 import kr.ktb.zura.needu.friend.service.FriendService;
 import kr.ktb.zura.needu.friend.service.KakaoFriendSyncService;
@@ -72,6 +75,16 @@ public class FriendController {
         return ResponseEntity.ok(FriendListApiResponse.of(
                 FriendResponseMessages.FRIENDS_FOUND,
                 friendService.findAllFriends(userId, condition)
+        ));
+    }
+
+    @GetMapping("/upcoming-events")
+    public ResponseEntity<ApiResponse<ItemsResponse<UpcomingFriendEventResponse>>> findAllUpcomingEvents(
+            @AuthenticationPrincipal Long userId
+    ) {
+        return ResponseEntity.ok(ApiResponse.of(
+                FriendResponseMessages.UPCOMING_EVENTS_FOUND,
+                friendService.findAllUpcomingEvents(userId)
         ));
     }
 

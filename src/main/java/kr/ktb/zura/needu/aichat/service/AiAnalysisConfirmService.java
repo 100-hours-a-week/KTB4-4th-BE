@@ -29,7 +29,7 @@ public class AiAnalysisConfirmService {
                 response.recommendations().self(),
                 response.recommendations().gift(),
                 tastes);
-        userService.completeTasteAnalysis(userId, response.summary(), tastes, interests);
+        userService.completeTasteAnalysis(userId, response.summary(), tastes, interests, response.memory());
         aiChatRoomService.completeRoom(conversationId);
     }
 

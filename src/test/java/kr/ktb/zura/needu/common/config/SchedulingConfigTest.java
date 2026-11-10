@@ -9,7 +9,10 @@ import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.core.SimpleLock;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.context.jdbc.Sql;
 
 @SpringBootTest
@@ -22,6 +25,20 @@ class SchedulingConfigTest {
 
     @Autowired
     private LockProvider lockProvider;
+
+    @Autowired
+    @Qualifier("taskScheduler")
+    private ThreadPoolTaskScheduler taskScheduler;
+
+    @Autowired
+    @Qualifier("messageBrokerTaskScheduler")
+    private TaskScheduler messageBrokerTaskScheduler;
+
+    @Test
+    void schedulersConfigured_usesSeparateBusinessAndMessageBrokerPools() {
+        assertThat(taskScheduler.getPoolSize()).isEqualTo(4);
+        assertThat(taskScheduler).isNotSameAs(messageBrokerTaskScheduler);
+    }
 
     @Test
     void sameLockName_lockTwice_allowsOnlyFirstAcquisition() {

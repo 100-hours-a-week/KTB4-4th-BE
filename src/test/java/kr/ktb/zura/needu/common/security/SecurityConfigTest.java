@@ -20,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = {
         "management.endpoints.web.exposure.include=health,metrics,prometheus",
+        "management.endpoint.health.probes.add-additional-paths=true",
         "needu.rate-limit.enabled=false",
         "notification.webpush.public-key=test-public-key"
 })
@@ -53,6 +54,30 @@ class SecurityConfigTest {
     void invalidAccessCookie_findHealth_returnsOk() throws Exception {
         mockMvc.perform(get("/actuator/health")
                         .cookie(new Cookie(AuthCookieNames.ACCESS_TOKEN, "malformed")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void noAuthentication_findLivenessProbe_returnsOk() throws Exception {
+        mockMvc.perform(get("/livez"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void noAuthentication_findReadinessProbe_returnsOk() throws Exception {
+        mockMvc.perform(get("/readyz"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void invalidAccessCookie_findProbes_returnsOk() throws Exception {
+        Cookie malformedCookie = new Cookie(AuthCookieNames.ACCESS_TOKEN, "malformed");
+
+        mockMvc.perform(get("/livez").cookie(malformedCookie))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/readyz").cookie(malformedCookie))
                 .andExpect(status().isOk());
     }
 
