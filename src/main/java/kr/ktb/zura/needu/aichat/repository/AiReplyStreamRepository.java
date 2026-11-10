@@ -70,6 +70,35 @@ public class AiReplyStreamRepository {
             return redis.call('XDEL', KEYS[1], ARGV[2])
             """, Long.class);
 
+    // 항목 ID 앞부분이 넣은 시각(ms) => 그룹이 마지막으로 할당한 ID 다음 항목이 가장 오래 기다린 항목
+    private static final DefaultRedisScript<List> STATUS_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return { 0, 0, 0 }
+            end
+            local time = redis.call('TIME')
+            local now = time[1] * 1000 + math.floor(time[2] / 1000)
+            local pending = 0
+            local start = '-'
+            for _, group in ipairs(redis.call('XINFO', 'GROUPS', KEYS[1])) do
+                local info = {}
+                for i = 1, #group, 2 do
+                    info[group[i]] = group[i + 1]
+                end
+                if info['name'] == ARGV[1] then
+                    pending = info['pending']
+                    start = '(' .. info['last-delivered-id']
+                end
+            end
+            local waiting = redis.call('XRANGE', KEYS[1], start, '+', 'COUNT', 1)
+            local oldestWaiting = 0
+            if #waiting > 0 then
+                local id = waiting[1][1]
+                local addedAt = tonumber(string.sub(id, 1, string.find(id, '-', 1, true) - 1))
+                oldestWaiting = math.max(now - addedAt, 0)
+            end
+            return { redis.call('XLEN', KEYS[1]), pending, oldestWaiting }
+            """, List.class);
+
     private final StringRedisTemplate redisTemplate;
     private final String key;
 
@@ -156,6 +185,17 @@ public class AiReplyStreamRepository {
     public long size() {
         Long size = redisTemplate.opsForStream().size(key);
         return size == null ? 0 : size;
+    }
+
+    public AiReplyStreamStatus findStatus() {
+        List<?> result = redisTemplate.execute(STATUS_SCRIPT, List.of(key), GROUP);
+        if (result == null || result.size() != 3) {
+            throw new IllegalStateException("Invalid Redis stream status result");
+        }
+        return new AiReplyStreamStatus(
+                Long.parseLong(String.valueOf(result.get(0))),
+                Long.parseLong(String.valueOf(result.get(1))),
+                Duration.ofMillis(Long.parseLong(String.valueOf(result.get(2)))));
     }
 
     public boolean isPending(String entryId) {
