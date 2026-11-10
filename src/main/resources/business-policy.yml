@@ -27,8 +27,9 @@ ai:
     stream-max-pending-events: ${AI_CHAT_STREAM_MAX_PENDING_EVENTS:1000}
     # 인스턴스 하나가 동시에 만드는 AI 답변 수다. 넘으면 사용자 메시지를 저장하지 않고 503으로 거절해 AI 서버를 보호한다.
     reply-max-concurrency: ${AI_CHAT_REPLY_MAX_CONCURRENCY:200}
-    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 중단하고 error 이벤트를 보낸다. ECS stopTimeout보다 짧게 둔다.
-    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
+    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 큐를 쓰는 답변은 대기열로 돌려보내고, 받은 서버가 바로 처리하는 답변은 중단하고 error 이벤트를 보낸다.
+    # 웹 서버 종료 대기(최대 30초) + 이 값 + 5초가 Pod 종료 유예에서 preStop을 뺀 시간 안에 끝나야 한다. 유예 130초·preStop 10초 기준 30 + 80 + 5 ≤ 120.
+    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:80s}
     reply-queue:
       # 켜면 메시지를 받은 서버가 답변을 직접 만들지 않고 답변 작업 스트림에 넣는다. 끄면 지금처럼 받은 서버가 처리한다.
       enabled: ${AI_CHAT_REPLY_QUEUE_ENABLED:false}
