@@ -31,6 +31,13 @@ public class AiReplyPermitRepository {
             return redis.call('ZADD', KEYS[1], now + tonumber(ARGV[1]), ARGV[2])
             """, Long.class);
 
+    // 만료된 허가는 다음 획득 때 지워진다 => 아직 지워지지 않은 만료 허가는 세지 않는다
+    private static final DefaultRedisScript<Long> COUNT_IN_USE_SCRIPT = new DefaultRedisScript<>("""
+            local time = redis.call('TIME')
+            local now = time[1] * 1000 + math.floor(time[2] / 1000)
+            return redis.call('ZCOUNT', KEYS[1], '(' .. now, '+inf')
+            """, Long.class);
+
     private static final long READDED = 1;
 
     private final StringRedisTemplate redisTemplate;
@@ -63,5 +70,10 @@ public class AiReplyPermitRepository {
 
     public void release(String permitId) {
         redisTemplate.opsForZSet().remove(key, permitId);
+    }
+
+    public long countInUse() {
+        Long result = redisTemplate.execute(COUNT_IN_USE_SCRIPT, List.of(key));
+        return result == null ? 0 : result;
     }
 }

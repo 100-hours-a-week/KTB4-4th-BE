@@ -47,6 +47,7 @@ import kr.ktb.zura.needu.aichat.service.AiReplyCommitResult;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobDispatch;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobTakeResult;
+import kr.ktb.zura.needu.aichat.service.AiReplyQueueMetrics;
 import kr.ktb.zura.needu.aichat.service.AiReplyQueueService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
@@ -84,6 +85,7 @@ public class AiChatFacade {
     private final AiChatEventPublisher aiChatEventPublisher;
     private final AiReplyTaskExecutor aiReplyTaskExecutor;
     private final AiReplyQueueService aiReplyQueueService;
+    private final AiReplyQueueMetrics aiReplyQueueMetrics;
     private final AiReplyQueueProperties replyQueueProperties;
     private final UserService userService;
     private final ConsentService consentService;
@@ -107,6 +109,7 @@ public class AiChatFacade {
                         AiChatEventPublisher aiChatEventPublisher,
                         AiReplyTaskExecutor aiReplyTaskExecutor,
                         AiReplyQueueService aiReplyQueueService,
+                        AiReplyQueueMetrics aiReplyQueueMetrics,
                         AiReplyQueueProperties replyQueueProperties,
                         UserService userService,
                         ConsentService consentService,
@@ -127,6 +130,7 @@ public class AiChatFacade {
         this.aiChatEventPublisher = aiChatEventPublisher;
         this.aiReplyTaskExecutor = aiReplyTaskExecutor;
         this.aiReplyQueueService = aiReplyQueueService;
+        this.aiReplyQueueMetrics = aiReplyQueueMetrics;
         this.replyQueueProperties = replyQueueProperties;
         this.userService = userService;
         this.productActivityService = productActivityService;
@@ -252,6 +256,7 @@ public class AiChatFacade {
         }
         if (replyQueueProperties.enabled()) {
             if (aiReplyQueueService.isFull()) {
+                aiReplyQueueMetrics.recordQueueFull();
                 log.info("AI reply queue full. userId={}, conversationId={}", userId, conversationId);
                 throw new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
             }
@@ -322,6 +327,7 @@ public class AiChatFacade {
                 yield AiReplyJobOutcome.FINISHED;
             }
             case GAVE_UP -> {
+                aiReplyQueueMetrics.recordGaveUp();
                 finishGivenUpJob(job);
                 yield AiReplyJobOutcome.FINISHED;
             }
@@ -378,6 +384,7 @@ public class AiChatFacade {
             return failJobReply(job, lock, turnEvents, e);
         }
         if (committed.isRejected()) {
+            aiReplyQueueMetrics.recordCommitRejected();
             return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
         finishReply(conversationId, userMessageId, lock);
@@ -470,6 +477,7 @@ public class AiChatFacade {
         if (dispatchToken.isEmpty()) {
             return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
+        aiReplyQueueMetrics.recordReturned();
         aiReplyQueueService.enqueue(job.jobId(), dispatchToken.get());
         return AiReplyJobOutcome.RETURNED;
     }
