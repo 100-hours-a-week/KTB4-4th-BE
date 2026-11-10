@@ -451,6 +451,46 @@ class AiReplyJobServiceTest {
     }
 
     @Test
+    void currentAttempt_returnTakenJob_queuesWithNewDispatchTokenAndKeepsAttempt() {
+        AiReplyJobDispatch dispatch = createJob();
+        AiReplyJobTakeResult taken = take(dispatch, 1);
+
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(taken.jobId(), taken.attempt());
+
+        AiReplyJob job = findJob(taken.userMessageId());
+        assertThat(dispatchToken).contains(job.getDispatchToken());
+        assertThat(job.getDispatchToken()).isNotEqualTo(dispatch.dispatchToken());
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
+        assertThat(job.getStreamEntryId()).isNull();
+        assertThat(job.getAttempt()).isEqualTo(taken.attempt());
+    }
+
+    @Test
+    void jobTakenByAnotherAttempt_returnTakenJob_keepsNewerAttemptRunning() {
+        AiReplyJobDispatch dispatch = createJob();
+        AiReplyJobTakeResult previous = take(dispatch, 1);
+        take(dispatch, 2);
+
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(previous.jobId(), previous.attempt());
+
+        assertThat(dispatchToken).isEmpty();
+        AiReplyJob job = findJob(previous.userMessageId());
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
+        assertThat(job.getDispatchToken()).isEqualTo(dispatch.dispatchToken());
+    }
+
+    @Test
+    void jobAlreadySucceeded_returnTakenJob_keepsSucceededJob() {
+        AiReplyJobTakeResult taken = takeNewJob();
+        commit(taken);
+
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(taken.jobId(), taken.attempt());
+
+        assertThat(dispatchToken).isEmpty();
+        assertThat(findJob(taken.userMessageId()).getStatus()).isEqualTo(AiReplyJobStatus.SUCCEEDED);
+    }
+
+    @Test
     void queuedJob_failJob_recordsErrorCodeAndFinishedAt() {
         Long userMessageId = createUserMessageAndJob();
 

@@ -169,6 +169,29 @@ class AiReplyJobReconcileIntegrationTest {
         assertThat(taken.attempt()).isEqualTo(2);
     }
 
+    // S7: 종료하는 워커가 처리 중이던 작업을 돌려보냄. 새 항목이라 배달 횟수가 1부터 다시 시작한다
+    @Test
+    void workerShuttingDown_returnTakenJob_nextWorkerTakesNewEntryAsFirstDelivery() {
+        AiReplyJobDispatch dispatch = createJob();
+        aiReplyQueueService.enqueue(dispatch.jobId(), dispatch.dispatchToken());
+        AiReplyStreamEntry oldEntry = aiReplyStreamRepository.readNew(WORKER_A).orElseThrow();
+        AiReplyJobTakeResult previous = aiReplyJobService.take(
+                dispatch.jobId(), dispatch.dispatchToken(), oldEntry.deliveryCount(), oldEntry.entryId());
+
+        String dispatchToken = aiReplyJobService.returnTakenJob(previous.jobId(), previous.attempt()).orElseThrow();
+        aiReplyQueueService.enqueue(dispatch.jobId(), dispatchToken);
+        aiReplyQueueService.acknowledge(oldEntry.entryId());
+
+        assertThat(aiReplyStreamRepository.exists(oldEntry.entryId())).isFalse();
+        AiReplyStreamEntry returned = aiReplyStreamRepository.readNew(WORKER_B).orElseThrow();
+        assertThat(returned.entryId()).isEqualTo(findJob(dispatch.jobId()).getStreamEntryId());
+        assertThat(returned.deliveryCount()).isEqualTo(1);
+        AiReplyJobTakeResult taken = aiReplyJobService.take(
+                returned.jobId(), returned.dispatchToken(), returned.deliveryCount(), returned.entryId());
+        assertThat(taken.outcome()).isEqualTo(AiReplyJobTakeResult.Outcome.TAKEN);
+        assertThat(taken.attempt()).isEqualTo(previous.attempt() + 1);
+    }
+
     @Test
     void jobWaitingInStream_redispatchLostJobs_keepsJob() {
         AiReplyJobDispatch dispatch = createJob();

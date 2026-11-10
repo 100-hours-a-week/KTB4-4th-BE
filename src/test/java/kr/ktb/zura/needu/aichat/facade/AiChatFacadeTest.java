@@ -136,6 +136,7 @@ class AiChatFacadeTest {
     private static final AiConversationLock.Handle LOCK_HANDLE = new AiConversationLock.Handle(ROOM_ID, LOCK_TOKEN);
     private static final Long JOB_ID = 301L;
     private static final String DISPATCH_TOKEN = "dispatch-token";
+    private static final String RETURNED_DISPATCH_TOKEN = "returned-dispatch-token";
     private static final int ATTEMPT = 1;
     private static final Duration TURN_RETRY_DELAY = Duration.ofMillis(10);
     private static final Duration TURN_TIMEOUT = Duration.ofMillis(100);
@@ -946,6 +947,44 @@ class AiChatFacadeTest {
         verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
         verify(aiReplyJobService, never()).commitReply(anyLong(), anyInt(), any(), anyInt(), anyBoolean(), any());
         verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.DELTA), any());
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+        verify(aiConversationLock, never()).unlock(any());
+    }
+
+    @Test
+    void returnRequestedOnShutdown_replyToJob_returnsJobToQueueWithoutErrorOrUnlock() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+        given(streamMessageCall()).willAnswer(invocation -> {
+            lease.requestReturn();
+            throw new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        });
+        given(aiReplyJobService.returnTakenJob(JOB_ID, ATTEMPT)).willReturn(Optional.of(RETURNED_DISPATCH_TOKEN));
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.RETURNED);
+        verify(aiReplyQueueService).enqueue(JOB_ID, RETURNED_DISPATCH_TOKEN);
+        verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+        verify(aiConversationLock, never()).unlock(any());
+        verify(aiGenerationStateService, never()).finishGenerating(any(), any());
+    }
+
+    @Test
+    void jobTakenByNewerAttemptBeforeReturn_replyToJob_returnsOwnershipLostWithoutEnqueue() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+        given(streamMessageCall()).willAnswer(invocation -> {
+            lease.requestReturn();
+            throw new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        });
+        given(aiReplyJobService.returnTakenJob(JOB_ID, ATTEMPT)).willReturn(Optional.empty());
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        verify(aiReplyQueueService, never()).enqueue(any(), any());
         verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
         verify(aiConversationLock, never()).unlock(any());
     }

@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +62,36 @@ class AiReplyLeaseTest {
         lease.attach(101L, 201L, "lock-token");
 
         assertThat(lease.target()).contains(new AiReplyLease.Target(101L, 201L, "lock-token"));
+    }
+
+    @Test
+    void threadBound_requestReturn_marksReturningAndInterruptsThread() throws InterruptedException {
+        AiReplyLease lease = AiReplyLease.start(Clock.fixed(STARTED_AT, ZoneOffset.UTC));
+        AtomicBoolean interrupted = new AtomicBoolean();
+        Thread thread = Thread.ofVirtual().start(() -> {
+            try {
+                Thread.sleep(Duration.ofMinutes(1));
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+            }
+        });
+        lease.bindThread(thread);
+
+        lease.requestReturn();
+
+        assertThat(thread.join(Duration.ofSeconds(5))).isTrue();
+        assertThat(interrupted).isTrue();
+        assertThat(lease.isReturning()).isTrue();
+    }
+
+    @Test
+    void noThreadBound_requestReturn_marksReturning() {
+        AiReplyLease lease = AiReplyLease.start(Clock.fixed(STARTED_AT, ZoneOffset.UTC));
+
+        lease.requestReturn();
+
+        assertThat(lease.isReturning()).isTrue();
+        assertThat(lease.isLost()).isFalse();
     }
 
     static final class MutableClock extends Clock {

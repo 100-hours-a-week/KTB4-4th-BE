@@ -12,6 +12,8 @@ public class AiReplyLease {
     private final Clock clock;
     private volatile Instant confirmedAt;
     private volatile boolean lost;
+    private volatile boolean returning;
+    private volatile Thread thread;
     private volatile Target target;
 
     private AiReplyLease(Clock clock) {
@@ -36,6 +38,10 @@ public class AiReplyLease {
         return lost;
     }
 
+    public boolean isReturning() {
+        return returning;
+    }
+
     public boolean isConfirmedWithin(Duration duration) {
         return !isManaged() || !confirmedAt.plus(duration).isBefore(clock.instant());
     }
@@ -54,6 +60,18 @@ public class AiReplyLease {
 
     void markLost() {
         this.lost = true;
+    }
+
+    void bindThread(Thread thread) {
+        this.thread = thread;
+    }
+
+    void requestReturn() {
+        this.returning = true;
+        Thread current = thread;
+        if (current != null) {
+            current.interrupt();
+        }
     }
 
     public record Target(Long conversationId, Long userMessageId, String lockToken) {

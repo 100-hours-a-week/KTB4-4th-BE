@@ -372,6 +372,9 @@ public class AiChatFacade {
                         job.jobId(), job.attempt(), conversationId);
                 return AiReplyJobOutcome.OWNERSHIP_LOST;
             }
+            if (lease.isReturning()) {
+                return returnJobToQueue(job);
+            }
             return failJobReply(job, lock, turnEvents, e);
         }
         if (committed.isRejected()) {
@@ -459,6 +462,16 @@ public class AiChatFacade {
                     job.userId(), job.conversationId(), job.userMessageId(), savedReply.getId());
             return AiReplyCommitResult.saved(savedReply);
         }
+    }
+
+    // 다른 인스턴스가 이어서 답한다 => 오류를 보내지 않고, 대화방 락과 생성 중 표시도 그 워커가 이어받도록 둔다
+    private AiReplyJobOutcome returnJobToQueue(AiReplyJobTakeResult job) {
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(job.jobId(), job.attempt());
+        if (dispatchToken.isEmpty()) {
+            return AiReplyJobOutcome.OWNERSHIP_LOST;
+        }
+        aiReplyQueueService.enqueue(job.jobId(), dispatchToken.get());
+        return AiReplyJobOutcome.RETURNED;
     }
 
     private AiReplyJobOutcome failJobReply(AiReplyJobTakeResult job, AiConversationLock.Handle lock,
