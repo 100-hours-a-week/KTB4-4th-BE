@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "ai.chat.reply-queue.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "ai.chat.reply-queue.worker-enabled", havingValue = "true")
 public class AiReplyJobReconcileScheduler {
 
     private final AiReplyQueueService aiReplyQueueService;
