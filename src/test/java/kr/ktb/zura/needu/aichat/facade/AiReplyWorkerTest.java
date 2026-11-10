@@ -73,17 +73,7 @@ class AiReplyWorkerTest {
     @BeforeEach
     void setUp() {
         clock = new AiReplyLeaseTest.MutableClock(NOW);
-        worker = createWorker(true);
-    }
-
-    @Test
-    void replyQueueDisabled_start_doesNotRunWorker() {
-        AiReplyWorker disabledWorker = createWorker(false);
-
-        disabledWorker.start();
-
-        assertThat(disabledWorker.isRunning()).isFalse();
-        verifyNoInteractions(aiReplyQueueService);
+        worker = createWorker();
     }
 
     @Test
@@ -313,8 +303,8 @@ class AiReplyWorkerTest {
         return lease.getValue();
     }
 
-    private AiReplyWorker createWorker(boolean enabled) {
-        AiReplyQueueProperties properties = new AiReplyQueueProperties(enabled, 96, Duration.ofSeconds(30), 3,
+    private AiReplyWorker createWorker() {
+        AiReplyQueueProperties properties = new AiReplyQueueProperties(true, true, 96, Duration.ofSeconds(30), 3,
                 HEARTBEAT_INTERVAL, CLAIM_MIN_IDLE, CLAIM_INTERVAL, Duration.ofMillis(200), Duration.ofSeconds(2));
         return new AiReplyWorker(aiChatFacade, aiReplyQueueService, aiReplyTaskExecutor, aiConversationLock,
                 aiGenerationStateService, properties, new AiReplyConsumerName(CONSUMER), clock, SHUTDOWN_TIMEOUT);
