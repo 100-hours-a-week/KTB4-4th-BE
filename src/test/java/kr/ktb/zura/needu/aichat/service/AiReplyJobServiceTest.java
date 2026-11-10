@@ -49,6 +49,9 @@ class AiReplyJobServiceTest {
     private static final int MAX_DELIVERIES = 3;
     private static final String STREAM_ENTRY_ID = "1730000000000-0";
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
+    private static final AiReplyQueueProperties QUEUE_ENABLED = new AiReplyQueueProperties(true, 96,
+            Duration.ofSeconds(30), MAX_DELIVERIES, Duration.ofSeconds(5), Duration.ofSeconds(30),
+            Duration.ofSeconds(5), Duration.ofMillis(200), Duration.ofSeconds(2));
 
     @TestConfiguration
     static class Config {
@@ -85,6 +88,12 @@ class AiReplyJobServiceTest {
 
     @Autowired
     private AiChatRoomRepository aiChatRoomRepository;
+
+    @Autowired
+    private AiConversationLockProperties aiConversationLockProperties;
+
+    @Autowired
+    private Clock clock;
 
     @Autowired
     private DataSource dataSource;
@@ -172,6 +181,36 @@ class AiReplyJobServiceTest {
         markUpdatedLongAgo(userMessageId);
 
         assertThat(aiReplyJobService.existsReplyInProgress(roomId)).isFalse();
+    }
+
+    @Test
+    void queueEnabledAndJobWaitingLongerThanLockTtl_isReplyInProgress_returnsTrue() {
+        Long userMessageId = createUserMessageAndJob();
+        markUpdatedLongAgo(userMessageId);
+
+        assertThat(queueEnabledService().isReplyInProgress(userMessageId)).isTrue();
+        assertThat(queueEnabledService().existsReplyInProgress(roomId)).isTrue();
+    }
+
+    @Test
+    void queueEnabledAndWorkerJobNotUpdatedWithinLockTtl_isReplyInProgress_returnsTrue() {
+        Long userMessageId = takeNewJob().userMessageId();
+        markUpdatedLongAgo(userMessageId);
+
+        assertThat(queueEnabledService().isReplyInProgress(userMessageId)).isTrue();
+        assertThat(queueEnabledService().existsReplyInProgress(roomId)).isTrue();
+    }
+
+    // 플래그를 켜는 동안 받은 서버가 바로 처리하던 작업은 여전히 시간 기준으로 판단한다
+    @Test
+    void queueEnabledAndDirectJobNotUpdatedWithinLockTtl_isReplyInProgress_returnsFalse() {
+        AiReplyJobDispatch dispatch = createJob();
+        aiReplyJobService.take(dispatch.jobId(), dispatch.dispatchToken(), 1, null);
+        Long userMessageId = dispatch.userMessage().getId();
+        markUpdatedLongAgo(userMessageId);
+
+        assertThat(queueEnabledService().isReplyInProgress(userMessageId)).isFalse();
+        assertThat(queueEnabledService().existsReplyInProgress(roomId)).isFalse();
     }
 
     @Test
@@ -412,6 +451,46 @@ class AiReplyJobServiceTest {
     }
 
     @Test
+    void currentAttempt_returnTakenJob_queuesWithNewDispatchTokenAndKeepsAttempt() {
+        AiReplyJobDispatch dispatch = createJob();
+        AiReplyJobTakeResult taken = take(dispatch, 1);
+
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(taken.jobId(), taken.attempt());
+
+        AiReplyJob job = findJob(taken.userMessageId());
+        assertThat(dispatchToken).contains(job.getDispatchToken());
+        assertThat(job.getDispatchToken()).isNotEqualTo(dispatch.dispatchToken());
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.QUEUED);
+        assertThat(job.getStreamEntryId()).isNull();
+        assertThat(job.getAttempt()).isEqualTo(taken.attempt());
+    }
+
+    @Test
+    void jobTakenByAnotherAttempt_returnTakenJob_keepsNewerAttemptRunning() {
+        AiReplyJobDispatch dispatch = createJob();
+        AiReplyJobTakeResult previous = take(dispatch, 1);
+        take(dispatch, 2);
+
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(previous.jobId(), previous.attempt());
+
+        assertThat(dispatchToken).isEmpty();
+        AiReplyJob job = findJob(previous.userMessageId());
+        assertThat(job.getStatus()).isEqualTo(AiReplyJobStatus.RUNNING);
+        assertThat(job.getDispatchToken()).isEqualTo(dispatch.dispatchToken());
+    }
+
+    @Test
+    void jobAlreadySucceeded_returnTakenJob_keepsSucceededJob() {
+        AiReplyJobTakeResult taken = takeNewJob();
+        commit(taken);
+
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(taken.jobId(), taken.attempt());
+
+        assertThat(dispatchToken).isEmpty();
+        assertThat(findJob(taken.userMessageId()).getStatus()).isEqualTo(AiReplyJobStatus.SUCCEEDED);
+    }
+
+    @Test
     void queuedJob_failJob_recordsErrorCodeAndFinishedAt() {
         Long userMessageId = createUserMessageAndJob();
 
@@ -509,6 +588,11 @@ class AiReplyJobServiceTest {
 
         assertThat(dispatchToken).isEmpty();
         assertThat(findJob(dispatch.userMessage().getId()).getStatus()).isEqualTo(AiReplyJobStatus.SUCCEEDED);
+    }
+
+    private AiReplyJobService queueEnabledService() {
+        return new AiReplyJobService(aiReplyJobRepository, aiChatRoomRepository, aiMessageService,
+                aiConversationLockProperties, QUEUE_ENABLED, clock);
     }
 
     private AiReplyJobDispatch createJob() {

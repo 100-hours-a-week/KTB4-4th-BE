@@ -1,0 +1,240 @@
+name: Backend V3 Production GitOps Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: "main에 반영되어 CI에서 빌드된 Backend 이미지의 Git SHA (40자리)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v3-prod-backend-gitops
+  cancel-in-progress: false
+
+jobs:
+  promotion-pr:
+    name: Create V3 Production GitOps PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: prod
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ap-northeast-2
+      AWS_ACCOUNT_ID: "919551759796"
+      ECR_REPOSITORY: need-u/backend
+      GITOPS_REPOSITORY: 100-hours-a-week/KTB4-4th-GITOPS
+      GITOPS_DEV_FILE: environments/dev/backend-image.yaml
+      GITOPS_PROD_FILE: environments/prod/backend-image.yaml
+
+    steps:
+      - name: Checkout Backend Main History
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate Production Promotion Candidate
+        env:
+          IMAGE_SHA: ${{ inputs.image_sha }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          if [ "$WORKFLOW_REF" != "refs/heads/main" ]; then
+            echo "V3 Production 승격은 main 브랜치에서만 실행할 수 있습니다: $WORKFLOW_REF"
+            exit 1
+          fi
+
+          if [[ ! "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Production 승격 이미지 SHA는 40자리 Git SHA여야 합니다."
+            exit 1
+          fi
+
+          git cat-file -e "${IMAGE_SHA}^{commit}" 2>/dev/null || {
+            echo "입력한 SHA를 Backend Git 이력에서 찾을 수 없습니다: $IMAGE_SHA"
+            exit 1
+          }
+
+          if ! git merge-base --is-ancestor "$IMAGE_SHA" HEAD; then
+            echo "입력한 SHA가 Backend main 브랜치에 포함되어 있지 않습니다: $IMAGE_SHA"
+            exit 1
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Account
+        run: |
+          set -euo pipefail
+
+          ACTUAL_ACCOUNT=$(aws sts get-caller-identity \
+            --query Account \
+            --output text)
+
+          if [ "$ACTUAL_ACCOUNT" != "$AWS_ACCOUNT_ID" ]; then
+            echo "예상하지 않은 AWS Account입니다: $ACTUAL_ACCOUNT"
+            exit 1
+          fi
+
+      - name: Resolve Backend ECR Image Digest
+        id: image
+        env:
+          IMAGE_SHA: ${{ inputs.image_sha }}
+        run: |
+          set -euo pipefail
+
+          IMAGE_TAG="v2-${IMAGE_SHA}"
+
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "유효하지 않은 ECR Image Digest입니다: $DIGEST"
+            exit 1
+          fi
+
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          owner: 100-hours-a-week
+          repositories: KTB4-4th-GITOPS
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPOSITORY }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: main
+          path: gitops
+          persist-credentials: false
+
+      - name: Verify Dev GitOps Image
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd gitops
+
+          test -f "$GITOPS_DEV_FILE"
+
+          DEV_DIGEST=$(yq -r '.image.digest' "$GITOPS_DEV_FILE")
+          DEV_TAG=$(yq -r '.image.tag' "$GITOPS_DEV_FILE")
+
+          if [ "$DEV_DIGEST" != "$IMAGE_DIGEST" ] || [ "$DEV_TAG" != "$IMAGE_TAG" ]; then
+            echo "선택한 이미지가 현재 V3 Dev GitOps에 설정된 Backend 이미지와 다릅니다."
+            echo "Dev tag: $DEV_TAG"
+            echo "요청 tag: $IMAGE_TAG"
+            echo "Dev digest: $DEV_DIGEST"
+            echo "요청 digest: $IMAGE_DIGEST"
+            exit 1
+          fi
+
+      - name: Install yq
+        run: |
+          set -euo pipefail
+
+          YQ_VERSION=v4.45.4
+
+          curl -fsSL \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+            -o /tmp/yq
+
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
+          yq --version
+
+      - name: Update V3 Production Backend Image
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd gitops
+
+          test -f "$GITOPS_PROD_FILE"
+
+          CURRENT_PROD_DIGEST=$(yq -r '.image.digest' "$GITOPS_PROD_FILE")
+
+          if [ "$CURRENT_PROD_DIGEST" = "$IMAGE_DIGEST" ]; then
+            echo "선택한 이미지는 이미 V3 Production에 설정되어 있습니다."
+            exit 1
+          fi
+
+          yq -i '.image.digest = strenv(IMAGE_DIGEST)' "$GITOPS_PROD_FILE"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' "$GITOPS_PROD_FILE"
+
+          CHANGED_FILES=$(git diff --name-only)
+
+          if [ "$CHANGED_FILES" != "$GITOPS_PROD_FILE" ]; then
+            echo "Production Backend 이미지 파일 외의 변경이 감지되었습니다."
+            echo "$CHANGED_FILES"
+            exit 1
+          fi
+
+          git diff --check
+          git diff -- "$GITOPS_PROD_FILE"
+
+      - name: Create V3 Production GitOps Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          path: gitops
+          base: main
+          branch: automation/v3-prod-backend-image
+          delete-branch: true
+          add-paths: environments/prod/backend-image.yaml
+          commit-message: "chore(v3-prod): 백엔드 이미지 승격"
+          title: "chore(v3-prod): 백엔드 이미지 승격"
+          body: |
+            ## 변경 내용
+            - V3 Dev에서 확인한 Backend 이미지를 V3 Production으로 승격
+            - ECR 이미지 Tag: `${{ steps.image.outputs.tag }}`
+            - ECR 이미지 Digest: `${{ steps.image.outputs.digest }}`
+
+            ## 배포 영향
+            - 대상 환경: V3 Production
+            - 대상 서비스: auth-api, recommendation-api, social-api, ai-api
+            - 이 PR은 자동 병합하지 않음
+            - PR 승인·병합 후 Argo CD Auto Sync로 EKS Rolling Update
+
+            ## 검증
+            - [ ] GitOps CI 통과
+            - [ ] 승격 대상 Tag·Digest 확인
+            - [ ] 백엔드 4개 Deployment Rolling Update 확인
+            - [ ] 모든 Pod Ready 및 Image Digest 확인
+            - [ ] 주요 API Smoke Test 통과
+
+            ## 원본
+            - Backend Commit: `${{ inputs.image_sha }}`
+
+      - name: Print GitOps PR Result
+        if: steps.create-pr.outputs.pull-request-number != ''
+        env:
+          PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
+        run: |
+          echo "GitOps PR: $PR_URL"
+          echo "### V3 Production GitOps PR" >> "$GITHUB_STEP_SUMMARY"
+          echo "$PR_URL" >> "$GITHUB_STEP_SUMMARY"

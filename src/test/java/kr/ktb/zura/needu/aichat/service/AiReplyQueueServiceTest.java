@@ -11,6 +11,7 @@ import kr.ktb.zura.needu.aichat.repository.AiReplyPermitRepository;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamClaimResult;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamEntry;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamRepository;
+import kr.ktb.zura.needu.aichat.repository.AiReplyStreamStatus;
 import kr.ktb.zura.needu.aichat.type.AiReplyJobStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -37,6 +39,7 @@ class AiReplyQueueServiceTest {
     private static final String CONSUMER = "worker-a";
     private static final Duration CLAIM_MIN_IDLE = Duration.ofSeconds(30);
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
+    private static final int MAX_LENGTH = 800;
     private static final Long OTHER_JOB_ID = 302L;
     private static final String NEW_DISPATCH_TOKEN = "new-dispatch-token";
     private static final String NEW_STREAM_ENTRY_ID = "1730000000100-0";
@@ -50,6 +53,9 @@ class AiReplyQueueServiceTest {
     @Mock
     private AiReplyJobService aiReplyJobService;
 
+    @Mock
+    private AiReplyQueueMetrics aiReplyQueueMetrics;
+
     private AiReplyQueueService aiReplyQueueService;
 
     @BeforeEach
@@ -57,7 +63,8 @@ class AiReplyQueueServiceTest {
         AiReplyQueueProperties properties = new AiReplyQueueProperties(true, 96, Duration.ofSeconds(30), 3,
                 Duration.ofSeconds(5), CLAIM_MIN_IDLE, Duration.ofSeconds(5), Duration.ofMillis(200), Duration.ofSeconds(2));
         aiReplyQueueService = new AiReplyQueueService(
-                aiReplyStreamRepository, aiReplyPermitRepository, aiReplyJobService, properties);
+                aiReplyStreamRepository, aiReplyPermitRepository, aiReplyJobService, aiReplyQueueMetrics, properties,
+                MAX_LENGTH);
     }
 
     @Test
@@ -88,12 +95,34 @@ class AiReplyQueueServiceTest {
     }
 
     @Test
+    void queueBelowMaxLength_isFull_returnsFalse() {
+        given(aiReplyStreamRepository.size()).willReturn((long) MAX_LENGTH - 1);
+
+        assertThat(aiReplyQueueService.isFull()).isFalse();
+    }
+
+    @Test
+    void queueReachedMaxLength_isFull_returnsTrue() {
+        given(aiReplyStreamRepository.size()).willReturn((long) MAX_LENGTH);
+
+        assertThat(aiReplyQueueService.isFull()).isTrue();
+    }
+
+    @Test
+    void streamUnavailable_isFull_returnsFalse() {
+        given(aiReplyStreamRepository.size()).willThrow(new RedisConnectionFailureException("redis down"));
+
+        assertThat(aiReplyQueueService.isFull()).isFalse();
+    }
+
+    @Test
     void idleEntryExists_claimIdle_returnsClaimedEntry() {
         AiReplyStreamEntry entry = new AiReplyStreamEntry(STREAM_ENTRY_ID, JOB_ID, DISPATCH_TOKEN, 2);
         given(aiReplyStreamRepository.claimIdle(CONSUMER, CLAIM_MIN_IDLE))
                 .willReturn(new AiReplyStreamClaimResult(entry, List.of()));
 
         assertThat(aiReplyQueueService.claimIdle(CONSUMER)).contains(entry);
+        verify(aiReplyQueueMetrics).recordClaimed();
     }
 
     @Test
@@ -102,6 +131,7 @@ class AiReplyQueueServiceTest {
                 .willReturn(new AiReplyStreamClaimResult(null, List.of("1730000000000-1")));
 
         assertThat(aiReplyQueueService.claimIdle(CONSUMER)).isEmpty();
+        verify(aiReplyQueueMetrics, never()).recordClaimed();
     }
 
     @Test
@@ -115,6 +145,7 @@ class AiReplyQueueServiceTest {
         aiReplyQueueService.redispatchLostJobs(STALE_AFTER);
 
         verify(aiReplyJobService).recordStreamEntry(JOB_ID, NEW_DISPATCH_TOKEN, NEW_STREAM_ENTRY_ID);
+        verify(aiReplyQueueMetrics).recordRedispatched();
     }
 
     @Test
@@ -190,6 +221,27 @@ class AiReplyQueueServiceTest {
         aiReplyQueueService.redispatchLostJobs(STALE_AFTER);
 
         verify(aiReplyStreamRepository, never()).add(any(), any());
+        verify(aiReplyQueueMetrics, never()).recordRedispatched();
+    }
+
+    @Test
+    void streamAvailable_recordQueueStatus_updatesMetrics() {
+        AiReplyStreamStatus streamStatus = new AiReplyStreamStatus(12, 3, Duration.ofSeconds(4));
+        given(aiReplyStreamRepository.findStatus()).willReturn(streamStatus);
+        given(aiReplyPermitRepository.countInUse()).willReturn(3L);
+
+        aiReplyQueueService.recordQueueStatus();
+
+        verify(aiReplyQueueMetrics).updateQueueStatus(streamStatus, 3L);
+    }
+
+    @Test
+    void streamUnavailable_recordQueueStatus_clearsMetricsWithoutThrowing() {
+        given(aiReplyStreamRepository.findStatus()).willThrow(new RedisConnectionFailureException("redis down"));
+
+        assertThatCode(() -> aiReplyQueueService.recordQueueStatus()).doesNotThrowAnyException();
+        verify(aiReplyQueueMetrics).clearQueueStatus();
+        verify(aiReplyQueueMetrics, never()).updateQueueStatus(any(), anyLong());
     }
 
     @Test

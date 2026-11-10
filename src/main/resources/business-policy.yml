@@ -27,14 +27,18 @@ ai:
     stream-max-pending-events: ${AI_CHAT_STREAM_MAX_PENDING_EVENTS:1000}
     # 인스턴스 하나가 동시에 만드는 AI 답변 수다. 넘으면 사용자 메시지를 저장하지 않고 503으로 거절해 AI 서버를 보호한다.
     reply-max-concurrency: ${AI_CHAT_REPLY_MAX_CONCURRENCY:200}
-    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 중단하고 error 이벤트를 보낸다. ECS stopTimeout보다 짧게 둔다.
-    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:20s}
+    # 서버 종료 시 진행 중인 답변 생성을 기다리는 시간이다. 지나면 큐를 쓰는 답변은 대기열로 돌려보내고, 받은 서버가 바로 처리하는 답변은 중단하고 error 이벤트를 보낸다.
+    # 웹 서버 종료 대기(최대 30초) + 이 값 + 5초가 Pod 종료 유예에서 preStop을 뺀 시간 안에 끝나야 한다. 유예 130초·preStop 10초 기준 30 + 80 + 5 ≤ 120.
+    reply-shutdown-timeout: ${AI_CHAT_REPLY_SHUTDOWN_TIMEOUT:80s}
     reply-queue:
       # 켜면 메시지를 받은 서버가 답변을 직접 만들지 않고 답변 작업 스트림에 넣는다. 끄면 지금처럼 받은 서버가 처리한다.
       enabled: ${AI_CHAT_REPLY_QUEUE_ENABLED:false}
       # AI 서버 전체에 동시에 보내는 답변 수다. BE 인스턴스 수와 상관없이 Redis에서 함께 센다.
       # AI 서버 1대 한계 60(부하 테스트) × 0.8(임시) = 48, AI 서버 2대 기준. 운영 대수와 모델 쪽 한도를 확인해 조정
       global-max-concurrency: ${AI_CHAT_REPLY_GLOBAL_MAX_CONCURRENCY:96}
+      # 스트림에 쌓인 답변 작업(처리 중 포함)이 이 수 이상이면 사용자 메시지를 저장하지 않고 503으로 거절한다. 대기열이 끝없이 쌓이지 않게 한다.
+      # 임시값이다. 부하 테스트 결과로 조정한다.
+      max-length: ${AI_CHAT_REPLY_MAX_LENGTH:800}
       # 워커가 연장하지 않으면 허가가 풀리는 시간이다. 죽은 워커가 반납하지 못한 허가는 이 시간이 지나면 다시 쓸 수 있다.
       permit-ttl: ${AI_CHAT_REPLY_PERMIT_TTL:30s}
       # 같은 작업을 이 횟수보다 많이 할당받으면 더 처리하지 않고 실패로 닫는다. 처리할 때마다 서버를 죽이는 작업이 계속 돌지 않게 한다.
@@ -55,6 +59,8 @@ ai:
       reconcile-stale-after: ${AI_CHAT_REPLY_RECONCILE_STALE_AFTER:15s}
       reconcile-lock-at-most-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_MOST_FOR:1m}
       reconcile-lock-at-least-for: ${AI_CHAT_REPLY_RECONCILE_LOCK_AT_LEAST_FOR:5s}
+      # 대기열 길이·처리 중 수·가장 오래 기다린 시간·전역 허가 사용 수를 Redis에서 읽어 지표에 반영하는 주기다. 인스턴스마다 읽는다.
+      metrics-interval: ${AI_CHAT_REPLY_METRICS_INTERVAL:5s}
 
 needu:
   messaging:

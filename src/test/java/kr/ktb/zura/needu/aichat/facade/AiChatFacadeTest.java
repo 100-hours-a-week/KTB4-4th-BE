@@ -55,6 +55,7 @@ import kr.ktb.zura.needu.aichat.service.AiReplyCommitResult;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobDispatch;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobTakeResult;
+import kr.ktb.zura.needu.aichat.service.AiReplyQueueMetrics;
 import kr.ktb.zura.needu.aichat.service.AiReplyQueueService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatAcceptedEvent;
@@ -136,6 +137,7 @@ class AiChatFacadeTest {
     private static final AiConversationLock.Handle LOCK_HANDLE = new AiConversationLock.Handle(ROOM_ID, LOCK_TOKEN);
     private static final Long JOB_ID = 301L;
     private static final String DISPATCH_TOKEN = "dispatch-token";
+    private static final String RETURNED_DISPATCH_TOKEN = "returned-dispatch-token";
     private static final int ATTEMPT = 1;
     private static final Duration TURN_RETRY_DELAY = Duration.ofMillis(10);
     private static final Duration TURN_TIMEOUT = Duration.ofMillis(100);
@@ -192,6 +194,9 @@ class AiChatFacadeTest {
 
     @Mock
     private AiReplyQueueService aiReplyQueueService;
+
+    @Mock
+    private AiReplyQueueMetrics aiReplyQueueMetrics;
 
     private AiChatFacade aiChatFacade;
 
@@ -902,6 +907,22 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void replyQueueEnabledAndQueueFull_sendMessage_throwsServiceUnavailableWithoutSavingMessage() {
+        aiChatFacade = createFacade(QUEUE_ENABLED, Set.of());
+        given(aiMessageService.findUserMessage(ROOM_ID, CLIENT_MESSAGE_ID)).willReturn(Optional.empty());
+        given(aiReplyQueueService.isFull()).willReturn(true);
+
+        assertThatThrownBy(() -> aiChatFacade.sendMessage(USER_ID, ROOM_ID, sendMessageRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+        verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyJobService, never()).createUserMessageAndJob(any(), any(), any(), any(), any());
+        verify(aiReplyQueueService, never()).enqueue(any(), any());
+        verify(aiGenerationStateService, never()).startGenerating(any(), any());
+        verify(aiReplyQueueMetrics).recordQueueFull();
+    }
+
+    @Test
     void jobTaken_replyToJob_attachesLeaseTargetAndReturnsFinished() {
         givenJobTaken(message(USER_MESSAGE_ID, null));
         given(streamMessageCall()).willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
@@ -913,6 +934,7 @@ class AiChatFacadeTest {
 
         assertThat(outcome).isEqualTo(AiReplyJobOutcome.FINISHED);
         assertThat(lease.target()).contains(new AiReplyLease.Target(ROOM_ID, USER_MESSAGE_ID, LOCK_TOKEN));
+        verify(aiReplyQueueMetrics, never()).recordCommitRejected();
     }
 
     @Test
@@ -936,6 +958,46 @@ class AiChatFacadeTest {
     }
 
     @Test
+    void returnRequestedOnShutdown_replyToJob_returnsJobToQueueWithoutErrorOrUnlock() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+        given(streamMessageCall()).willAnswer(invocation -> {
+            lease.requestReturn();
+            throw new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        });
+        given(aiReplyJobService.returnTakenJob(JOB_ID, ATTEMPT)).willReturn(Optional.of(RETURNED_DISPATCH_TOKEN));
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.RETURNED);
+        verify(aiReplyQueueService).enqueue(JOB_ID, RETURNED_DISPATCH_TOKEN);
+        verify(aiReplyQueueMetrics).recordReturned();
+        verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+        verify(aiConversationLock, never()).unlock(any());
+        verify(aiGenerationStateService, never()).finishGenerating(any(), any());
+    }
+
+    @Test
+    void jobTakenByNewerAttemptBeforeReturn_replyToJob_returnsOwnershipLostWithoutEnqueue() {
+        givenJobTaken(message(USER_MESSAGE_ID, null));
+        AiReplyLease lease = AiReplyLease.start(Clock.systemUTC());
+        given(streamMessageCall()).willAnswer(invocation -> {
+            lease.requestReturn();
+            throw new BusinessException(AiChatErrorCode.AICHAT_SERVER_UNAVAILABLE);
+        });
+        given(aiReplyJobService.returnTakenJob(JOB_ID, ATTEMPT)).willReturn(Optional.empty());
+
+        AiReplyJobOutcome outcome = aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, lease);
+
+        assertThat(outcome).isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        verify(aiReplyQueueService, never()).enqueue(any(), any());
+        verify(aiReplyQueueMetrics, never()).recordReturned();
+        verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
+        verify(aiConversationLock, never()).unlock(any());
+    }
+
+    @Test
     void commitRejectedByNewerAttempt_replyToJob_returnsOwnershipLost() {
         givenJobTaken(message(USER_MESSAGE_ID, null));
         given(streamMessageCall()).willAnswer(streamReply(sendMessageResponse(AI_CONTENT)));
@@ -944,6 +1006,7 @@ class AiChatFacadeTest {
 
         assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
                 .isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
+        verify(aiReplyQueueMetrics).recordCommitRejected();
     }
 
     @Test
@@ -1260,6 +1323,7 @@ class AiChatFacadeTest {
         verify(aiChatEventPublisher).publish(ROOM_ID, AiChatEventType.DONE, new AiChatDoneEvent(USER_MESSAGE_ID));
         verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
         verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyQueueMetrics).recordGaveUp();
     }
 
     @Test
@@ -1682,7 +1746,8 @@ class AiChatFacadeTest {
     private AiChatFacade createFacade(AiReplyQueueProperties replyQueueProperties, Set<Long> shortCooldownExternalIds) {
         return new AiChatFacade(aiChatRoomService, aiMessageService, aiReplyJobService, aiConversationLock,
                 aiGenerationStateService, aiChatClient, aiAnalysisConfirmService, aiChatStreamService,
-                aiChatEventPublisher, aiReplyTaskExecutor, aiReplyQueueService, replyQueueProperties, userService,
+                aiChatEventPublisher, aiReplyTaskExecutor, aiReplyQueueService, aiReplyQueueMetrics, replyQueueProperties,
+                userService,
                 consentService, productActivityService, Clock.systemUTC(), TURN_TIMEOUT, MESSAGE_RETRY_AFTER,
                 SHORT_COMPLETION_COOLDOWN, shortCooldownExternalIds);
     }

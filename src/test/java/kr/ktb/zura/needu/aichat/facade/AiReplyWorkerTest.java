@@ -15,6 +15,7 @@ import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -45,6 +47,7 @@ class AiReplyWorkerTest {
     private static final Duration CLAIM_INTERVAL = Duration.ofSeconds(5);
     // process가 띄우는 하트비트 스레드가 테스트 중에 돌지 않게 길게 둔다
     private static final Duration HEARTBEAT_INTERVAL = Duration.ofHours(1);
+    private static final Duration SHUTDOWN_TIMEOUT = Duration.ofMillis(400);
 
     @Mock
     private AiChatFacade aiChatFacade;
@@ -142,7 +145,7 @@ class AiReplyWorkerTest {
         given(aiChatFacade.replyToJob(any(), any(), anyLong(), any(), any()))
                 .willReturn(AiReplyJobOutcome.FINISHED);
 
-        worker.process(ENTRY, PERMIT_ID);
+        worker.process(ENTRY, PERMIT_ID, AiReplyLease.start(clock));
 
         verify(aiChatFacade).replyToJob(any(), any(), anyLong(), any(), any());
         verify(aiReplyQueueService).acknowledge(STREAM_ENTRY_ID);
@@ -150,11 +153,59 @@ class AiReplyWorkerTest {
     }
 
     @Test
+    void jobReturnedToQueue_process_acknowledgesOldEntryAndReleasesPermit() {
+        given(aiChatFacade.replyToJob(any(), any(), anyLong(), any(), any()))
+                .willReturn(AiReplyJobOutcome.RETURNED);
+
+        worker.process(ENTRY, PERMIT_ID, AiReplyLease.start(clock));
+
+        verify(aiReplyQueueService).acknowledge(STREAM_ENTRY_ID);
+        verify(aiReplyQueueService).releasePermit(PERMIT_ID);
+    }
+
+    @Test
+    void jobFinishesWithinShutdownTimeout_stop_waitsForJobWithoutRequestingReturn() {
+        givenEntryRunsOnNewThread();
+        given(aiChatFacade.replyToJob(any(), any(), anyLong(), any(), any())).willAnswer(invocation -> {
+            Thread.sleep(SHUTDOWN_TIMEOUT.dividedBy(4));
+            return AiReplyJobOutcome.FINISHED;
+        });
+        worker.dispatchNext();
+
+        worker.stop();
+
+        verify(aiReplyQueueService).acknowledge(STREAM_ENTRY_ID);
+        assertThat(capturedLease().isReturning()).isFalse();
+    }
+
+    @Test
+    void jobRunningPastShutdownTimeout_stop_interruptsJobAndAcknowledgesReturnedEntry() {
+        givenEntryRunsOnNewThread();
+        given(aiChatFacade.replyToJob(any(), any(), anyLong(), any(), any())).willAnswer(invocation -> {
+            try {
+                Thread.sleep(Duration.ofMinutes(1));
+                return AiReplyJobOutcome.FINISHED;
+            } catch (InterruptedException e) {
+                return invocation.<AiReplyLease>getArgument(4).isReturning()
+                        ? AiReplyJobOutcome.RETURNED
+                        : AiReplyJobOutcome.OWNERSHIP_LOST;
+            }
+        });
+        worker.dispatchNext();
+
+        worker.stop();
+
+        assertThat(capturedLease().isReturning()).isTrue();
+        verify(aiReplyQueueService).acknowledge(STREAM_ENTRY_ID);
+        verify(aiReplyQueueService).releasePermit(anyString());
+    }
+
+    @Test
     void jobTakenByAnotherWorker_process_leavesEntryAndReleasesPermit() {
         given(aiChatFacade.replyToJob(any(), any(), anyLong(), any(), any()))
                 .willReturn(AiReplyJobOutcome.OWNERSHIP_LOST);
 
-        worker.process(ENTRY, PERMIT_ID);
+        worker.process(ENTRY, PERMIT_ID, AiReplyLease.start(clock));
 
         verify(aiReplyQueueService, never()).acknowledge(any());
         verify(aiReplyQueueService).releasePermit(PERMIT_ID);
@@ -165,7 +216,7 @@ class AiReplyWorkerTest {
         given(aiChatFacade.replyToJob(any(), any(), anyLong(), any(), any()))
                 .willThrow(new IllegalStateException("db down"));
 
-        worker.process(ENTRY, PERMIT_ID);
+        worker.process(ENTRY, PERMIT_ID, AiReplyLease.start(clock));
 
         verify(aiReplyQueueService, never()).acknowledge(any());
         verify(aiReplyQueueService).releasePermit(PERMIT_ID);
@@ -175,7 +226,7 @@ class AiReplyWorkerTest {
     void malformedEntry_process_deletesEntryWithoutProcessing() {
         AiReplyStreamEntry malformed = new AiReplyStreamEntry(STREAM_ENTRY_ID, null, null, 1);
 
-        worker.process(malformed, PERMIT_ID);
+        worker.process(malformed, PERMIT_ID, AiReplyLease.start(clock));
 
         verifyNoInteractions(aiChatFacade);
         verify(aiReplyQueueService).acknowledge(STREAM_ENTRY_ID);
@@ -249,10 +300,23 @@ class AiReplyWorkerTest {
         given(aiReplyQueueService.tryAcquirePermit(anyString())).willReturn(true);
     }
 
+    private void givenEntryRunsOnNewThread() {
+        givenSlotAndPermit();
+        given(aiReplyQueueService.claimIdle(CONSUMER)).willReturn(Optional.of(ENTRY));
+        willAnswer(invocation -> Thread.ofVirtual().start(invocation.<Runnable>getArgument(0)))
+                .given(slot).execute(any());
+    }
+
+    private AiReplyLease capturedLease() {
+        ArgumentCaptor<AiReplyLease> lease = ArgumentCaptor.forClass(AiReplyLease.class);
+        verify(aiChatFacade).replyToJob(any(), any(), anyLong(), any(), lease.capture());
+        return lease.getValue();
+    }
+
     private AiReplyWorker createWorker(boolean enabled) {
         AiReplyQueueProperties properties = new AiReplyQueueProperties(enabled, 96, Duration.ofSeconds(30), 3,
                 HEARTBEAT_INTERVAL, CLAIM_MIN_IDLE, CLAIM_INTERVAL, Duration.ofMillis(200), Duration.ofSeconds(2));
         return new AiReplyWorker(aiChatFacade, aiReplyQueueService, aiReplyTaskExecutor, aiConversationLock,
-                aiGenerationStateService, properties, new AiReplyConsumerName(CONSUMER), clock);
+                aiGenerationStateService, properties, new AiReplyConsumerName(CONSUMER), clock, SHUTDOWN_TIMEOUT);
     }
 }

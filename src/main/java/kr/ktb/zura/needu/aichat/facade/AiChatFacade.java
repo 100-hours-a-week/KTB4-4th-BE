@@ -47,6 +47,7 @@ import kr.ktb.zura.needu.aichat.service.AiReplyCommitResult;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobDispatch;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobService;
 import kr.ktb.zura.needu.aichat.service.AiReplyJobTakeResult;
+import kr.ktb.zura.needu.aichat.service.AiReplyQueueMetrics;
 import kr.ktb.zura.needu.aichat.service.AiReplyQueueService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
@@ -84,6 +85,7 @@ public class AiChatFacade {
     private final AiChatEventPublisher aiChatEventPublisher;
     private final AiReplyTaskExecutor aiReplyTaskExecutor;
     private final AiReplyQueueService aiReplyQueueService;
+    private final AiReplyQueueMetrics aiReplyQueueMetrics;
     private final AiReplyQueueProperties replyQueueProperties;
     private final UserService userService;
     private final ConsentService consentService;
@@ -107,6 +109,7 @@ public class AiChatFacade {
                         AiChatEventPublisher aiChatEventPublisher,
                         AiReplyTaskExecutor aiReplyTaskExecutor,
                         AiReplyQueueService aiReplyQueueService,
+                        AiReplyQueueMetrics aiReplyQueueMetrics,
                         AiReplyQueueProperties replyQueueProperties,
                         UserService userService,
                         ConsentService consentService,
@@ -127,6 +130,7 @@ public class AiChatFacade {
         this.aiChatEventPublisher = aiChatEventPublisher;
         this.aiReplyTaskExecutor = aiReplyTaskExecutor;
         this.aiReplyQueueService = aiReplyQueueService;
+        this.aiReplyQueueMetrics = aiReplyQueueMetrics;
         this.replyQueueProperties = replyQueueProperties;
         this.userService = userService;
         this.productActivityService = productActivityService;
@@ -251,6 +255,11 @@ public class AiChatFacade {
             throw new TooManyRequestsException(messageRetryAfter.toSeconds());
         }
         if (replyQueueProperties.enabled()) {
+            if (aiReplyQueueService.isFull()) {
+                aiReplyQueueMetrics.recordQueueFull();
+                log.info("AI reply queue full. userId={}, conversationId={}", userId, conversationId);
+                throw new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE);
+            }
             AiReplyJobDispatch dispatch = sentMessage.isPresent()
                     ? restartReply(userId, conversationId, sentMessage.get(), lock)
                     : createUserMessage(userId, conversationId, request, lock);
@@ -318,6 +327,7 @@ public class AiChatFacade {
                 yield AiReplyJobOutcome.FINISHED;
             }
             case GAVE_UP -> {
+                aiReplyQueueMetrics.recordGaveUp();
                 finishGivenUpJob(job);
                 yield AiReplyJobOutcome.FINISHED;
             }
@@ -368,9 +378,13 @@ public class AiChatFacade {
                         job.jobId(), job.attempt(), conversationId);
                 return AiReplyJobOutcome.OWNERSHIP_LOST;
             }
+            if (lease.isReturning()) {
+                return returnJobToQueue(job);
+            }
             return failJobReply(job, lock, turnEvents, e);
         }
         if (committed.isRejected()) {
+            aiReplyQueueMetrics.recordCommitRejected();
             return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
         finishReply(conversationId, userMessageId, lock);
@@ -455,6 +469,17 @@ public class AiChatFacade {
                     job.userId(), job.conversationId(), job.userMessageId(), savedReply.getId());
             return AiReplyCommitResult.saved(savedReply);
         }
+    }
+
+    // 다른 인스턴스가 이어서 답한다 => 오류를 보내지 않고, 대화방 락과 생성 중 표시도 그 워커가 이어받도록 둔다
+    private AiReplyJobOutcome returnJobToQueue(AiReplyJobTakeResult job) {
+        Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(job.jobId(), job.attempt());
+        if (dispatchToken.isEmpty()) {
+            return AiReplyJobOutcome.OWNERSHIP_LOST;
+        }
+        aiReplyQueueMetrics.recordReturned();
+        aiReplyQueueService.enqueue(job.jobId(), dispatchToken.get());
+        return AiReplyJobOutcome.RETURNED;
     }
 
     private AiReplyJobOutcome failJobReply(AiReplyJobTakeResult job, AiConversationLock.Handle lock,

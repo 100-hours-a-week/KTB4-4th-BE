@@ -34,8 +34,9 @@ public class AiReplyJobService {
     private final AiMessageService aiMessageService;
     // 지금 경로는 AI 서버에 요청한 뒤 답변을 받을 때까지 작업 행을 갱신하지 않음 => DB만 봐서는 처리 중인지 서버가 죽었는지 확인 불가
     // 정상 처리는 대화방 락 시간(120초) 안에 끝남 => 그보다 오래 갱신이 없는 미완료 작업은 죽은 것으로 판단
-    // 큐 경로는 하트비트와 재배달로 죽은 작업을 찾을 수 있기에 이 기준을 쓰지 않는다 (큐 도입 이후 옛 경로 제거와 함께 삭제)
+    // 큐 경로 작업은 대기열에서 120초 넘게 기다릴 수 있고, 재투입 스케줄러와 할당 횟수 제한이 끝까지 처리하므로 이 기준을 쓰지 않는다
     private final Duration abandonedAfter;
+    private final boolean replyQueueEnabled;
     private final int maxDeliveries;
     private final Clock clock;
 
@@ -49,6 +50,7 @@ public class AiReplyJobService {
         this.aiChatRoomRepository = aiChatRoomRepository;
         this.aiMessageService = aiMessageService;
         this.abandonedAfter = lockProperties.ttl();
+        this.replyQueueEnabled = queueProperties.enabled();
         this.maxDeliveries = queueProperties.maxDeliveries();
         this.clock = clock;
     }
@@ -71,8 +73,8 @@ public class AiReplyJobService {
 
     @Transactional(readOnly = true)
     public boolean existsReplyInProgress(Long conversationId) {
-        return aiReplyJobRepository.existsByAiChatRoomIdAndStatusInAndUpdatedAtAfter(
-                conversationId, UNFINISHED_STATUSES, abandonedSince());
+        return aiReplyJobRepository.findAllByAiChatRoomIdAndStatusIn(conversationId, UNFINISHED_STATUSES).stream()
+                .anyMatch(job -> !isAbandoned(job));
     }
 
     @Transactional
@@ -174,6 +176,19 @@ public class AiReplyJobService {
     }
 
     @Transactional
+    public Optional<String> returnTakenJob(Long jobId, int attempt) {
+        AiReplyJob job = findJobForUpdate(jobId);
+        if (!job.isOwnedBy(attempt)) {
+            logRejected("AI reply job return rejected.", job, attempt);
+            return Optional.empty();
+        }
+        job.redispatch();
+        log.info("AI reply job returned to queue. jobId={}, attempt={}, conversationId={}, userMessageId={}",
+                jobId, attempt, job.getAiChatRoom().getId(), job.getUserMessageId());
+        return Optional.of(job.getDispatchToken());
+    }
+
+    @Transactional
     public void failJob(Long userMessageId, String errorCode) {
         AiReplyJob job = findJob(userMessageId);
         if (!job.isFinished()) {
@@ -198,7 +213,11 @@ public class AiReplyJobService {
                         "AI reply job not found. userMessageId=" + userMessageId));
     }
 
+    // 플래그를 켜는 동안 받은 서버가 바로 처리하던 작업이 남아 있을 수 있어 그 작업에는 시간 기준을 그대로 쓴다
     private boolean isAbandoned(AiReplyJob job) {
+        if (replyQueueEnabled && !job.isRunningWithoutStreamEntry()) {
+            return false;
+        }
         return !job.getUpdatedAt().isAfter(abandonedSince());
     }
 

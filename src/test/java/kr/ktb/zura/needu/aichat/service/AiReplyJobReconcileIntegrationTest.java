@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import javax.sql.DataSource;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import kr.ktb.zura.needu.aichat.config.AiConversationLockProperties;
 import kr.ktb.zura.needu.aichat.config.AiReplyQueueProperties;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -43,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @ImportAutoConfiguration(DataRedisAutoConfiguration.class)
-@Import({AiReplyQueueService.class, AiReplyJobService.class, AiMessageService.class,
+@Import({AiReplyQueueService.class, AiReplyQueueMetrics.class, AiReplyJobService.class, AiMessageService.class,
         AiReplyStreamRepository.class, AiReplyPermitRepository.class, RedisKeyGenerator.class,
         StreamRedisConfig.class, AiReplyJobReconcileIntegrationTest.Config.class})
 class AiReplyJobReconcileIntegrationTest {
@@ -63,6 +65,11 @@ class AiReplyJobReconcileIntegrationTest {
         @Bean
         Clock clock() {
             return Clock.systemUTC();
+        }
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
         }
 
         @Bean
@@ -167,6 +174,29 @@ class AiReplyJobReconcileIntegrationTest {
                 redispatched.entryId());
         assertThat(taken.outcome()).isEqualTo(AiReplyJobTakeResult.Outcome.TAKEN);
         assertThat(taken.attempt()).isEqualTo(2);
+    }
+
+    // S7: 종료하는 워커가 처리 중이던 작업을 돌려보냄. 새 항목이라 배달 횟수가 1부터 다시 시작한다
+    @Test
+    void workerShuttingDown_returnTakenJob_nextWorkerTakesNewEntryAsFirstDelivery() {
+        AiReplyJobDispatch dispatch = createJob();
+        aiReplyQueueService.enqueue(dispatch.jobId(), dispatch.dispatchToken());
+        AiReplyStreamEntry oldEntry = aiReplyStreamRepository.readNew(WORKER_A).orElseThrow();
+        AiReplyJobTakeResult previous = aiReplyJobService.take(
+                dispatch.jobId(), dispatch.dispatchToken(), oldEntry.deliveryCount(), oldEntry.entryId());
+
+        String dispatchToken = aiReplyJobService.returnTakenJob(previous.jobId(), previous.attempt()).orElseThrow();
+        aiReplyQueueService.enqueue(dispatch.jobId(), dispatchToken);
+        aiReplyQueueService.acknowledge(oldEntry.entryId());
+
+        assertThat(aiReplyStreamRepository.exists(oldEntry.entryId())).isFalse();
+        AiReplyStreamEntry returned = aiReplyStreamRepository.readNew(WORKER_B).orElseThrow();
+        assertThat(returned.entryId()).isEqualTo(findJob(dispatch.jobId()).getStreamEntryId());
+        assertThat(returned.deliveryCount()).isEqualTo(1);
+        AiReplyJobTakeResult taken = aiReplyJobService.take(
+                returned.jobId(), returned.dispatchToken(), returned.deliveryCount(), returned.entryId());
+        assertThat(taken.outcome()).isEqualTo(AiReplyJobTakeResult.Outcome.TAKEN);
+        assertThat(taken.attempt()).isEqualTo(previous.attempt() + 1);
     }
 
     @Test
