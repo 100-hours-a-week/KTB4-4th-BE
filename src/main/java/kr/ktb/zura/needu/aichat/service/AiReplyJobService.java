@@ -176,6 +176,19 @@ public class AiReplyJobService {
     }
 
     @Transactional
+    public Optional<String> returnTakenJob(Long jobId, int attempt) {
+        AiReplyJob job = findJobForUpdate(jobId);
+        if (!job.isOwnedBy(attempt)) {
+            logRejected("AI reply job return rejected.", job, attempt);
+            return Optional.empty();
+        }
+        job.redispatch();
+        log.info("AI reply job returned to queue. jobId={}, attempt={}, conversationId={}, userMessageId={}",
+                jobId, attempt, job.getAiChatRoom().getId(), job.getUserMessageId());
+        return Optional.of(job.getDispatchToken());
+    }
+
+    @Transactional
     public void failJob(Long userMessageId, String errorCode) {
         AiReplyJob job = findJob(userMessageId);
         if (!job.isFinished()) {
