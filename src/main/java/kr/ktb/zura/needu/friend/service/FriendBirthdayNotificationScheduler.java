@@ -4,14 +4,17 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import lombok.extern.slf4j.Slf4j;
+import kr.ktb.zura.needu.common.config.AppProfile;
 import net.javacrumbs.shedlock.core.LockAssert;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
+@Profile(AppProfile.NOT_AI_WORKER)
 public class FriendBirthdayNotificationScheduler {
 
     private final FriendBirthdayNotificationService notificationService;

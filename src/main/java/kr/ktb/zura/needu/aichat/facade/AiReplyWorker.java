@@ -18,12 +18,14 @@ import kr.ktb.zura.needu.aichat.service.AiReplyQueueService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
 // 작업 실행기보다 늦게 시작하고 먼저 멈춘다
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "ai.chat.reply-queue.worker-enabled", havingValue = "true")
 public class AiReplyWorker implements SmartLifecycle {
 
     private static final int PHASE = AiReplyTaskExecutor.PHASE + 1;
@@ -67,9 +69,6 @@ public class AiReplyWorker implements SmartLifecycle {
 
     @Override
     public void start() {
-        if (!properties.enabled()) {
-            return;
-        }
         aiReplyQueueService.createGroupIfAbsent();
         running = true;
         reader = Thread.ofVirtual().name("aichat-reply-reader").start(this::readLoop);

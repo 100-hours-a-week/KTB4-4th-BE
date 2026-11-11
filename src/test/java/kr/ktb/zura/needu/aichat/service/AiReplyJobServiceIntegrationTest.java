@@ -69,7 +69,7 @@ class AiReplyJobServiceIntegrationTest {
 
         @Bean
         AiReplyQueueProperties aiReplyQueueProperties() {
-            return new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), 3,
+            return new AiReplyQueueProperties(false, false, 96, Duration.ofSeconds(30), 3,
                     Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
                     Duration.ofSeconds(2));
         }

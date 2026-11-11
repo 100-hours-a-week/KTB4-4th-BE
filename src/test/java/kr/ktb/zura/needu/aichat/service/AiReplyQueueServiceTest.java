@@ -60,7 +60,7 @@ class AiReplyQueueServiceTest {
 
     @BeforeEach
     void setUp() {
-        AiReplyQueueProperties properties = new AiReplyQueueProperties(true, 96, Duration.ofSeconds(30), 3,
+        AiReplyQueueProperties properties = new AiReplyQueueProperties(true, false, 96, Duration.ofSeconds(30), 3,
                 Duration.ofSeconds(5), CLAIM_MIN_IDLE, Duration.ofSeconds(5), Duration.ofMillis(200), Duration.ofSeconds(2));
         aiReplyQueueService = new AiReplyQueueService(
                 aiReplyStreamRepository, aiReplyPermitRepository, aiReplyJobService, aiReplyQueueMetrics, properties,
