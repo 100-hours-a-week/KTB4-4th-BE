@@ -19,7 +19,9 @@ public class UserControllerDocs implements ControllerDocs {
                         .build(),
                 OperationDoc.of(UserController.class, "withdraw")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_WITHDRAWN,
-                                UserErrorCode.USER_WITHDRAWAL_IN_PROGRESS, CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
+                                UserErrorCode.USER_WITHDRAWAL_IN_PROGRESS,
+                                UserErrorCode.USER_DEMO_ACCOUNT_WITHDRAWAL_FORBIDDEN,
+                                CommonErrorCode.COMMON_SERVICE_UNAVAILABLE)
                         .build(),
                 OperationDoc.of(GiftPreferenceController.class, "findGiftPreference")
                         .errors(UserErrorCode.USER_BLOCKED, UserErrorCode.USER_ONBOARDING_REQUIRED,
