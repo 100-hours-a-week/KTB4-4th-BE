@@ -96,12 +96,13 @@ public class AuthController {
     }
 
     @PostMapping("/demo/login")
-    public ResponseEntity<Void> loginWithDemoAccount(@RequestBody @Valid DemoLoginRequest request) {
+    public ResponseEntity<ApiResponse<Void>> loginWithDemoAccount(@RequestBody @Valid DemoLoginRequest request) {
         AuthService.Tokens tokens = authService.loginWithDemoAccount(request.loginId(), request.password());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
-                .cacheControl(CacheControl.noStore()).build();
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.of(AuthResponseMessages.DEMO_LOGIN_SUCCEEDED, null));
     }
 
     @GetMapping("/csrf")
@@ -118,13 +119,14 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<Void> refresh(@CookieValue(name = AuthCookieNames.REFRESH_TOKEN, required = false)
-                                        String refreshToken) {
+    public ResponseEntity<ApiResponse<Void>> refresh(
+            @CookieValue(name = AuthCookieNames.REFRESH_TOKEN, required = false) String refreshToken) {
         AuthService.Tokens tokens = authService.refresh(refreshToken);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
-                .cacheControl(CacheControl.noStore()).build();
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.of(AuthResponseMessages.TOKEN_REFRESHED, null));
     }
 
     @PostMapping("/logout")
