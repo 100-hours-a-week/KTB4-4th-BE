@@ -1,7 +1,9 @@
 package kr.ktb.zura.needu.auth.controller;
 
 import java.net.URI;
+import jakarta.validation.Valid;
 import java.time.Duration;
+import kr.ktb.zura.needu.auth.dto.request.DemoLoginRequest;
 import kr.ktb.zura.needu.auth.dto.response.AuthSessionResponse;
 import kr.ktb.zura.needu.auth.dto.response.CsrfTokenResponse;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -89,6 +92,15 @@ public class AuthController {
                 .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
                 .header(HttpHeaders.SET_COOKIE, oauthCookie("", Duration.ZERO).toString())
+                .cacheControl(CacheControl.noStore()).build();
+    }
+
+    @PostMapping("/demo/login")
+    public ResponseEntity<Void> loginWithDemoAccount(@RequestBody @Valid DemoLoginRequest request) {
+        AuthService.Tokens tokens = authService.loginWithDemoAccount(request.loginId(), request.password());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
                 .cacheControl(CacheControl.noStore()).build();
     }
 

@@ -112,6 +112,30 @@ class SecurityConfigTest {
     }
 
     @Test
+    void missingCsrfToken_demoLogin_returnsCsrfRefreshRequired() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/demo/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"reviewer1\",\"password\":\"password\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.data.csrfTokenRefreshRequired").value(true));
+    }
+
+    // 기본 설정에서는 데모 로그인이 꺼져 있어, 인증 없이 컨트롤러까지 도달하면 404가 된다.
+    @Test
+    void validCsrfWithInvalidAccessCookie_demoLogin_reachesControllerWithoutAuthentication() throws Exception {
+        MvcResult csrf = mockMvc.perform(get("/api/v1/auth/csrf")).andReturn();
+        Cookie csrfCookie = csrf.getResponse().getCookie(CSRF_COOKIE);
+        String csrfToken = JsonPath.read(csrf.getResponse().getContentAsString(), "$.data.token");
+
+        mockMvc.perform(post("/api/v1/auth/demo/login")
+                        .cookie(new Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-token"), csrfCookie)
+                        .header(CSRF_HEADER, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"reviewer1\",\"password\":\"password\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void authenticatedRequest_withCsrfCookie_keepsCsrfCookie() throws Exception {
         Cookie csrfCookie = mockMvc.perform(get("/api/v1/auth/csrf"))
                 .andReturn().getResponse().getCookie(CSRF_COOKIE);

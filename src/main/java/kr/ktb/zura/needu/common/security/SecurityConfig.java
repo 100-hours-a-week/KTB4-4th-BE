@@ -28,6 +28,7 @@ public class SecurityConfig {
     private static final String READINESS_PROBE_PATH = "/readyz";
     private static final String PROMETHEUS_PATH = "/actuator/prometheus";
     private static final String VAPID_PUBLIC_KEY_PATH = "/api/v1/notifications/web-push/public-key";
+    private static final String DEMO_LOGIN_PATH = "/api/v1/auth/demo/login";
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http,
@@ -42,6 +43,7 @@ public class SecurityConfig {
             String path = request.getRequestURI().substring(request.getContextPath().length());
             if (path.startsWith("/api/v1/auth/kakao/") || path.equals("/api/v1/auth/csrf")
                     || path.equals("/api/v1/auth/refresh") || path.equals("/api/v1/auth/logout")
+                    || path.equals(DEMO_LOGIN_PATH)
                     || path.equals("/api/v1/friends/kakao/callback") || path.equals(HEALTH_PATH)
                     || path.equals(LIVENESS_PROBE_PATH) || path.equals(READINESS_PROBE_PATH)
                     || path.equals(PROMETHEUS_PATH) || path.equals(VAPID_PUBLIC_KEY_PATH)) {
@@ -61,7 +63,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/friends/kakao/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/logout")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/logout",
+                                DEMO_LOGIN_PATH)
                         .permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions

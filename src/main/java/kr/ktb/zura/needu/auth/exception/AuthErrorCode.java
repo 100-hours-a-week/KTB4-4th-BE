@@ -15,7 +15,9 @@ public enum AuthErrorCode implements ErrorCode {
     AUTH_KAKAO_INVALID_CODE(HttpStatus.BAD_REQUEST, "카카오 인가 코드가 유효하지 않습니다."),
     AUTH_KAKAO_AUTHORIZATION_REQUIRED(HttpStatus.CONFLICT, "카카오 서비스 추가 동의가 필요합니다."),
     AUTH_KAKAO_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "카카오 로그인을 처리할 수 없습니다."),
-    AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "리프레시 토큰이 유효하지 않습니다.");
+    AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "리프레시 토큰이 유효하지 않습니다."),
+    AUTH_DEMO_LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
+    AUTH_DEMO_LOGIN_DISABLED(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;
