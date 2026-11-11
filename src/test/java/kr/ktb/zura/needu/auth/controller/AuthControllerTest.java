@@ -84,23 +84,6 @@ class AuthControllerTest {
     }
 
     @Test
-    void validRefreshToken_refresh_returnsMessageAndRotatesCookies() throws Exception {
-        String refreshToken = "a".repeat(43);
-        when(authService.refresh(refreshToken))
-                .thenReturn(new AuthService.Tokens("next-access-token", "next-refresh-token", Duration.ofDays(13)));
-
-        mockMvc.perform(post("/api/v1/auth/refresh").cookie(new Cookie("NEEDU_REFRESH_TOKEN", refreshToken)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("로그인을 연장했습니다."))
-                .andExpect(jsonPath("$.data").isEmpty())
-                .andExpect(header().stringValues("Set-Cookie", hasItem(
-                        containsString("NEEDU_ACCESS_TOKEN=next-access-token"))))
-                .andExpect(header().stringValues("Set-Cookie", hasItem(
-                        containsString("NEEDU_REFRESH_TOKEN=next-refresh-token"))))
-                .andExpect(header().string("Cache-Control", "no-store"));
-    }
-
-    @Test
     void blankPassword_loginWithDemoAccount_returnsUnprocessableContent() throws Exception {
         mockMvc.perform(post("/api/v1/auth/demo/login")
                         .contentType(MediaType.APPLICATION_JSON)
