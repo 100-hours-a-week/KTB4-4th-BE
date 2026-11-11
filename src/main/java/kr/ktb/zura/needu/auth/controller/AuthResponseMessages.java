@@ -4,6 +4,8 @@ final class AuthResponseMessages {
 
     static final String CSRF_TOKEN_FOUND = "CSRF 토큰을 조회했습니다.";
     static final String SESSION_FOUND = "로그인 유효성을 조회했습니다.";
+    static final String DEMO_LOGIN_SUCCEEDED = "로그인했습니다.";
+    static final String TOKEN_REFRESHED = "로그인을 연장했습니다.";
 
     private AuthResponseMessages() {
     }

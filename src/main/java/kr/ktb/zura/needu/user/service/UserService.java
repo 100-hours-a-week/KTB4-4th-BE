@@ -59,6 +59,14 @@ public class UserService {
         return UserResponse.from(user);
     }
 
+    @Transactional
+    public void recordLogin(Long userId) {
+        User user = findUser(userId);
+        user.releaseExpiredBlock(LocalDateTime.now(clock));
+        validateLoginAvailableUser(user);
+        user.recordLogin();
+    }
+
     public void validateAuthenticatableUser(Long userId) {
         validateLoginAvailableUser(findUser(userId));
     }

@@ -33,6 +33,7 @@ class AuthServiceTest {
     private AuthSessionService authSessionService;
     private KakaoTokenService kakaoTokenService;
     private OAuth2AuthorizedClientManager authorizedClientManager;
+    private DemoAccountService demoAccountService;
     private AuthService authService;
 
     @BeforeEach
@@ -42,13 +43,15 @@ class AuthServiceTest {
         authSessionService = mock(AuthSessionService.class);
         kakaoTokenService = mock(KakaoTokenService.class);
         authorizedClientManager = mock(OAuth2AuthorizedClientManager.class);
+        demoAccountService = mock(DemoAccountService.class);
         authService = new AuthService(
                 kakaoOAuthClient,
                 userService,
                 authSessionService,
                 mock(AccessTokenService.class),
                 kakaoTokenService,
-                authorizedClientManager
+                authorizedClientManager,
+                demoAccountService
         );
     }
 
@@ -100,6 +103,39 @@ class AuthServiceTest {
 
         verify(authSessionService).deleteAllByUserId(1L);
         verify(kakaoTokenService).deleteByUserId(1L);
+    }
+
+    @Test
+    void validDemoAccount_loginWithDemoAccount_recordsLoginAndCreatesSession() {
+        when(demoAccountService.authenticate("reviewer1", "password")).thenReturn(101L);
+        when(authSessionService.create(101L))
+                .thenReturn(new AuthSessionService.RefreshToken(101L, "refresh-token", Duration.ofDays(14)));
+
+        AuthService.Tokens tokens = authService.loginWithDemoAccount("reviewer1", "password");
+
+        verify(userService).recordLogin(101L);
+        assertEquals("refresh-token", tokens.refreshToken());
+        assertEquals(Duration.ofDays(14), tokens.refreshMaxAge());
+    }
+
+    @Test
+    void blockedDemoUser_loginWithDemoAccount_doesNotCreateSession() {
+        when(demoAccountService.authenticate("reviewer1", "password")).thenReturn(101L);
+        doThrow(new BusinessException(UserErrorCode.USER_BLOCKED)).when(userService).recordLogin(101L);
+
+        assertThrows(BusinessException.class, () -> authService.loginWithDemoAccount("reviewer1", "password"));
+
+        verify(authSessionService, never()).create(101L);
+    }
+
+    @Test
+    void wrongDemoCredentials_loginWithDemoAccount_doesNotTouchUser() {
+        when(demoAccountService.authenticate("reviewer1", "wrong"))
+                .thenThrow(new BusinessException(AuthErrorCode.AUTH_DEMO_LOGIN_FAILED));
+
+        assertThrows(BusinessException.class, () -> authService.loginWithDemoAccount("reviewer1", "wrong"));
+
+        verify(userService, never()).recordLogin(org.mockito.ArgumentMatchers.anyLong());
     }
 
     private KakaoOAuthClient.KakaoAuthorization authorization() {

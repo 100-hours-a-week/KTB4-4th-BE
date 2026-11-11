@@ -107,7 +107,9 @@ class AuthFlowIntegrationTest {
                         .cookie(refreshCookie, csrfCookie,
                                 new Cookie(AuthCookieNames.ACCESS_TOKEN, "expired"))
                         .header("X-XSRF-TOKEN", csrfToken))
-                .andExpect(status().isOk()).andReturn();
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("로그인을 연장했습니다."))
+                .andReturn();
         Cookie nextRefreshCookie = refreshed.getResponse().getCookie(AuthCookieNames.REFRESH_TOKEN);
         assertThat(nextRefreshCookie).isNotNull();
         assertThat(nextRefreshCookie.getValue()).isNotEqualTo(refreshCookie.getValue());

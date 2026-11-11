@@ -2,8 +2,10 @@ package kr.ktb.zura.needu.auth.controller;
 
 import java.util.List;
 import kr.ktb.zura.needu.auth.exception.AuthErrorCode;
+import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.openapi.ControllerDocs;
 import kr.ktb.zura.needu.common.openapi.OperationDoc;
+import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -31,6 +33,12 @@ public class AuthControllerDocs implements ControllerDocs {
                         .errors(AuthErrorCode.AUTH_KAKAO_INVALID_STATE, AuthErrorCode.AUTH_KAKAO_CANCELLED,
                                 AuthErrorCode.AUTH_KAKAO_INVALID_CODE, AuthErrorCode.AUTH_KAKAO_UNAVAILABLE)
                         .errors(UserErrorCode.USER_WITHDRAWN, UserErrorCode.USER_BLOCKED)
+                        .build(),
+                OperationDoc.of(AuthController.class, "loginWithDemoAccount")
+                        .publicApi()
+                        .errors(AuthErrorCode.AUTH_DEMO_LOGIN_FAILED, AuthErrorCode.AUTH_DEMO_LOGIN_DISABLED)
+                        .errors(AUTHENTICATED_USER_ERRORS)
+                        .error(CommonErrorCode.COMMON_TOO_MANY_REQUESTS, new RetryAfterResponse(60))
                         .build(),
                 OperationDoc.of(AuthController.class, "csrf")
                         .publicApi()

@@ -30,6 +30,7 @@ public class AuthService {
     private final AccessTokenService accessTokenService;
     private final KakaoTokenService kakaoTokenService;
     private final OAuth2AuthorizedClientManager kakaoAuthorizedClientManager;
+    private final DemoAccountService demoAccountService;
 
     public URI createKakaoAuthorizationUri(String state) {
         return kakaoOAuthClient.createAuthorizationUri(state);
@@ -74,6 +75,16 @@ public class AuthService {
                 kakaoUser.id(), kakaoUser.nickname(), kakaoUser.profileImageUrl());
         AuthSessionService.RefreshToken refresh = authSessionService.create(user.id());
         return toTokens(refresh);
+    }
+
+    public Tokens loginWithDemoAccount(String loginId, String password) {
+        Long userId = demoAccountService.authenticate(loginId, password);
+        userService.recordLogin(userId);
+        return toTokens(authSessionService.create(userId));
+    }
+
+    public boolean isDemoAccount(Long userId) {
+        return demoAccountService.isDemoAccount(userId);
     }
 
     @Transactional

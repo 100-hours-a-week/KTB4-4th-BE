@@ -16,7 +16,8 @@ public enum UserErrorCode implements ErrorCode {
     USER_ONBOARDING_REQUIRED(HttpStatus.FORBIDDEN, "온보딩 진행이 필요합니다."),
     USER_ONBOARDING_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 온보딩이 완료되었습니다."),
     USER_REQUIRED_CONSENT_MISSING(HttpStatus.FORBIDDEN, "필수 약관에 동의해야 합니다."),
-    USER_WITHDRAWAL_IN_PROGRESS(HttpStatus.CONFLICT, "회원 탈퇴 처리가 이미 진행 중입니다.");
+    USER_WITHDRAWAL_IN_PROGRESS(HttpStatus.CONFLICT, "회원 탈퇴 처리가 이미 진행 중입니다."),
+    USER_DEMO_ACCOUNT_WITHDRAWAL_FORBIDDEN(HttpStatus.FORBIDDEN, "테스트 계정은 탈퇴할 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;
