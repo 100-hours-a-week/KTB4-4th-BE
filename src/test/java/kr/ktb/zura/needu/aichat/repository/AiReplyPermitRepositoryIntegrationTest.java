@@ -87,4 +87,23 @@ class AiReplyPermitRepositoryIntegrationTest {
         assertThat(held).isFalse();
         assertThat(redisTemplate.opsForZSet().score(KEY, "permit-0")).isNotNull();
     }
+
+    @Test
+    void permitsHeldAndReleased_countInUse_countsOnlyHeldPermits() {
+        IntStream.range(0, 3).forEach(i -> repository.acquire("permit-" + i));
+
+        repository.release("permit-0");
+
+        assertThat(repository.countInUse()).isEqualTo(2);
+    }
+
+    // 만료된 허가는 다음 획득 전까지 남아 있다 => 사용 중으로 세지 않아야 한다
+    @Test
+    void permitsExpiredButNotCleared_countInUse_returnsZero() throws InterruptedException {
+        IntStream.range(0, 2).forEach(i -> repository.acquire("permit-" + i));
+        Thread.sleep(300);
+
+        assertThat(repository.countInUse()).isZero();
+        assertThat(redisTemplate.opsForZSet().size(KEY)).isEqualTo(2);
+    }
 }

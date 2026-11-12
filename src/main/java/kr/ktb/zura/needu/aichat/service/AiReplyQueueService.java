@@ -22,17 +22,20 @@ public class AiReplyQueueService {
     private final AiReplyStreamRepository aiReplyStreamRepository;
     private final AiReplyPermitRepository aiReplyPermitRepository;
     private final AiReplyJobService aiReplyJobService;
+    private final AiReplyQueueMetrics aiReplyQueueMetrics;
     private final AiReplyQueueProperties properties;
     private final int maxLength;
 
     public AiReplyQueueService(AiReplyStreamRepository aiReplyStreamRepository,
                                AiReplyPermitRepository aiReplyPermitRepository,
                                AiReplyJobService aiReplyJobService,
+                               AiReplyQueueMetrics aiReplyQueueMetrics,
                                AiReplyQueueProperties properties,
                                @Value("${ai.chat.reply-queue.max-length}") int maxLength) {
         this.aiReplyStreamRepository = aiReplyStreamRepository;
         this.aiReplyPermitRepository = aiReplyPermitRepository;
         this.aiReplyJobService = aiReplyJobService;
+        this.aiReplyQueueMetrics = aiReplyQueueMetrics;
         this.properties = properties;
         this.maxLength = maxLength;
     }
@@ -84,7 +87,20 @@ public class AiReplyQueueService {
 
     private void redispatch(AiReplyJob job) {
         aiReplyJobService.redispatch(job.getId(), job.getDispatchToken(), job.getStatus())
-                .ifPresent(dispatchToken -> enqueue(job.getId(), dispatchToken));
+                .ifPresent(dispatchToken -> {
+                    aiReplyQueueMetrics.recordRedispatched();
+                    enqueue(job.getId(), dispatchToken);
+                });
+    }
+
+    public void recordQueueStatus() {
+        try {
+            aiReplyQueueMetrics.updateQueueStatus(aiReplyStreamRepository.findStatus(),
+                    aiReplyPermitRepository.countInUse());
+        } catch (RuntimeException e) {
+            aiReplyQueueMetrics.clearQueueStatus();
+            log.warn("AI reply queue status check failed.", e);
+        }
     }
 
     public void createGroupIfAbsent() {
@@ -100,6 +116,7 @@ public class AiReplyQueueService {
             return Optional.empty();
         }
         AiReplyStreamEntry claimed = result.claimed();
+        aiReplyQueueMetrics.recordClaimed();
         log.info("AI reply job claimed. jobId={}, streamEntryId={}, deliveryCount={}",
                 claimed.jobId(), claimed.entryId(), claimed.deliveryCount());
         return Optional.of(claimed);

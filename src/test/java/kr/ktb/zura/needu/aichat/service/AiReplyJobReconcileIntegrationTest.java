@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import javax.sql.DataSource;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import kr.ktb.zura.needu.aichat.config.AiConversationLockProperties;
 import kr.ktb.zura.needu.aichat.config.AiReplyQueueProperties;
 import kr.ktb.zura.needu.aichat.entity.AiChatRoom;
@@ -43,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @ImportAutoConfiguration(DataRedisAutoConfiguration.class)
-@Import({AiReplyQueueService.class, AiReplyJobService.class, AiMessageService.class,
+@Import({AiReplyQueueService.class, AiReplyQueueMetrics.class, AiReplyJobService.class, AiMessageService.class,
         AiReplyStreamRepository.class, AiReplyPermitRepository.class, RedisKeyGenerator.class,
         StreamRedisConfig.class, AiReplyJobReconcileIntegrationTest.Config.class})
 class AiReplyJobReconcileIntegrationTest {
@@ -66,13 +68,18 @@ class AiReplyJobReconcileIntegrationTest {
         }
 
         @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
+
+        @Bean
         AiConversationLockProperties aiConversationLockProperties() {
             return new AiConversationLockProperties(Duration.ofSeconds(120), "backend:test:aichat:lock");
         }
 
         @Bean
         AiReplyQueueProperties aiReplyQueueProperties() {
-            return new AiReplyQueueProperties(true, 96, Duration.ofSeconds(30), 3,
+            return new AiReplyQueueProperties(true, false, 96, Duration.ofSeconds(30), 3,
                     Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
                     Duration.ofSeconds(2));
         }

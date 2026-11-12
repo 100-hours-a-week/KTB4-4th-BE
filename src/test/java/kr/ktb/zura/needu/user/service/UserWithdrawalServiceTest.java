@@ -1,6 +1,8 @@
 package kr.ktb.zura.needu.user.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,6 +13,7 @@ import kr.ktb.zura.needu.auth.service.AuthService;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.user.dto.response.UserResponse;
+import kr.ktb.zura.needu.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -41,6 +44,17 @@ class UserWithdrawalServiceTest {
         order.verify(authService).unlinkKakaoAccount(KAKAO_ID);
         order.verify(dataService).deleteAndAnonymize(USER_ID);
         order.verify(withdrawalLock).unlock(handle);
+    }
+
+    @Test
+    void demoAccount_withdraw_throwsForbiddenWithoutDeletingData() {
+        when(authService.isDemoAccount(USER_ID)).thenReturn(true);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.withdraw(USER_ID));
+
+        assertEquals(UserErrorCode.USER_DEMO_ACCOUNT_WITHDRAWAL_FORBIDDEN, exception.getErrorCode());
+        verify(authService, never()).unlinkKakaoAccount(KAKAO_ID);
+        verifyNoInteractions(withdrawalLock, dataService);
     }
 
     @Test

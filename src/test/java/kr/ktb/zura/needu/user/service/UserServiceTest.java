@@ -120,6 +120,28 @@ class UserServiceTest {
     }
 
     @Test
+    void onboardingUser_recordLogin_recordsLastLogin() {
+        User onboarding = createOnboardingUser();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(onboarding));
+
+        userService.recordLogin(1L);
+
+        assertNotNull(onboarding.getLastLoginAt());
+    }
+
+    @Test
+    void withdrawnUser_recordLogin_throwsUserWithdrawn() {
+        User withdrawn = new User(42L, "탈퇴회원", null, Gender.NONE, null);
+        withdrawn.withdraw();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(withdrawn));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> userService.recordLogin(1L));
+
+        assertEquals(UserErrorCode.USER_WITHDRAWN, exception.getErrorCode());
+        assertNull(withdrawn.getLastLoginAt());
+    }
+
+    @Test
     void onboardingUser_findUserSummary_throwsOnboardingRequired() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(createOnboardingUser()));
 

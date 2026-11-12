@@ -255,3 +255,7 @@ needu:
       anonymous-chat-message-send:
         limit: 10
         window: 1s
+      # 테스트 계정 비밀번호 대입을 막는다. 계정 단위로 세며 여러 평가자가 함께 써도 충분한 값이다.
+      auth-demo-login:
+        limit: 10
+        window: 1m

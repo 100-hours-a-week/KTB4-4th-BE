@@ -16,6 +16,7 @@ import kr.ktb.zura.needu.common.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -59,6 +61,51 @@ class AuthControllerTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void validDemoAccount_loginWithDemoAccount_setsAuthCookies() throws Exception {
+        when(authService.loginWithDemoAccount("reviewer1", "password"))
+                .thenReturn(new AuthService.Tokens("access-token", "refresh-token", Duration.ofDays(14)));
+
+        mockMvc.perform(post("/api/v1/auth/demo/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"reviewer1","password":"password"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("로그인했습니다."))
+                .andExpect(jsonPath("$.data").isEmpty())
+                .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
+                        containsString("NEEDU_ACCESS_TOKEN=access-token"), containsString("HttpOnly")))))
+                .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
+                        containsString("NEEDU_REFRESH_TOKEN=refresh-token"), containsString("Max-Age=1209600")))))
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    void blankPassword_loginWithDemoAccount_returnsUnprocessableContent() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/demo/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"reviewer1","password":""}
+                                """))
+                .andExpect(status().isUnprocessableContent());
+
+        verify(authService, org.mockito.Mockito.never()).loginWithDemoAccount(anyString(), anyString());
+    }
+
+    @Test
+    void wrongDemoCredentials_loginWithDemoAccount_returnsUnauthorized() throws Exception {
+        when(authService.loginWithDemoAccount("reviewer1", "wrong"))
+                .thenThrow(new BusinessException(AuthErrorCode.AUTH_DEMO_LOGIN_FAILED));
+
+        mockMvc.perform(post("/api/v1/auth/demo/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"reviewer1","password":"wrong"}
+                                """))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

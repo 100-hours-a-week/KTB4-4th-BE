@@ -49,7 +49,7 @@ class AiReplyJobServiceTest {
     private static final int MAX_DELIVERIES = 3;
     private static final String STREAM_ENTRY_ID = "1730000000000-0";
     private static final Duration STALE_AFTER = Duration.ofSeconds(15);
-    private static final AiReplyQueueProperties QUEUE_ENABLED = new AiReplyQueueProperties(true, 96,
+    private static final AiReplyQueueProperties QUEUE_ENABLED = new AiReplyQueueProperties(true, false, 96,
             Duration.ofSeconds(30), MAX_DELIVERIES, Duration.ofSeconds(5), Duration.ofSeconds(30),
             Duration.ofSeconds(5), Duration.ofMillis(200), Duration.ofSeconds(2));
 
@@ -68,7 +68,7 @@ class AiReplyJobServiceTest {
 
         @Bean
         AiReplyQueueProperties aiReplyQueueProperties() {
-            return new AiReplyQueueProperties(false, 96, Duration.ofSeconds(30), MAX_DELIVERIES,
+            return new AiReplyQueueProperties(false, false, 96, Duration.ofSeconds(30), MAX_DELIVERIES,
                     Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(200),
                     Duration.ofSeconds(2));
         }

@@ -224,6 +224,50 @@ class AiReplyStreamRepositoryIntegrationTest {
         assertThat(repository.heartbeat(WORKER_A, entryId)).isEqualTo(AiReplyHeartbeatResult.OWNED);
     }
 
+    @Test
+    void streamMissing_findStatus_returnsEmptyStatus() {
+        redisTemplate.delete(KEY);
+
+        assertThat(repository.findStatus()).isEqualTo(new AiReplyStreamStatus(0, 0, Duration.ZERO));
+    }
+
+    // 처리 중인 항목은 기다리는 항목이 아니다 => 할당되지 않은 다음 항목부터 잰다
+    @Test
+    void entryPendingAndEntryWaiting_findStatus_measuresWaitFromUndeliveredEntry() throws InterruptedException {
+        repository.add(41L, DISPATCH_TOKEN);
+        Thread.sleep(300);
+        repository.add(42L, DISPATCH_TOKEN);
+        repository.readNew(WORKER_A);
+
+        AiReplyStreamStatus status = repository.findStatus();
+
+        assertThat(status.length()).isEqualTo(2);
+        assertThat(status.pendingCount()).isEqualTo(1);
+        assertThat(status.oldestWaiting()).isLessThan(Duration.ofMillis(300));
+    }
+
+    @Test
+    void allEntriesDelivered_findStatus_returnsZeroWait() {
+        readNewEntry(WORKER_A);
+
+        AiReplyStreamStatus status = repository.findStatus();
+
+        assertThat(status).isEqualTo(new AiReplyStreamStatus(1, 1, Duration.ZERO));
+    }
+
+    @Test
+    void entryAddedBeforeGroup_findStatus_measuresWaitFromFirstEntry() throws InterruptedException {
+        redisTemplate.delete(KEY);
+        repository.add(42L, DISPATCH_TOKEN);
+        Thread.sleep(200);
+
+        AiReplyStreamStatus status = repository.findStatus();
+
+        assertThat(status.length()).isEqualTo(1);
+        assertThat(status.pendingCount()).isZero();
+        assertThat(status.oldestWaiting()).isGreaterThanOrEqualTo(Duration.ofMillis(200));
+    }
+
     private String readNewEntry(String consumerName) {
         repository.add(42L, DISPATCH_TOKEN);
         return repository.readNew(consumerName).orElseThrow().entryId();
