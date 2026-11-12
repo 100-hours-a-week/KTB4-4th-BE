@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import io.micrometer.core.instrument.Timer;
 import kr.ktb.zura.needu.aichat.client.AiChatClient;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerAnalysisKeywordsRequest;
 import kr.ktb.zura.needu.aichat.client.dto.request.AiServerFeedbackRequest;
@@ -51,6 +52,7 @@ import kr.ktb.zura.needu.aichat.service.AiReplyQueueMetrics;
 import kr.ktb.zura.needu.aichat.service.AiReplyQueueService;
 import kr.ktb.zura.needu.aichat.service.AiReplyTaskExecutor;
 import kr.ktb.zura.needu.aichat.sse.AiChatCompletedEvent;
+import kr.ktb.zura.needu.aichat.type.AiReplyProcessingResult;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.ErrorCode;
@@ -316,7 +318,14 @@ public class AiChatFacade {
     // 큐 워커도 이 메서드로 작업 하나를 처리 => 두 경로가 같은 저장 규칙을 사용하도록
     public AiReplyJobOutcome replyToJob(Long jobId, String dispatchToken, long deliveryCount, String streamEntryId,
                                         AiReplyLease lease) {
-        AiReplyJobTakeResult job = aiReplyJobService.take(jobId, dispatchToken, deliveryCount, streamEntryId);
+        var processingSample = aiReplyQueueMetrics.startProcessing();
+        AiReplyJobTakeResult job;
+        try {
+            job = aiReplyJobService.take(jobId, dispatchToken, deliveryCount, streamEntryId);
+        } catch (RuntimeException e) {
+            aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.RETRYABLE_FAILURE);
+            throw e;
+        }
         return switch (job.outcome()) {
             case STALE -> {
                 log.info("AI reply job stale. jobId={}", jobId);
@@ -328,12 +337,13 @@ public class AiChatFacade {
             }
             case GAVE_UP -> {
                 aiReplyQueueMetrics.recordGaveUp();
+                aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.TERMINAL_FAILURE);
                 finishGivenUpJob(job);
                 yield AiReplyJobOutcome.FINISHED;
             }
             case TAKEN -> {
                 lease.attach(job.conversationId(), job.userMessageId(), job.lockToken());
-                yield generateJobReply(job, lease);
+                yield generateJobReply(job, lease, processingSample);
             }
         };
     }
@@ -353,7 +363,8 @@ public class AiChatFacade {
                 .fail(new BusinessException(CommonErrorCode.COMMON_SERVICE_UNAVAILABLE));
     }
 
-    private AiReplyJobOutcome generateJobReply(AiReplyJobTakeResult job, AiReplyLease lease) {
+    private AiReplyJobOutcome generateJobReply(AiReplyJobTakeResult job, AiReplyLease lease,
+                                               Timer.Sample processingSample) {
         Long conversationId = job.conversationId();
         Long userMessageId = job.userMessageId();
         AiConversationLock.Handle lock = toLock(job);
@@ -364,7 +375,11 @@ public class AiChatFacade {
                 // 다른 턴이 대화방 락을 잡음 => 그 턴의 락과 생성 중 표시는 건드리지 않는다
                 log.info("AI reply lock held by another turn. jobId={}, conversationId={}, userMessageId={}",
                         job.jobId(), conversationId, userMessageId);
-                return toOutcome(recordTakenJobFailure(job, LOCK_LOST_ERROR_CODE));
+                boolean failureRecorded = recordTakenJobFailure(job, LOCK_LOST_ERROR_CODE);
+                aiReplyQueueMetrics.recordProcessing(processingSample, failureRecorded
+                        ? AiReplyProcessingResult.TERMINAL_FAILURE
+                        : AiReplyProcessingResult.RETRYABLE_FAILURE);
+                return toOutcome(failureRecorded);
             }
             turnEvents.accept(userMessageId, job.userMessage().getClientMessageId());
             aiChatRoomService.validateMessageSendableRoom(job.userId(), conversationId);
@@ -376,17 +391,20 @@ public class AiChatFacade {
             if (lease.isLost()) {
                 log.info("AI reply stopped after lease lost. jobId={}, attempt={}, conversationId={}",
                         job.jobId(), job.attempt(), conversationId);
+                aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.RETRYABLE_FAILURE);
                 return AiReplyJobOutcome.OWNERSHIP_LOST;
             }
             if (lease.isReturning()) {
-                return returnJobToQueue(job);
+                return returnJobToQueue(job, processingSample);
             }
-            return failJobReply(job, lock, turnEvents, e);
+            return failJobReply(job, lock, turnEvents, e, processingSample);
         }
         if (committed.isRejected()) {
             aiReplyQueueMetrics.recordCommitRejected();
+            aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.RETRYABLE_FAILURE);
             return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
+        aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.SUCCESS);
         finishReply(conversationId, userMessageId, lock);
         turnEvents.complete(AiChatCompletedEvent.from(committed.reply()));
         return AiReplyJobOutcome.FINISHED;
@@ -414,6 +432,7 @@ public class AiChatFacade {
                 }
                 log.info("AI reply turn in progress, retrying. jobId={}, attempt={}, retry={}",
                         job.jobId(), job.attempt(), retry);
+                aiReplyQueueMetrics.recordTurnInProgressRetry();
                 sleepBeforeRetry(delay, e);
                 delay = delay.multipliedBy(2);
             }
@@ -472,22 +491,27 @@ public class AiChatFacade {
     }
 
     // 다른 인스턴스가 이어서 답한다 => 오류를 보내지 않고, 대화방 락과 생성 중 표시도 그 워커가 이어받도록 둔다
-    private AiReplyJobOutcome returnJobToQueue(AiReplyJobTakeResult job) {
+    private AiReplyJobOutcome returnJobToQueue(AiReplyJobTakeResult job, Timer.Sample processingSample) {
         Optional<String> dispatchToken = aiReplyJobService.returnTakenJob(job.jobId(), job.attempt());
         if (dispatchToken.isEmpty()) {
+            aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.RETRYABLE_FAILURE);
             return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
         aiReplyQueueMetrics.recordReturned();
+        aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.RETRYABLE_FAILURE);
         aiReplyQueueService.enqueue(job.jobId(), dispatchToken.get());
         return AiReplyJobOutcome.RETURNED;
     }
 
     private AiReplyJobOutcome failJobReply(AiReplyJobTakeResult job, AiConversationLock.Handle lock,
-                                           AiChatTurnEvents turnEvents, RuntimeException cause) {
+                                           AiChatTurnEvents turnEvents, RuntimeException cause,
+                                           Timer.Sample processingSample) {
         logReplyFailure(job.userId(), job.conversationId(), job.userMessageId(), cause);
         if (!recordTakenJobFailure(job, toErrorCode(cause))) {
+            aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.RETRYABLE_FAILURE);
             return AiReplyJobOutcome.OWNERSHIP_LOST;
         }
+        aiReplyQueueMetrics.recordProcessing(processingSample, AiReplyProcessingResult.TERMINAL_FAILURE);
         finishReply(job.conversationId(), job.userMessageId(), lock);
         turnEvents.fail(cause);
         return AiReplyJobOutcome.FINISHED;
