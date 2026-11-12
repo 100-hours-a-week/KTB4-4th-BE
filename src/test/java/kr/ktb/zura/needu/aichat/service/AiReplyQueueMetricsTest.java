@@ -1,10 +1,12 @@
 package kr.ktb.zura.needu.aichat.service;
 
 import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import kr.ktb.zura.needu.aichat.repository.AiReplyStreamStatus;
+import kr.ktb.zura.needu.aichat.type.AiReplyProcessingResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +20,7 @@ class AiReplyQueueMetricsTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        aiReplyQueueMetrics = new AiReplyQueueMetrics(meterRegistry);
+        aiReplyQueueMetrics = new AiReplyQueueMetrics(meterRegistry, true);
     }
 
     @Test
@@ -65,6 +67,49 @@ class AiReplyQueueMetricsTest {
 
         assertThat(gauge("aichat.reply.queue.length")).isNaN();
         assertThat(oldestWaitSeconds()).isNaN();
+    }
+
+    @Test
+    void processingRecorded_recordsBoundedResultCounterAndTimer() {
+        var sample = aiReplyQueueMetrics.startProcessing();
+
+        aiReplyQueueMetrics.recordProcessing(sample, AiReplyProcessingResult.SUCCESS);
+
+        assertThat(meterRegistry.get("aichat.reply.jobs.processed")
+                .tag("result", "success").counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("aichat.reply.jobs.processing")
+                .tag("result", "success").timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.get("aichat.reply.jobs.processed").meters())
+                .extracting(meter -> meter.getId().getTag("result"))
+                .containsExactlyInAnyOrder("success", "retryable_failure", "terminal_failure");
+    }
+
+    @Test
+    void turnInProgressRetryRecorded_usesBoundedReasonLabel() {
+        aiReplyQueueMetrics.recordTurnInProgressRetry();
+
+        assertThat(meterRegistry.get("aichat.reply.jobs.retries")
+                .tag("reason", "turn_in_progress").counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.getMeters().stream()
+                .flatMap(meter -> meter.getId().getTags().stream())
+                .map(tag -> tag.getKey() + "=" + tag.getValue()))
+                .allMatch(Set.of(
+                        "result=success",
+                        "result=retryable_failure",
+                        "result=terminal_failure",
+                        "reason=turn_in_progress")::contains);
+    }
+
+    @Test
+    void apiInstance_registersProducerCountersWithoutQueueGauges() {
+        SimpleMeterRegistry apiRegistry = new SimpleMeterRegistry();
+
+        new AiReplyQueueMetrics(apiRegistry, false).recordQueueFull();
+
+        assertThat(apiRegistry.find("aichat.reply.queue.rejected").counter()).isNotNull();
+        assertThat(apiRegistry.find("aichat.reply.queue.length").gauge()).isNull();
+        assertThat(apiRegistry.find("aichat.reply.queue.pending").gauge()).isNull();
+        assertThat(apiRegistry.find("aichat.reply.permits.used").gauge()).isNull();
     }
 
     private double counter(String name) {

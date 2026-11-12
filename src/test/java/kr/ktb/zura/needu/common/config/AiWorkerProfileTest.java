@@ -103,6 +103,8 @@ class AiWorkerProfileTest {
                     AiReplyQueueProperties properties = context.getBean(AiReplyQueueProperties.class);
                     assertThat(properties.enabled()).isTrue();
                     assertThat(properties.workerEnabled()).isTrue();
+                    assertThat(context.getEnvironment().getProperty("management.endpoints.web.exposure.include"))
+                            .isEqualTo("health,prometheus");
                     assertThat(context.getEnvironment().getProperty("needu.messaging.stream.worker.enabled"))
                             .isEqualTo("false");
                     assertThat(context.getEnvironment().getProperty("needu.redis.pub-sub.enabled")).isEqualTo("false");
