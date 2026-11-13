@@ -39,7 +39,7 @@ public class AiChatRoom {
     @Column(nullable = false)
     private Long userId;
 
-    // 진행 중(PENDING/ACTIVE/ANALYZING)인 방에만 userId를 채워 유일 제약으로 사용자당 진행 중인 방을 하나로 제한
+    // 진행 중(PENDING/ACTIVE/ANALYZING)인 방에만 userId를 채워 유일 제약으로 사용자당 진행 중인 방을 하나로 제한 (부하 테스트 방은 비움)
     private Long activeUserId;
 
     @Enumerated(EnumType.STRING)
@@ -67,14 +67,19 @@ public class AiChatRoom {
 
     private LocalDateTime deletedAt;
 
-    private AiChatRoom(Long userId) {
+    private AiChatRoom(Long userId, Long activeUserId) {
         this.userId = userId;
-        this.activeUserId = userId;
+        this.activeUserId = activeUserId;
     }
 
     // AI 세션 생성 요청에 대화방 ID가 필요 => AI 호출 전에 PENDING 상태로 먼저 저장
     public static AiChatRoom reserve(Long userId) {
-        return new AiChatRoom(userId);
+        return new AiChatRoom(userId, userId);
+    }
+
+    // 부하 테스트 계정은 대화방을 동시에 여러 개 만들어야 함 => 유일 제약에 걸리지 않게 activeUserId를 비운다
+    public static AiChatRoom reserveForLoadTest(Long userId) {
+        return new AiChatRoom(userId, null);
     }
 
     public void activate(LocalDateTime purgeAt) {

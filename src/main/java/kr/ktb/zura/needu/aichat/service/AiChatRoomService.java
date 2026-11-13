@@ -10,6 +10,7 @@ import kr.ktb.zura.needu.aichat.exception.AiChatErrorCode;
 import kr.ktb.zura.needu.aichat.repository.AiChatRoomRepository;
 import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.loadtest.LoadTestAccountProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,6 +28,7 @@ public class AiChatRoomService {
     private final Duration completionCooldown;
     private final int dailyConversationLimit;
     private final ZoneId dailyConversationLimitZone;
+    private final LoadTestAccountProperties loadTestAccountProperties;
     private final Clock clock;
 
     public AiChatRoomService(AiChatRoomRepository aiChatRoomRepository,
@@ -36,6 +38,7 @@ public class AiChatRoomService {
                              @Value("${ai.chat.daily-conversation-limit:6}") int dailyConversationLimit,
                              @Value("${ai.chat.daily-conversation-limit-zone:Asia/Seoul}")
                              String dailyConversationLimitZone,
+                             LoadTestAccountProperties loadTestAccountProperties,
                              Clock clock) {
         this.aiChatRoomRepository = aiChatRoomRepository;
         this.aiMessageRepository = aiMessageRepository;
@@ -43,6 +46,7 @@ public class AiChatRoomService {
         this.completionCooldown = completionCooldown;
         this.dailyConversationLimit = dailyConversationLimit;
         this.dailyConversationLimitZone = ZoneId.of(dailyConversationLimitZone);
+        this.loadTestAccountProperties = loadTestAccountProperties;
         this.clock = clock;
     }
 
@@ -69,6 +73,9 @@ public class AiChatRoomService {
     }
 
     private AiChatRoom findOrReserveRoom(Long userId, Duration cooldown, boolean isDailyLimitApplied) {
+        if (loadTestAccountProperties.isLoadTestAccount(userId)) {
+            return aiChatRoomRepository.saveAndFlush(AiChatRoom.reserveForLoadTest(userId));
+        }
         AiChatRoom room = aiChatRoomRepository.findByActiveUserId(userId).orElse(null);
         if (room == null) {
             return findRecentCompletedRoom(userId, cooldown)

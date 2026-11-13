@@ -17,7 +17,9 @@ import kr.ktb.zura.needu.aichat.repository.AiMessageRepository;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.config.ClockConfig;
+import kr.ktb.zura.needu.common.config.LoadTestAccountConfig;
 import kr.ktb.zura.needu.common.exception.BusinessException;
+import kr.ktb.zura.needu.common.loadtest.LoadTestAccountProperties;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import({AiChatRoomService.class, ClockConfig.class})
+@Import({AiChatRoomService.class, ClockConfig.class, LoadTestAccountConfig.class})
 class AiChatRoomServiceTest {
 
     private static final Long USER_ID = 1L;
@@ -477,6 +479,51 @@ class AiChatRoomServiceTest {
     }
 
     @Test
+    void activeRoomExists_findOrReserveRoomForLoadTestAccount_reservesAnotherRoom() {
+        AiChatRoom activeRoom = activateRoom(USER_ID);
+        AiChatRoomService loadTestService = loadTestAccountRoomService();
+
+        AiChatRoom firstRoom = loadTestService.findOrReserveRoom(USER_ID);
+        AiChatRoom secondRoom = loadTestService.findOrReserveRoom(USER_ID);
+
+        assertThat(List.of(firstRoom.getId(), secondRoom.getId()))
+                .doesNotHaveDuplicates()
+                .doesNotContain(activeRoom.getId());
+        assertThat(firstRoom.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+        assertThat(firstRoom.getActiveUserId()).isNull();
+        assertThat(secondRoom.getActiveUserId()).isNull();
+    }
+
+    @Test
+    void roomsStartedTodayReachLimit_findOrReserveRoomForLoadTestAccount_reservesRoom() {
+        startAndExpireRooms(DAILY_CONVERSATION_LIMIT);
+
+        AiChatRoom room = loadTestAccountRoomService().findOrReserveRoom(USER_ID);
+
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void recentlyCompletedRoom_findOrReserveRoomForLoadTestAccount_reservesNewRoom() {
+        AiChatRoom completedRoom = activateRoom(USER_ID);
+        aiChatRoomService.completeRoom(completedRoom.getId());
+
+        AiChatRoom room = loadTestAccountRoomService().findOrReserveRoom(USER_ID);
+
+        assertThat(room.getId()).isNotEqualTo(completedRoom.getId());
+        assertThat(room.getStatus()).isEqualTo(AiChatRoomStatus.PENDING);
+    }
+
+    @Test
+    void userOutsideLoadTestRange_findOrReserveRoom_returnsExistingRoom() {
+        AiChatRoom activeRoom = activateRoom(OTHER_USER_ID);
+
+        AiChatRoom room = loadTestAccountRoomService().findOrReserveRoom(OTHER_USER_ID);
+
+        assertThat(room.getId()).isEqualTo(activeRoom.getId());
+    }
+
+    @Test
     void activeRoom_startAnalysis_marksAnalyzing() {
         AiChatRoom activeRoom = activateRoom(USER_ID);
 
@@ -521,6 +568,12 @@ class AiChatRoomServiceTest {
     private AiChatRoomService aiChatRoomServiceAt(Instant now) {
         return new AiChatRoomService(aiChatRoomRepository, aiMessageRepository, Duration.ofMinutes(1),
                 Duration.ofHours(24), DAILY_CONVERSATION_LIMIT, DAILY_CONVERSATION_LIMIT_ZONE,
-                Clock.fixed(now, ZoneOffset.UTC));
+                LoadTestAccountProperties.disabled(), Clock.fixed(now, ZoneOffset.UTC));
+    }
+
+    private AiChatRoomService loadTestAccountRoomService() {
+        return new AiChatRoomService(aiChatRoomRepository, aiMessageRepository, Duration.ofMinutes(1),
+                Duration.ofHours(24), DAILY_CONVERSATION_LIMIT, DAILY_CONVERSATION_LIMIT_ZONE,
+                new LoadTestAccountProperties(USER_ID, USER_ID), Clock.systemUTC());
     }
 }
