@@ -68,6 +68,11 @@ ai:
       metrics-interval: ${AI_CHAT_REPLY_METRICS_INTERVAL:5s}
 
 needu:
+  # 부하 테스트 계정의 user id 범위다. 이 범위의 사용자는 AI 대화방을 동시에 여러 개 만들 수 있고(하루 대화 수·완료 쿨다운 미적용) 요청 제한을 받지 않는다.
+  # 테스트하는 동안만 두 값을 함께 넣고, 평소에는 비워 둔다.
+  load-test-account:
+    user-id-from: ${LOAD_TEST_ACCOUNT_USER_ID_FROM:}
+    user-id-to: ${LOAD_TEST_ACCOUNT_USER_ID_TO:}
   messaging:
     stream:
       # 스트림 하나에 남겨 두는 최대 엔트리 수다(근사값). 넘으면 오래된 것부터 지워지고, ACK 전 메시지도 함께 지워진다.
