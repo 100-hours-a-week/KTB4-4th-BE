@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -106,6 +107,36 @@ class AuthControllerTest {
                                 {"loginId":"reviewer1","password":"wrong"}
                                 """))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void rotatedRefreshToken_refresh_setsAccessAndRefreshCookies() throws Exception {
+        when(authService.refresh("old-refresh-token"))
+                .thenReturn(new AuthService.Tokens("access-token", "next-refresh-token", Duration.ofDays(14)));
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(new Cookie("NEEDU_REFRESH_TOKEN", "old-refresh-token")))
+                .andExpect(status().isOk())
+                .andExpect(header().stringValues("Set-Cookie", hasItem(
+                        containsString("NEEDU_ACCESS_TOKEN=access-token"))))
+                .andExpect(header().stringValues("Set-Cookie", hasItem(
+                        containsString("NEEDU_REFRESH_TOKEN=next-refresh-token"))))
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    void previousRefreshTokenWithinGrace_refresh_setsOnlyAccessCookie() throws Exception {
+        when(authService.refresh("previous-refresh-token"))
+                .thenReturn(new AuthService.Tokens("access-token", null, null));
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(new Cookie("NEEDU_REFRESH_TOKEN", "previous-refresh-token")))
+                .andExpect(status().isOk())
+                .andExpect(header().stringValues("Set-Cookie", hasItem(
+                        containsString("NEEDU_ACCESS_TOKEN=access-token"))))
+                .andExpect(header().stringValues("Set-Cookie",
+                        not(hasItem(containsString("NEEDU_REFRESH_TOKEN=")))))
+                .andExpect(header().string("Cache-Control", "no-store"));
     }
 
     @Test

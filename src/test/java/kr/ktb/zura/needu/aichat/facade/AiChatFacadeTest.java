@@ -65,6 +65,7 @@ import kr.ktb.zura.needu.aichat.sse.AiChatDoneEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatErrorEvent;
 import kr.ktb.zura.needu.aichat.sse.AiChatEventType;
 import kr.ktb.zura.needu.aichat.type.AiChatRoomStatus;
+import kr.ktb.zura.needu.aichat.type.AiReplyProcessingResult;
 import kr.ktb.zura.needu.aichat.type.SenderType;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
@@ -98,6 +99,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willDoNothing;
@@ -935,6 +937,7 @@ class AiChatFacadeTest {
         assertThat(outcome).isEqualTo(AiReplyJobOutcome.FINISHED);
         assertThat(lease.target()).contains(new AiReplyLease.Target(ROOM_ID, USER_MESSAGE_ID, LOCK_TOKEN));
         verify(aiReplyQueueMetrics, never()).recordCommitRejected();
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.SUCCESS));
     }
 
     @Test
@@ -955,6 +958,7 @@ class AiChatFacadeTest {
         verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.DELTA), any());
         verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
         verify(aiConversationLock, never()).unlock(any());
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.RETRYABLE_FAILURE));
     }
 
     @Test
@@ -976,6 +980,7 @@ class AiChatFacadeTest {
         verify(aiChatEventPublisher, never()).publish(eq(ROOM_ID), eq(AiChatEventType.ERROR), any());
         verify(aiConversationLock, never()).unlock(any());
         verify(aiGenerationStateService, never()).finishGenerating(any(), any());
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.RETRYABLE_FAILURE));
     }
 
     @Test
@@ -1007,6 +1012,7 @@ class AiChatFacadeTest {
         assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
                 .isEqualTo(AiReplyJobOutcome.OWNERSHIP_LOST);
         verify(aiReplyQueueMetrics).recordCommitRejected();
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.RETRYABLE_FAILURE));
     }
 
     @Test
@@ -1028,6 +1034,7 @@ class AiChatFacadeTest {
         assertThat(aiChatFacade.replyToJob(JOB_ID, DISPATCH_TOKEN, 1L, null, AiReplyLease.unmanaged()))
                 .isEqualTo(AiReplyJobOutcome.FINISHED);
         verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.TERMINAL_FAILURE));
     }
 
     @Test
@@ -1045,6 +1052,7 @@ class AiChatFacadeTest {
         assertThat(outcome).isEqualTo(AiReplyJobOutcome.FINISHED);
         verify(aiChatClient, times(2)).streamMessage(anyLong(), anyLong(), anyLong(), any(), any());
         verify(aiReplyJobService, never()).failTakenJob(anyLong(), anyInt(), any());
+        verify(aiReplyQueueMetrics).recordTurnInProgressRetry();
     }
 
     @Test
@@ -1229,6 +1237,7 @@ class AiChatFacadeTest {
         verify(aiReplyJobService).failJob(USER_MESSAGE_ID, CommonErrorCode.COMMON_INTERNAL_SERVER_ERROR.name());
         verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
         verify(aiConversationLock).unlock(LOCK_HANDLE);
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.RETRYABLE_FAILURE));
     }
 
     @Test
@@ -1324,6 +1333,7 @@ class AiChatFacadeTest {
         verify(aiGenerationStateService).finishGenerating(ROOM_ID, USER_MESSAGE_ID);
         verify(aiConversationLock).unlock(LOCK_HANDLE);
         verify(aiReplyQueueMetrics).recordGaveUp();
+        verify(aiReplyQueueMetrics).recordProcessing(isNull(), eq(AiReplyProcessingResult.TERMINAL_FAILURE));
     }
 
     @Test

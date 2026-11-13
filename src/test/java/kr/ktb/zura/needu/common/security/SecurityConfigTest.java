@@ -19,7 +19,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
-        "management.endpoints.web.exposure.include=health,metrics,prometheus",
         "management.endpoint.health.probes.add-additional-paths=true",
         "needu.rate-limit.enabled=false",
         "notification.webpush.public-key=test-public-key"
@@ -206,15 +205,13 @@ class SecurityConfigTest {
     }
 
     @Test
-    void authentication_findHikariConnectionMetrics_returnsOk() throws Exception {
+    void metricsEndpoint_isNotExposed() throws Exception {
         Cookie accessCookie = accessCookie();
 
         mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/actuator/metrics/hikaricp.connections.active").cookie(accessCookie))
-                .andExpect(status().isOk());
-        mockMvc.perform(get("/actuator/metrics/hikaricp.connections.pending").cookie(accessCookie))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -222,7 +219,11 @@ class SecurityConfigTest {
         mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
-                        .string(containsString("jvm_")));
+                        .string(containsString("jvm_")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(containsString("aichat_reply_jobs_processed_total")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(containsString("aichat_reply_jobs_processing_seconds_bucket")));
     }
 
     @Test

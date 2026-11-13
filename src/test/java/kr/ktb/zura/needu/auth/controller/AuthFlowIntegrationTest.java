@@ -112,9 +112,12 @@ class AuthFlowIntegrationTest {
         assertThat(nextRefreshCookie).isNotNull();
         assertThat(nextRefreshCookie.getValue()).isNotEqualTo(refreshCookie.getValue());
 
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        // 동시 재발급 경합에서 늦게 도착한 직전 토큰은 유예 시간 동안 액세스 토큰만 재발급한다
+        MvcResult reusedWithinGrace = mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(refreshCookie, csrfCookie).header("X-XSRF-TOKEN", csrfToken))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk()).andReturn();
+        assertThat(reusedWithinGrace.getResponse().getCookie(AuthCookieNames.ACCESS_TOKEN)).isNotNull();
+        assertThat(reusedWithinGrace.getResponse().getCookie(AuthCookieNames.REFRESH_TOKEN)).isNull();
         MvcResult logout = mockMvc.perform(post("/api/v1/auth/logout")
                         .cookie(nextRefreshCookie, csrfCookie).header("X-XSRF-TOKEN", csrfToken))
                 .andExpect(status().isNoContent()).andReturn();
@@ -122,6 +125,9 @@ class AuthFlowIntegrationTest {
         assertThat(logout.getResponse().getCookie(AuthCookieNames.REFRESH_TOKEN).getMaxAge()).isZero();
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(nextRefreshCookie, csrfCookie).header("X-XSRF-TOKEN", csrfToken))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(refreshCookie, csrfCookie).header("X-XSRF-TOKEN", csrfToken))
                 .andExpect(status().isUnauthorized());
     }
 }
