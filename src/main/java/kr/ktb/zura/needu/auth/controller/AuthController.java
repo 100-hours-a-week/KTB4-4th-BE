@@ -122,10 +122,13 @@ public class AuthController {
     public ResponseEntity<Void> refresh(@CookieValue(name = AuthCookieNames.REFRESH_TOKEN, required = false)
                                         String refreshToken) {
         AuthService.Tokens tokens = authService.refresh(refreshToken);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString())
-                .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString())
-                .cacheControl(CacheControl.noStore()).build();
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, accessCookie(tokens.accessToken(), accessTokenExpiration).toString());
+        if (tokens.hasRefreshToken()) {
+            response.header(HttpHeaders.SET_COOKIE,
+                    refreshCookie(tokens.refreshToken(), tokens.refreshMaxAge()).toString());
+        }
+        return response.cacheControl(CacheControl.noStore()).build();
     }
 
     @PostMapping("/logout")

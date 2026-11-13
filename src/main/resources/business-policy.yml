@@ -2,6 +2,8 @@ auth:
   jwt:
     access-token-expiration: 15m
   refresh-token-expiration: 14d
+  # 동시 재발급 경합에서 늦게 도착한 직전 리프레시 토큰을 인정하는 시간이다.
+  refresh-token-reuse-grace: 10s
 
 ai:
   chat:

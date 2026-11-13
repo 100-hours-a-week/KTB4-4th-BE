@@ -119,6 +119,11 @@ public class AuthService {
                 refresh.value(), refresh.remaining());
     }
 
+    // refreshToken이 null이면 리프레시 토큰을 교체하지 않았으므로 리프레시 쿠키를 내려주지 않는다
     public record Tokens(String accessToken, String refreshToken, Duration refreshMaxAge) {
+
+        public boolean hasRefreshToken() {
+            return refreshToken != null;
+        }
     }
 }
