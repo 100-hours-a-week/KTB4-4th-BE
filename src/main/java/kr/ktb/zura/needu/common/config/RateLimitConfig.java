@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.common.config;
 
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
+import kr.ktb.zura.needu.common.loadtest.LoadTestAccountProperties;
 import kr.ktb.zura.needu.common.ratelimit.EventRateLimiter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitCounter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitFilter;
@@ -44,10 +45,11 @@ public class RateLimitConfig {
     public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(
             RateLimitProperties properties,
             RateLimitCounter rateLimitCounter,
-            ErrorResponseWriter errorResponseWriter
+            ErrorResponseWriter errorResponseWriter,
+            LoadTestAccountProperties loadTestAccountProperties
     ) {
-        FilterRegistrationBean<RateLimitFilter> registration =
-                new FilterRegistrationBean<>(new RateLimitFilter(properties, rateLimitCounter, errorResponseWriter));
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(
+                new RateLimitFilter(properties, rateLimitCounter, errorResponseWriter, loadTestAccountProperties));
         registration.setOrder(Ordered.LOWEST_PRECEDENCE);
         return registration;
     }

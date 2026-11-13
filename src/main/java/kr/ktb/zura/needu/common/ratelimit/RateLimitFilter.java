@@ -11,6 +11,7 @@ import java.util.Optional;
 
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
+import kr.ktb.zura.needu.common.loadtest.LoadTestAccountProperties;
 import kr.ktb.zura.needu.common.response.RetryAfterResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -30,15 +31,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final List<RateLimitRule> rules;
     private final RateLimitCounter rateLimitCounter;
     private final ErrorResponseWriter errorResponseWriter;
+    private final LoadTestAccountProperties loadTestAccountProperties;
 
     public RateLimitFilter(RateLimitProperties properties, RateLimitCounter rateLimitCounter,
-                           ErrorResponseWriter errorResponseWriter) {
+                           ErrorResponseWriter errorResponseWriter,
+                           LoadTestAccountProperties loadTestAccountProperties) {
         this.rules = properties.policies().entrySet().stream()
                 .map(entry -> RateLimitRule.from(entry.getKey(), entry.getValue()))
                 .sorted(Comparator.comparing(RateLimitRule::pathPattern, PathPattern.SPECIFICITY_COMPARATOR))
                 .toList();
         this.rateLimitCounter = rateLimitCounter;
         this.errorResponseWriter = errorResponseWriter;
+        this.loadTestAccountProperties = loadTestAccountProperties;
     }
 
     @Override
@@ -47,7 +51,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         Optional<RateLimitRule> rule = findRule(request);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (rule.isEmpty() || !isAuthenticatedUser(authentication)) {
+        if (rule.isEmpty() || !isAuthenticatedUser(authentication) || isLoadTestAccount(authentication)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -84,6 +88,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return authentication != null
                 && authentication.isAuthenticated()
                 && !(authentication instanceof AnonymousAuthenticationToken);
+    }
+
+    private boolean isLoadTestAccount(Authentication authentication) {
+        return authentication.getPrincipal() instanceof Long userId
+                && loadTestAccountProperties.isLoadTestAccount(userId);
     }
 
     private record RateLimitRule(String name, HttpMethod method, PathPattern pathPattern, long limit) {

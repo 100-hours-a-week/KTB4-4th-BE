@@ -16,7 +16,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class RateLimitConfigTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(RateLimitConfig.class)
+            .withUserConfiguration(RateLimitConfig.class, LoadTestAccountConfig.class)
             .withBean(ErrorResponseWriter.class, () -> mock(ErrorResponseWriter.class))
             .withBean(RateLimitRedisRepository.class, () -> mock(RateLimitRedisRepository.class))
             .withBean(RedisKeyGenerator.class, () -> mock(RedisKeyGenerator.class))
