@@ -3,6 +3,7 @@ package kr.ktb.zura.needu.calendar.controller;
 import java.time.Duration;
 import java.util.List;
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
+import kr.ktb.zura.needu.common.loadtest.LoadTestAccountProperties;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitCounter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitFilter;
 import kr.ktb.zura.needu.common.ratelimit.RateLimitProperties;
@@ -54,7 +55,8 @@ class CalendarRateLimitTest {
         given(counter.increment(policyName, "1")).willReturn(
                 new RateLimitUsage(120, Duration.ofSeconds(10)),
                 new RateLimitUsage(121, Duration.ofSeconds(10)));
-        var filter = new RateLimitFilter(properties, counter, new ErrorResponseWriter(JsonMapper.builder().build()));
+        var filter = new RateLimitFilter(properties, counter, new ErrorResponseWriter(JsonMapper.builder().build()),
+                LoadTestAccountProperties.disabled());
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
 

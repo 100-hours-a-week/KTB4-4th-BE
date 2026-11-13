@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import kr.ktb.zura.needu.common.exception.ErrorResponseWriter;
+import kr.ktb.zura.needu.common.loadtest.LoadTestAccountProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class RateLimitFilterTest {
 
@@ -43,7 +45,8 @@ class RateLimitFilterTest {
         rateLimitFilter = new RateLimitFilter(
                 properties,
                 rateLimitCounter,
-                new ErrorResponseWriter(JsonMapper.builder().build()));
+                new ErrorResponseWriter(JsonMapper.builder().build()),
+                LoadTestAccountProperties.disabled());
     }
 
     @AfterEach
@@ -103,6 +106,39 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void loadTestAccount_doFilter_skipsRateLimit() throws Exception {
+        RateLimitProperties properties = new RateLimitProperties(Map.of(
+                POLICY_NAME, new RateLimitProperties.Policy(HttpMethod.GET, PATH, LIMIT, WINDOW)
+        ), Map.of());
+        rateLimitFilter = new RateLimitFilter(
+                properties,
+                rateLimitCounter,
+                new ErrorResponseWriter(JsonMapper.builder().build()),
+                new LoadTestAccountProperties(USER_ID, USER_ID));
+        authenticate(USER_ID);
+
+        assertThat(sendRequests(PATH, "GET", LIMIT + 1)).isEqualTo(HttpStatus.OK.value());
+        verifyNoInteractions(rateLimitCounter);
+    }
+
+    @Test
+    void userOutsideLoadTestRange_doFilter_appliesRateLimit() throws Exception {
+        RateLimitProperties properties = new RateLimitProperties(Map.of(
+                POLICY_NAME, new RateLimitProperties.Policy(HttpMethod.GET, PATH, LIMIT, WINDOW)
+        ), Map.of());
+        rateLimitFilter = new RateLimitFilter(
+                properties,
+                rateLimitCounter,
+                new ErrorResponseWriter(JsonMapper.builder().build()),
+                new LoadTestAccountProperties(USER_ID + 1, USER_ID + 10));
+        authenticate(USER_ID);
+        given(rateLimitCounter.increment(POLICY_NAME, USER_ID.toString()))
+                .willReturn(new RateLimitUsage(LIMIT + 1, WINDOW));
+
+        assertThat(sendRequests(PATH, "GET", 1)).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    }
+
+    @Test
     void notLimitedPath_doFilter_skipsRateLimit() throws Exception {
         authenticate(USER_ID);
 
@@ -132,7 +168,8 @@ class RateLimitFilterTest {
         rateLimitFilter = new RateLimitFilter(
                 properties,
                 rateLimitCounter,
-                new ErrorResponseWriter(JsonMapper.builder().build()));
+                new ErrorResponseWriter(JsonMapper.builder().build()),
+                LoadTestAccountProperties.disabled());
         authenticate(USER_ID);
         given(rateLimitCounter.increment(anyString(), anyString()))
                 .willReturn(new RateLimitUsage(1, WINDOW));
