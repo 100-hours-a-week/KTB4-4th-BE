@@ -43,6 +43,7 @@ class NotificationCreationServiceTest {
     private final NotificationSettingRepository notificationSettingRepository =
             mock(NotificationSettingRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final WebPushJobService webPushJobService = mock(WebPushJobService.class);
     private final NotificationCreationService notificationCreationService = createService(INSERT_CHUNK_SIZE);
 
     @Test
@@ -130,6 +131,7 @@ class NotificationCreationServiceTest {
         verify(notificationEventRepository, never()).save(any());
         verify(notificationRepository, never()).insertAll(anyList(), any());
         verify(eventPublisher, never()).publishEvent(any());
+        verify(webPushJobService, never()).createJobs(anyList(), any());
     }
 
     @Test
@@ -221,6 +223,38 @@ class NotificationCreationServiceTest {
     }
 
     @Test
+    void multipleCommands_createNotifications_createsWebPushJobsWithEventNotificationIdsAndCreatedAt() {
+        given(notificationEventRepository.findAllDedupKeysByDedupKeyIn(
+                List.of("friend-birthday:10", "friend-birthday:11"))).willReturn(List.of());
+        given(notificationSettingRepository.findAllByUserIdInAndType(
+                Set.of(1L, 2L, 3L), NotificationSettingType.FRIEND_BIRTHDAY)).willReturn(List.of());
+        givenEventsSavedWithSequentialIds(EVENT_ID);
+        givenInsertReturnsSequentialIds(1_000L);
+
+        notificationCreationService.createNotifications(List.of(
+                birthdayCommand(10L, new LinkedHashSet<>(List.of(1L, 2L))),
+                birthdayCommand(11L, new LinkedHashSet<>(List.of(3L, 1L)))
+        ));
+
+        ArgumentCaptor<List<WebPushJobTarget>> targetsCaptor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<LocalDateTime> createdAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(webPushJobService).createJobs(targetsCaptor.capture(), createdAtCaptor.capture());
+        assertThat(targetsCaptor.getValue())
+                .extracting(
+                        WebPushJobTarget::notificationEventId,
+                        WebPushJobTarget::type,
+                        WebPushJobTarget::notificationIds
+                )
+                .containsExactly(
+                        tuple(EVENT_ID, NotificationType.FRIEND_BIRTHDAY, List.of(1_000L, 1_001L)),
+                        tuple(EVENT_ID + 1, NotificationType.FRIEND_BIRTHDAY, List.of(1_002L, 1_003L))
+                );
+        assertThat(capturePublishedEvent().notifications())
+                .extracting(NotificationsCreatedEvent.CreatedNotification::createdAt)
+                .containsOnly(createdAtCaptor.getValue());
+    }
+
+    @Test
     void someDedupKeysUsed_createNotifications_skipsOnlyThoseCommands() {
         given(notificationEventRepository.findAllDedupKeysByDedupKeyIn(
                 List.of("friend-birthday:10", "friend-birthday:11", "friend-birthday:11")))
@@ -259,6 +293,7 @@ class NotificationCreationServiceTest {
                 notificationRepository,
                 notificationSettingRepository,
                 eventPublisher,
+                webPushJobService,
                 insertChunkSize
         );
     }
