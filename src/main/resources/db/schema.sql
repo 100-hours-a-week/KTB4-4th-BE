@@ -199,6 +199,34 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     KEY idx_push_subscriptions_user_id (user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- 웹푸시 발송 작업 큐. 알림 이벤트 하나의 수신자를 묶음(chunk) 단위로 한 행에 담는다.
+-- 알림 INSERT와 같은 트랜잭션에서 생성해 커밋된 알림만, 커밋된 알림은 빠짐없이 발송 대상이 된다.
+-- 성공한 작업은 바로 삭제하고 재시도를 다 쓴 작업만 FAILED로 남긴다. 알림 이벤트는 FK 없이 ID만 저장한다.
+CREATE TABLE IF NOT EXISTS webpush_jobs (
+    id                    BIGINT       NOT NULL AUTO_INCREMENT,
+    notification_event_id BIGINT       NOT NULL COMMENT '제목·본문 등 공통 내용은 notification_events에서 읽는다',
+    -- 처리할 대기열. 대기열마다 워커를 따로 두어 대량 발송이 밀려도 실시간 알림이 기다리지 않게 한다
+    queue_type            VARCHAR(20)  NOT NULL COMMENT 'REALTIME, BULK',
+    -- 아직 보내지 않은 수신자의 알림 ID 목록. 재시도할 때는 실패한 수신자만 남긴다
+    notification_ids      JSON         NOT NULL,
+    status                VARCHAR(20)  NOT NULL COMMENT 'QUEUED, RUNNING, FAILED',
+    -- 발송 실패나 리스 만료로 다시 대기열에 넣을 때마다 1씩 오른다. 최대 재시도 횟수를 넘으면 FAILED로 둔다
+    retry_count           INT          NOT NULL DEFAULT 0,
+    -- 이 시각 이후에만 가져간다. 재시도 백오프에 사용한다
+    available_at          DATETIME(6)  NOT NULL,
+    -- 작업을 가져간 워커의 리스. 이 토큰을 가진 워커만 결과를 반영하고, 만료되면 다른 워커가 회수한다
+    lease_token           VARCHAR(36)  NULL,
+    lease_expires_at      DATETIME(6)  NULL,
+    last_error_code       VARCHAR(100) NULL,
+    created_at            DATETIME(6)  NOT NULL,
+    updated_at            DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    -- 대기열별 대기 작업 가져가기(status = 'QUEUED' AND queue_type = ? AND available_at <= now ORDER BY available_at)와 FAILED 정리
+    KEY idx_webpush_jobs_status_queue_type_available_at (status, queue_type, available_at),
+    -- 리스가 만료된 RUNNING 작업 회수
+    KEY idx_webpush_jobs_status_lease_expires_at (status, lease_expires_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 SET @add_push_subscription_endpoint_hash = (
     SELECT IF(COUNT(*) = 0,
               'ALTER TABLE push_subscriptions ADD COLUMN endpoint_hash CHAR(64) NULL COMMENT ''SHA-256(endpoint)''',
