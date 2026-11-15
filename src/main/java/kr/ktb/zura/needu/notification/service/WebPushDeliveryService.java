@@ -1,7 +1,10 @@
 package kr.ktb.zura.needu.notification.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.notification.client.WebPushClient;
 import kr.ktb.zura.needu.notification.client.WebPushResult;
@@ -22,6 +25,11 @@ public class WebPushDeliveryService {
     private final WebPushClient webPushClient;
 
     public void deliver(List<NotificationsCreatedEvent.CreatedNotification> notifications) {
+        deliver(notifications, Runnable::run);
+    }
+
+    // 구독별 발송을 sendExecutor로 나눠 보내고 모두 끝날 때까지 기다린다
+    public void deliver(List<NotificationsCreatedEvent.CreatedNotification> notifications, Executor sendExecutor) {
         if (notifications.isEmpty()) {
             return;
         }
@@ -34,9 +42,12 @@ public class WebPushDeliveryService {
                 .stream()
                 .collect(Collectors.groupingBy(PushSubscription::getUserId));
 
+        List<CompletableFuture<Void>> sends = new ArrayList<>();
         notifications.forEach(notification -> subscriptionsByUserId
                 .getOrDefault(notification.receiverUserId(), List.of())
-                .forEach(subscription -> send(subscription, notification)));
+                .forEach(subscription -> sends.add(
+                        CompletableFuture.runAsync(() -> send(subscription, notification), sendExecutor))));
+        CompletableFuture.allOf(sends.toArray(CompletableFuture[]::new)).join();
     }
 
     private void send(PushSubscription subscription, NotificationsCreatedEvent.CreatedNotification notification) {

@@ -1,5 +1,6 @@
 package kr.ktb.zura.needu.notification.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,6 +13,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import kr.ktb.zura.needu.notification.client.WebPushClient;
 import kr.ktb.zura.needu.notification.client.WebPushResult;
 import kr.ktb.zura.needu.notification.entity.PushSubscription;
@@ -53,6 +56,29 @@ class WebPushDeliveryServiceTest {
         verify(pushSubscriptionRepository).deleteById(21L);
         verify(pushSubscriptionRepository, never()).deleteById(11L);
         verify(pushSubscriptionRepository, never()).deleteById(12L);
+    }
+
+    @Test
+    void sendExecutor_deliver_sendsEachSubscriptionThroughExecutor() {
+        PushSubscription firstSubscription = subscription(11L, FIRST_USER_ID);
+        PushSubscription secondSubscription = subscription(12L, FIRST_USER_ID);
+        PushSubscription thirdSubscription = subscription(21L, SECOND_USER_ID);
+        given(pushSubscriptionRepository.findAllByUserIdIn(List.of(FIRST_USER_ID, SECOND_USER_ID)))
+                .willReturn(List.of(firstSubscription, secondSubscription, thirdSubscription));
+        given(webPushClient.send(any(), any())).willReturn(WebPushResult.SUCCESS);
+        AtomicInteger executed = new AtomicInteger();
+        Executor countingExecutor = task -> {
+            executed.incrementAndGet();
+            task.run();
+        };
+
+        deliveryService.deliver(
+                List.of(notification(101L, FIRST_USER_ID), notification(102L, SECOND_USER_ID)), countingExecutor);
+
+        assertThat(executed).hasValue(3);
+        verify(webPushClient).send(firstSubscription, notification(101L, FIRST_USER_ID));
+        verify(webPushClient).send(secondSubscription, notification(101L, FIRST_USER_ID));
+        verify(webPushClient).send(thirdSubscription, notification(102L, SECOND_USER_ID));
     }
 
     @Test
