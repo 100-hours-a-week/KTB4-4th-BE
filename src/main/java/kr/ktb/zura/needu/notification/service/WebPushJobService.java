@@ -1,9 +1,12 @@
 package kr.ktb.zura.needu.notification.service;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import kr.ktb.zura.needu.notification.entity.NotificationEvent;
 import kr.ktb.zura.needu.notification.entity.WebPushJob;
@@ -12,38 +15,51 @@ import kr.ktb.zura.needu.notification.repository.NotificationReceiver;
 import kr.ktb.zura.needu.notification.repository.NotificationRepository;
 import kr.ktb.zura.needu.notification.repository.WebPushJobInsertRow;
 import kr.ktb.zura.needu.notification.repository.WebPushJobRepository;
+import kr.ktb.zura.needu.notification.type.WebPushQueueType;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class WebPushJobService {
 
     private final WebPushJobRepository webPushJobRepository;
     private final NotificationEventRepository notificationEventRepository;
     private final NotificationRepository notificationRepository;
+    private final Clock clock;
     private final boolean enabled;
     private final int chunkSize;
+    private final Duration leaseDuration;
 
     public WebPushJobService(
             WebPushJobRepository webPushJobRepository,
             NotificationEventRepository notificationEventRepository,
             NotificationRepository notificationRepository,
+            Clock clock,
             @Value("${notification.webpush.enabled:false}") boolean webPushEnabled,
             @Value("${needu.notification.webpush-job.enabled}") boolean jobEnabled,
-            @Value("${needu.notification.webpush-job.chunk-size}") int chunkSize
+            @Value("${needu.notification.webpush-job.chunk-size}") int chunkSize,
+            @Value("${needu.notification.webpush-job.lease-duration}") Duration leaseDuration
     ) {
         // 0 이하면 chunk 반복이 끝나지 않으므로 기동 시점에 막는다
         if (chunkSize <= 0) {
             throw new IllegalArgumentException(
                     "needu.notification.webpush-job.chunk-size must be positive. value=" + chunkSize);
         }
+        if (leaseDuration.isZero() || leaseDuration.isNegative()) {
+            throw new IllegalArgumentException(
+                    "needu.notification.webpush-job.lease-duration must be positive. value=" + leaseDuration);
+        }
         this.webPushJobRepository = webPushJobRepository;
         this.notificationEventRepository = notificationEventRepository;
         this.notificationRepository = notificationRepository;
+        this.clock = clock;
         this.enabled = webPushEnabled && jobEnabled;
         this.chunkSize = chunkSize;
+        this.leaseDuration = leaseDuration;
     }
 
     /**
@@ -71,10 +87,31 @@ public class WebPushJobService {
         webPushJobRepository.insertAll(rows, createdAt);
     }
 
-    /**
-     * 작업의 알림 이벤트와 수신자를 읽어 발송할 알림 목록을 만든다. 작업에 담긴 알림 순서를 유지한다.
-     * 알림 이벤트나 알림이 그사이 지워졌으면 그 수신자는 빠진다.
-     */
+
+    @Transactional
+    public List<WebPushJob> takeJobs(WebPushQueueType queueType, int limit) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Web push job take limit must be positive. limit=" + limit);
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        List<Long> ids = webPushJobRepository.findAllAvailableIdsForUpdate(queueType, now, limit);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        webPushJobRepository.updateToRunning(ids, UUID.randomUUID().toString(), now.plus(leaseDuration), now);
+        return webPushJobRepository.findAllById(ids);
+    }
+
+
+    @Transactional
+    public void completeJob(WebPushJob job) {
+        int deleted = webPushJobRepository.deleteByIdAndLeaseToken(job.getId(), job.getLeaseToken());
+        if (deleted == 0) {
+            log.info("Web push job lease lost before completion. jobId={}", job.getId());
+        }
+    }
+
+
     @Transactional(readOnly = true)
     public List<NotificationsCreatedEvent.CreatedNotification> findDeliveryNotifications(WebPushJob job) {
         NotificationEvent event = notificationEventRepository.findById(job.getNotificationEventId()).orElse(null);

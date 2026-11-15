@@ -1,6 +1,7 @@
 package kr.ktb.zura.needu.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
@@ -11,7 +12,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import kr.ktb.zura.needu.notification.entity.NotificationEvent;
@@ -32,6 +36,9 @@ class WebPushJobServiceTest {
 
     private static final int CHUNK_SIZE = 2;
     private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 11, 14, 0, 0);
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 15, 0, 0);
+    private static final Clock CLOCK = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+    private static final Duration LEASE_DURATION = Duration.ofMinutes(5);
 
     private final WebPushJobRepository webPushJobRepository = mock(WebPushJobRepository.class);
     private final NotificationEventRepository notificationEventRepository = mock(NotificationEventRepository.class);
@@ -95,10 +102,70 @@ class WebPushJobServiceTest {
 
     @Test
     void nonPositiveChunkSize_create_throwsIllegalArgumentException() {
-        assertThatThrownBy(() -> new WebPushJobService(
-                webPushJobRepository, notificationEventRepository, notificationRepository, true, true, 0))
+        assertThatThrownBy(() -> createService(true, true, 0, LEASE_DURATION))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("chunk-size");
+    }
+
+    @Test
+    void nonPositiveLeaseDuration_create_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> createService(true, true, CHUNK_SIZE, Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("lease-duration");
+    }
+
+    @Test
+    void availableJobs_takeJobs_leasesTakenJobsWithOneTokenAndReturnsThem() {
+        List<WebPushJob> jobs = List.of(job(100L, List.of(1L)), job(101L, List.of(2L)));
+        given(webPushJobRepository.findAllAvailableIdsForUpdate(WebPushQueueType.REALTIME, NOW, 10))
+                .willReturn(List.of(7L, 8L));
+        given(webPushJobRepository.findAllById(List.of(7L, 8L))).willReturn(jobs);
+
+        List<WebPushJob> taken = createService(true, true).takeJobs(WebPushQueueType.REALTIME, 10);
+
+        assertThat(taken).isEqualTo(jobs);
+        ArgumentCaptor<String> leaseTokenCaptor = ArgumentCaptor.forClass(String.class);
+        verify(webPushJobRepository).updateToRunning(
+                eq(List.of(7L, 8L)), leaseTokenCaptor.capture(), eq(NOW.plus(LEASE_DURATION)), eq(NOW));
+        assertThat(leaseTokenCaptor.getValue()).isNotBlank();
+    }
+
+    @Test
+    void noAvailableJobs_takeJobs_returnsEmptyWithoutLeasing() {
+        given(webPushJobRepository.findAllAvailableIdsForUpdate(WebPushQueueType.BULK, NOW, 10))
+                .willReturn(List.of());
+
+        assertThat(createService(true, true).takeJobs(WebPushQueueType.BULK, 10)).isEmpty();
+        verify(webPushJobRepository, never()).updateToRunning(any(), any(), any(), any());
+        verify(webPushJobRepository, never()).findAllById(any());
+    }
+
+    @Test
+    void nonPositiveLimit_takeJobs_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> createService(true, true).takeJobs(WebPushQueueType.REALTIME, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void leasedJob_completeJob_deletesWithLeaseToken() {
+        WebPushJob job = job(100L, List.of(1L));
+        ReflectionTestUtils.setField(job, "id", 7L);
+        ReflectionTestUtils.setField(job, "leaseToken", "lease-token");
+        given(webPushJobRepository.deleteByIdAndLeaseToken(7L, "lease-token")).willReturn(1);
+
+        createService(true, true).completeJob(job);
+
+        verify(webPushJobRepository).deleteByIdAndLeaseToken(7L, "lease-token");
+    }
+
+    @Test
+    void leaseLost_completeJob_doesNotThrow() {
+        WebPushJob job = job(100L, List.of(1L));
+        ReflectionTestUtils.setField(job, "id", 7L);
+        ReflectionTestUtils.setField(job, "leaseToken", "old-lease-token");
+        given(webPushJobRepository.deleteByIdAndLeaseToken(7L, "old-lease-token")).willReturn(0);
+
+        assertThatCode(() -> createService(true, true).completeJob(job)).doesNotThrowAnyException();
     }
 
     @Test
@@ -168,8 +235,17 @@ class WebPushJobServiceTest {
     }
 
     private WebPushJobService createService(boolean webPushEnabled, boolean jobEnabled) {
+        return createService(webPushEnabled, jobEnabled, CHUNK_SIZE, LEASE_DURATION);
+    }
+
+    private WebPushJobService createService(
+            boolean webPushEnabled,
+            boolean jobEnabled,
+            int chunkSize,
+            Duration leaseDuration
+    ) {
         return new WebPushJobService(webPushJobRepository, notificationEventRepository, notificationRepository,
-                webPushEnabled, jobEnabled, CHUNK_SIZE);
+                CLOCK, webPushEnabled, jobEnabled, chunkSize, leaseDuration);
     }
 
     @SuppressWarnings("unchecked")

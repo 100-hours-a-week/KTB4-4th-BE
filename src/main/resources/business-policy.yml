@@ -106,6 +106,8 @@ needu:
       enabled: ${WEB_PUSH_JOB_ENABLED:false}
       # 발송 작업 하나에 담는 최대 수신자 수다. 생일 배치 하루치(수신자 약 89만 명)가 약 1,800개 작업이 된다
       chunk-size: ${WEB_PUSH_JOB_CHUNK_SIZE:500}
+      # 워커가 가져간 작업을 다른 워커가 가져가지 못하는 시간이다. 작업 하나를 다 보내는 시간보다 넉넉히 둔다
+      lease-duration: ${WEB_PUSH_JOB_LEASE_DURATION:5m}
     friend-birthday:
       cron: ${FRIEND_BIRTHDAY_NOTIFICATION_CRON:0 0 9 * * *}
       zone: ${FRIEND_BIRTHDAY_NOTIFICATION_ZONE:Asia/Seoul}
