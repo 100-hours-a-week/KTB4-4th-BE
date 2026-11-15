@@ -12,6 +12,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "notification.webpush.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "needu.notification.webpush-job.enabled", havingValue = "false", matchIfMissing = true)
 public class WebPushNotificationCreatedEventListener {
 
     private final WebPushDeliveryService webPushDeliveryService;
