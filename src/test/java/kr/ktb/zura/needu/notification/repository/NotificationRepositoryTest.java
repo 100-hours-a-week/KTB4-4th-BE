@@ -211,6 +211,27 @@ class NotificationRepositoryTest {
         ));
     }
 
+    @Test
+    void someNotificationsDeleted_findAllActiveReceiversByIdIn_returnsOnlyNotDeletedRequestedNotifications() {
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(1);
+        Notification active = createNotification(USER_ID, "active-receiver", expiresAt);
+        Notification otherUserActive = createNotification(2L, "other-user-active-receiver", expiresAt);
+        Notification deleted = createNotification(USER_ID, "deleted-receiver", expiresAt);
+        Notification notRequested = createNotification(3L, "not-requested-receiver", expiresAt);
+        deleted.delete();
+        notificationRepository.saveAllAndFlush(List.of(active, otherUserActive, deleted, notRequested));
+
+        List<NotificationReceiver> receivers = notificationRepository.findAllActiveReceiversByIdIn(
+                List.of(active.getId(), otherUserActive.getId(), deleted.getId()));
+
+        assertThat(receivers)
+                .extracting(NotificationReceiver::getNotificationId, NotificationReceiver::getReceiverUserId)
+                .containsExactlyInAnyOrder(
+                        tuple(active.getId(), USER_ID),
+                        tuple(otherUserActive.getId(), 2L)
+                );
+    }
+
     private Notification createNotification(Long receiverUserId, String dedupKey, LocalDateTime expiresAt) {
         return createNotification(receiverUserId, dedupKey, expiresAt, NotificationType.POKE);
     }

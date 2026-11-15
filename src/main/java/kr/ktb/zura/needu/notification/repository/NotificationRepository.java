@@ -23,6 +23,15 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @EntityGraph(attributePaths = "event")
     Optional<Notification> findOneById(Long id);
 
+    // 사용자가 지운 알림은 웹푸시를 보내지 않는다
+    @Query("""
+            SELECT notification.id AS notificationId, notification.receiverUserId AS receiverUserId
+            FROM Notification notification
+            WHERE notification.id IN :ids
+              AND notification.deletedAt IS NULL
+            """)
+    List<NotificationReceiver> findAllActiveReceiversByIdIn(@Param("ids") Collection<Long> ids);
+
     @Query("""
             SELECT COUNT(notification)
             FROM Notification notification

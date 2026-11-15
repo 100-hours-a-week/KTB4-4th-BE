@@ -3,6 +3,13 @@ package kr.ktb.zura.needu.notification.service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import kr.ktb.zura.needu.notification.entity.NotificationEvent;
+import kr.ktb.zura.needu.notification.entity.WebPushJob;
+import kr.ktb.zura.needu.notification.repository.NotificationEventRepository;
+import kr.ktb.zura.needu.notification.repository.NotificationReceiver;
+import kr.ktb.zura.needu.notification.repository.NotificationRepository;
 import kr.ktb.zura.needu.notification.repository.WebPushJobInsertRow;
 import kr.ktb.zura.needu.notification.repository.WebPushJobRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,11 +21,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class WebPushJobService {
 
     private final WebPushJobRepository webPushJobRepository;
+    private final NotificationEventRepository notificationEventRepository;
+    private final NotificationRepository notificationRepository;
     private final boolean enabled;
     private final int chunkSize;
 
     public WebPushJobService(
             WebPushJobRepository webPushJobRepository,
+            NotificationEventRepository notificationEventRepository,
+            NotificationRepository notificationRepository,
             @Value("${notification.webpush.enabled:false}") boolean webPushEnabled,
             @Value("${needu.notification.webpush-job.enabled}") boolean jobEnabled,
             @Value("${needu.notification.webpush-job.chunk-size}") int chunkSize
@@ -29,6 +40,8 @@ public class WebPushJobService {
                     "needu.notification.webpush-job.chunk-size must be positive. value=" + chunkSize);
         }
         this.webPushJobRepository = webPushJobRepository;
+        this.notificationEventRepository = notificationEventRepository;
+        this.notificationRepository = notificationRepository;
         this.enabled = webPushEnabled && jobEnabled;
         this.chunkSize = chunkSize;
     }
@@ -56,5 +69,33 @@ public class WebPushJobService {
             }
         }
         webPushJobRepository.insertAll(rows, createdAt);
+    }
+
+    /**
+     * 작업의 알림 이벤트와 수신자를 읽어 발송할 알림 목록을 만든다. 작업에 담긴 알림 순서를 유지한다.
+     * 알림 이벤트나 알림이 그사이 지워졌으면 그 수신자는 빠진다.
+     */
+    @Transactional(readOnly = true)
+    public List<NotificationsCreatedEvent.CreatedNotification> findDeliveryNotifications(WebPushJob job) {
+        NotificationEvent event = notificationEventRepository.findById(job.getNotificationEventId()).orElse(null);
+        if (event == null) {
+            return List.of();
+        }
+
+        Map<Long, Long> receiverUserIdByNotificationId = notificationRepository
+                .findAllActiveReceiversByIdIn(job.getNotificationIds())
+                .stream()
+                .collect(Collectors.toMap(
+                        NotificationReceiver::getNotificationId,
+                        NotificationReceiver::getReceiverUserId
+                ));
+        List<Long> notificationIds = job.getNotificationIds().stream()
+                .filter(receiverUserIdByNotificationId::containsKey)
+                .toList();
+        List<Long> receiverUserIds = notificationIds.stream()
+                .map(receiverUserIdByNotificationId::get)
+                .toList();
+        return NotificationsCreatedEvent.of(event, notificationIds, receiverUserIds, job.getCreatedAt())
+                .notifications();
     }
 }
