@@ -34,6 +34,7 @@ public class NotificationCreationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final WebPushJobService webPushJobService;
     private final int insertChunkSize;
 
     public NotificationCreationService(
@@ -41,6 +42,7 @@ public class NotificationCreationService {
             NotificationRepository notificationRepository,
             NotificationSettingRepository notificationSettingRepository,
             ApplicationEventPublisher eventPublisher,
+            WebPushJobService webPushJobService,
             @Value("${needu.notification.insert-chunk-size}") int insertChunkSize
     ) {
         // 0 이하면 chunk 반복이 끝나지 않으므로 기동 시점에 막는다
@@ -52,6 +54,7 @@ public class NotificationCreationService {
         this.notificationRepository = notificationRepository;
         this.notificationSettingRepository = notificationSettingRepository;
         this.eventPublisher = eventPublisher;
+        this.webPushJobService = webPushJobService;
         this.insertChunkSize = insertChunkSize;
     }
 
@@ -121,15 +124,20 @@ public class NotificationCreationService {
         List<Long> notificationIds = insertNotifications(rows, createdAt);
 
         List<NotificationsCreatedEvent.CreatedNotification> createdNotifications = new ArrayList<>(rows.size());
+        List<WebPushJobTarget> webPushJobTargets = new ArrayList<>(enabledNotifications.size());
         int fromIndex = 0;
         for (int index = 0; index < enabledNotifications.size(); index++) {
+            NotificationEvent event = events.get(index);
             List<Long> receiverUserIds = enabledNotifications.get(index).receiverUserIds();
             int toIndex = fromIndex + receiverUserIds.size();
+            List<Long> eventNotificationIds = notificationIds.subList(fromIndex, toIndex);
             createdNotifications.addAll(NotificationsCreatedEvent.of(
-                    events.get(index), notificationIds.subList(fromIndex, toIndex), receiverUserIds, createdAt
+                    event, eventNotificationIds, receiverUserIds, createdAt
             ).notifications());
+            webPushJobTargets.add(new WebPushJobTarget(event.getId(), event.getType(), eventNotificationIds));
             fromIndex = toIndex;
         }
+        webPushJobService.createJobs(webPushJobTargets, createdAt);
         return new NotificationsCreatedEvent(createdNotifications);
     }
 
