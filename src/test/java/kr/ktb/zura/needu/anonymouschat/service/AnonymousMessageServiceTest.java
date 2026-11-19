@@ -17,6 +17,7 @@ import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousMessageRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
+import kr.ktb.zura.needu.anonymouschat.support.ForbiddenWordMasker;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousMessageSender;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomEndedReason;
 import kr.ktb.zura.needu.anonymouschat.type.AnonymousRoomStatus;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -66,6 +68,9 @@ class AnonymousMessageServiceTest {
 
     @Mock
     private AnonymousMessageRepository anonymousMessageRepository;
+
+    @Spy
+    private ForbiddenWordMasker forbiddenWordMasker = new ForbiddenWordMasker();
 
     @Mock
     private UserService userService;
@@ -107,6 +112,23 @@ class AnonymousMessageServiceTest {
         assertThat(event.clientMessageId()).isEqualTo(request.clientMessageId());
         assertThat(event.content()).isEqualTo(request.content());
         assertThat(event.duplicated()).isFalse();
+    }
+
+    @Test
+    void forbiddenWordContent_sendMessage_savesAndPublishesMaskedContent() {
+        givenParticipatingRoom(QUESTIONER_ID);
+        SendAnonymousMessageRequest request = new SendAnonymousMessageRequest(UUID.randomUUID(), "이 씨발 뭐야");
+        given(anonymousMessageRepository.findByRoomIdAndSenderUserIdAndClientMessageId(
+                ROOM_ID, QUESTIONER_ID, request.clientMessageId())).willReturn(Optional.empty());
+        given(anonymousMessageRepository.saveAndFlush(any(AnonymousMessage.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        anonymousMessageService.sendMessage(QUESTIONER_ID, ROOM_ID, request);
+
+        ArgumentCaptor<AnonymousMessage> savedCaptor = ArgumentCaptor.forClass(AnonymousMessage.class);
+        verify(anonymousMessageRepository).saveAndFlush(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().getContent()).isEqualTo("이 ** 뭐야");
+        assertThat(capturePublishedEvent().content()).isEqualTo("이 ** 뭐야");
     }
 
     @Test

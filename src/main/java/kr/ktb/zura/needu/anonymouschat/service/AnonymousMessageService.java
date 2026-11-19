@@ -13,6 +13,7 @@ import kr.ktb.zura.needu.anonymouschat.entity.AnonymousRoom;
 import kr.ktb.zura.needu.anonymouschat.exception.AnonymousChatErrorCode;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousMessageRepository;
 import kr.ktb.zura.needu.anonymouschat.repository.AnonymousRoomRepository;
+import kr.ktb.zura.needu.anonymouschat.support.ForbiddenWordMasker;
 import kr.ktb.zura.needu.common.exception.BusinessException;
 import kr.ktb.zura.needu.common.exception.CommonErrorCode;
 import kr.ktb.zura.needu.common.exception.TooManyRequestsException;
@@ -38,6 +39,7 @@ public class AnonymousMessageService {
     private final AnonymousChatService anonymousChatService;
     private final AnonymousRoomRepository anonymousRoomRepository;
     private final AnonymousMessageRepository anonymousMessageRepository;
+    private final ForbiddenWordMasker forbiddenWordMasker;
     private final UserService userService;
     private final EventRateLimiter eventRateLimiter;
     private final ApplicationEventPublisher eventPublisher;
@@ -74,12 +76,14 @@ public class AnonymousMessageService {
 
         anonymousChatService.validatePartnerJoined(room, userId);
         validateRoomActive(room);
+        String content = forbiddenWordMasker.mask(request.content());
         AnonymousMessage message = saveMessage(
-                new AnonymousMessage(room, userId, request.clientMessageId(), request.content()));
+                new AnonymousMessage(room, userId, request.clientMessageId(), content));
         AnonymousMessageSavedEvent savedEvent = AnonymousMessageSavedEvent.of(room, message, false);
         anonymousRoomRepository.updateLastActivityAt(roomId, message.getCreatedAt());
 
-        log.info("Anonymous message sent. userId={}, roomId={}, messageId={}", userId, roomId, message.getId());
+        log.info("Anonymous message sent. userId={}, roomId={}, messageId={}, masked={}",
+                userId, roomId, message.getId(), !content.equals(request.content()));
         eventPublisher.publishEvent(savedEvent);
     }
 
