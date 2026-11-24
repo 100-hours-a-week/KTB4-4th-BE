@@ -311,6 +311,48 @@ class AnonymousChatMessageControllerTest {
     }
 
     @Test
+    void participantTyping_updateTyping_sendsTypingEventOnlyToPartner() throws Exception {
+        AnonymousRoom room = saveRoom();
+        ConnectedClient typer = connectAndSubscribe(questionerId);
+        ConnectedClient partner = connectAndSubscribe(recipientId);
+
+        typer.sendTyping(room.getId(), Map.of("isTyping", true));
+
+        JsonNode typing = partner.nextEvent();
+        assertThat(typing).isNotNull();
+        assertThat(typing.get("type").asString()).isEqualTo("ANONYMOUS_CHAT_TYPING");
+        assertThat(typing.get("data").get("roomId").asLong()).isEqualTo(room.getId());
+        assertThat(typing.get("data").get("isTyping").asBoolean()).isTrue();
+        assertThat(typing.get("data").size()).isEqualTo(2);
+        assertThat(typer.eventWithinNoEventWait()).isNull();
+    }
+
+    @Test
+    void nonParticipant_updateTyping_dropsEventWithoutError() throws Exception {
+        AnonymousRoom room = saveRoom();
+        ConnectedClient outsider = connectAndSubscribe(outsiderId);
+        ConnectedClient partner = connectAndSubscribe(recipientId);
+
+        outsider.sendTyping(room.getId(), Map.of("isTyping", true));
+
+        assertThat(outsider.eventWithinNoEventWait()).isNull();
+        assertThat(partner.eventWithinNoEventWait()).isNull();
+    }
+
+    @Test
+    void missingOrMalformedIsTyping_updateTyping_dropsEventWithoutError() throws Exception {
+        AnonymousRoom room = saveRoom();
+        ConnectedClient typer = connectAndSubscribe(questionerId);
+        ConnectedClient partner = connectAndSubscribe(recipientId);
+
+        typer.sendTyping(room.getId(), Map.of());
+        typer.sendTyping(room.getId(), Map.of("isTyping", "not-boolean"));
+
+        assertThat(typer.eventWithinNoEventWait()).isNull();
+        assertThat(partner.eventWithinNoEventWait()).isNull();
+    }
+
+    @Test
     void tooManyRequests_handleBusinessException_returnsRetryAfterWithMessageIdentity() {
         Message<byte[]> message = MessageBuilder
                 .withPayload("{\"clientMessageId\":\"client-1\",\"content\":\"안녕하세요\"}".getBytes())
@@ -418,6 +460,10 @@ class AnonymousChatMessageControllerTest {
 
         void send(Long roomId, Map<String, Object> body) {
             sendTo("/app/anonymous-chats/" + roomId + "/messages", body);
+        }
+
+        void sendTyping(Long roomId, Map<String, Object> body) {
+            sendTo("/app/anonymous-chats/" + roomId + "/typing", body);
         }
 
         void sendTo(String destination, Map<String, Object> body) {
