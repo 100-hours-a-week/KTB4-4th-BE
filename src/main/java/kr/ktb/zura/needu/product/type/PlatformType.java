@@ -7,7 +7,8 @@ public enum PlatformType {
     COUPANG,
     KAKAO,
     ELEVEN_STREET,
-    HOMEPLUS;
+    HOMEPLUS,
+    KREAM;
 
     @JsonCreator
     public static PlatformType from(String value) {

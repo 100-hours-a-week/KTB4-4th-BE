@@ -60,7 +60,6 @@ public class GiftProductService {
             Long ownerUserId, GiftProductSearchCondition condition, ProductCategory category,
             Function<GiftProductSummary, T> mapper) {
         int size = condition.size();
-        // 다음 페이지 존재 여부를 추가 count 쿼리 없이 판단하기 위해 한 건을 더 조회한다.
         List<GiftProductSummary> giftProducts =
                 findGiftProducts(ownerUserId, condition, category, Limit.of(size + 1));
         boolean hasNext = giftProducts.size() > size;
