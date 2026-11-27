@@ -1,10 +1,8 @@
 package kr.ktb.zura.needu.product.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import java.time.Duration;
+import kr.ktb.zura.needu.common.redis.RedisCacheStore;
+import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import kr.ktb.zura.needu.product.dto.response.PriceRangeResponse;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
@@ -17,52 +15,49 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class ProductPriceRangeCacheService {
 
     private static final String CACHE_NAME = "product-price-range";
+    private static final String KEY_DOMAIN = "product";
+    private static final String KEY_PURPOSE = "price-range";
+    private static final String PERSONAL = "personal";
+    private static final String GIFT = "gift";
 
     private final PersonalProductRepository personalProductRepository;
     private final GiftProductRepository giftProductRepository;
-    private final Cache<CacheKey, PriceRangeResponse> cache;
+    private final RedisCacheStore redisCacheStore;
+    private final RedisKeyGenerator keyGenerator;
+    private final Duration ttl;
 
     public ProductPriceRangeCacheService(
             PersonalProductRepository personalProductRepository,
             GiftProductRepository giftProductRepository,
-            MeterRegistry meterRegistry,
-            @Value("${needu.product.price-range-cache.ttl}") Duration ttl,
-            @Value("${needu.product.price-range-cache.maximum-size}") long maximumSize
+            RedisCacheStore redisCacheStore,
+            RedisKeyGenerator keyGenerator,
+            @Value("${needu.product.price-range-cache.ttl}") Duration ttl
     ) {
         this.personalProductRepository = personalProductRepository;
         this.giftProductRepository = giftProductRepository;
-        this.cache = CaffeineCacheMetrics.monitor(
-                meterRegistry,
-                Caffeine.newBuilder()
-                        .recordStats()
-                        .expireAfterWrite(ttl)
-                        .maximumSize(maximumSize)
-                        .<CacheKey, PriceRangeResponse>build(),
-                CACHE_NAME
-        );
+        this.redisCacheStore = redisCacheStore;
+        this.keyGenerator = keyGenerator;
+        this.ttl = ttl;
     }
 
     public PriceRangeResponse findPersonalPriceRange(Long userId) {
-        return cache.get(new CacheKey(RecommendationType.PERSONAL, userId),
-                key -> PriceRangeResponse.from(personalProductRepository.findPriceRangeByUserId(key.userId())));
+        return redisCacheStore.findOrLoad(CACHE_NAME, generateKey(PERSONAL, userId), PriceRangeResponse.class, ttl,
+                () -> PriceRangeResponse.from(personalProductRepository.findPriceRangeByUserId(userId)));
     }
 
     public PriceRangeResponse findGiftPriceRange(Long userId) {
-        return cache.get(new CacheKey(RecommendationType.GIFT, userId),
-                key -> PriceRangeResponse.from(giftProductRepository.findPriceRangeByUserId(key.userId())));
+        return redisCacheStore.findOrLoad(CACHE_NAME, generateKey(GIFT, userId), PriceRangeResponse.class, ttl,
+                () -> PriceRangeResponse.from(giftProductRepository.findPriceRangeByUserId(userId)));
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void evictPriceRanges(ProductRecommendationsUpdatedEvent event) {
-        cache.invalidate(new CacheKey(RecommendationType.PERSONAL, event.userId()));
-        cache.invalidate(new CacheKey(RecommendationType.GIFT, event.userId()));
+        redisCacheStore.delete(CACHE_NAME,
+                generateKey(PERSONAL, event.userId()),
+                generateKey(GIFT, event.userId()));
     }
 
-    private enum RecommendationType {
-        PERSONAL,
-        GIFT
-    }
-
-    private record CacheKey(RecommendationType type, Long userId) {
+    private String generateKey(String recommendationType, Long userId) {
+        return keyGenerator.generate(KEY_DOMAIN, KEY_PURPOSE, recommendationType, userId);
     }
 }

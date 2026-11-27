@@ -1,13 +1,11 @@
 package kr.ktb.zura.needu.product.service;
 
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.math.BigDecimal;
 import java.time.Duration;
 import javax.sql.DataSource;
+import kr.ktb.zura.needu.common.redis.RedisCacheStore;
+import kr.ktb.zura.needu.common.redis.RedisKeyGenerator;
 import kr.ktb.zura.needu.product.repository.GiftProductRepository;
 import kr.ktb.zura.needu.product.repository.PersonalProductRepository;
-import kr.ktb.zura.needu.product.repository.ProductPriceRange;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -20,55 +18,48 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 class ProductPriceRangeCacheTransactionTest {
 
     private static final Long USER_ID = 1L;
+    private static final String CACHE_NAME = "product-price-range";
+    private static final String PERSONAL_KEY = "backend:test:product:price-range:personal:1";
+    private static final String GIFT_KEY = "backend:test:product:price-range:gift:1";
 
     @Test
     void transactionCommitted_recommendationsUpdated_evictsAfterCommit() {
         try (AnnotationConfigApplicationContext context = context()) {
-            PersonalProductRepository repository = context.getBean(PersonalProductRepository.class);
-            ProductPriceRangeCacheService cacheService = context.getBean(ProductPriceRangeCacheService.class);
+            RedisCacheStore redisCacheStore = context.getBean(RedisCacheStore.class);
             ApplicationEventPublisher eventPublisher = context;
             TransactionTemplate transactionTemplate = context.getBean(TransactionTemplate.class);
-            given(repository.findPriceRangeByUserId(USER_ID))
-                    .willReturn(new ProductPriceRange(BigDecimal.ONE, BigDecimal.TEN));
-            cacheService.findPersonalPriceRange(USER_ID);
 
             transactionTemplate.executeWithoutResult(status -> {
                 eventPublisher.publishEvent(new ProductRecommendationsUpdatedEvent(USER_ID));
-                cacheService.findPersonalPriceRange(USER_ID);
-                verify(repository).findPriceRangeByUserId(USER_ID);
+                verify(redisCacheStore, never()).delete(anyString(), any(String[].class));
             });
-            cacheService.findPersonalPriceRange(USER_ID);
 
-            verify(repository, times(2)).findPriceRangeByUserId(USER_ID);
+            verify(redisCacheStore).delete(CACHE_NAME, PERSONAL_KEY, GIFT_KEY);
         }
     }
 
     @Test
     void transactionRolledBack_recommendationsUpdated_keepsCachedValue() {
         try (AnnotationConfigApplicationContext context = context()) {
-            PersonalProductRepository repository = context.getBean(PersonalProductRepository.class);
-            ProductPriceRangeCacheService cacheService = context.getBean(ProductPriceRangeCacheService.class);
+            RedisCacheStore redisCacheStore = context.getBean(RedisCacheStore.class);
             ApplicationEventPublisher eventPublisher = context;
             TransactionTemplate transactionTemplate = context.getBean(TransactionTemplate.class);
-            given(repository.findPriceRangeByUserId(USER_ID))
-                    .willReturn(new ProductPriceRange(BigDecimal.ONE, BigDecimal.TEN));
-            cacheService.findPersonalPriceRange(USER_ID);
 
             transactionTemplate.executeWithoutResult(status -> {
                 eventPublisher.publishEvent(new ProductRecommendationsUpdatedEvent(USER_ID));
                 status.setRollbackOnly();
             });
-            cacheService.findPersonalPriceRange(USER_ID);
 
-            verify(repository).findPriceRangeByUserId(USER_ID);
+            verify(redisCacheStore, never()).delete(anyString(), any(String[].class));
         }
     }
 
@@ -81,28 +72,19 @@ class ProductPriceRangeCacheTransactionTest {
     static class TestConfig {
 
         @Bean
-        PersonalProductRepository personalProductRepository() {
-            return mock(PersonalProductRepository.class);
+        RedisCacheStore redisCacheStore() {
+            return mock(RedisCacheStore.class);
         }
 
         @Bean
-        GiftProductRepository giftProductRepository() {
-            return mock(GiftProductRepository.class);
-        }
-
-        @Bean
-        ProductPriceRangeCacheService productPriceRangeCacheService(
-                PersonalProductRepository personalProductRepository,
-                GiftProductRepository giftProductRepository,
-                MeterRegistry meterRegistry
-        ) {
+        ProductPriceRangeCacheService productPriceRangeCacheService(RedisCacheStore redisCacheStore) {
             return new ProductPriceRangeCacheService(
-                    personalProductRepository, giftProductRepository, meterRegistry, Duration.ofMinutes(10), 100L);
-        }
-
-        @Bean
-        MeterRegistry meterRegistry() {
-            return new SimpleMeterRegistry();
+                    mock(PersonalProductRepository.class),
+                    mock(GiftProductRepository.class),
+                    redisCacheStore,
+                    new RedisKeyGenerator("backend:test"),
+                    Duration.ofMinutes(10)
+            );
         }
 
         @Bean
