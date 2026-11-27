@@ -35,7 +35,6 @@ dependencies {
     implementation platform('io.awspring.cloud:spring-cloud-aws-dependencies:4.1.1')
     implementation 'io.awspring.cloud:spring-cloud-aws-starter'
     implementation 'io.micrometer:micrometer-registry-cloudwatch2'
-    implementation 'com.github.ben-manes.caffeine:caffeine'
     implementation 'com.zerodeplibs:zerodep-web-push-java:2.1.5'
     implementation 'io.github.vaneproject:vane-badwordfiltering:1.0.0'
     // API 스펙(JSON)만 생성. Swagger UI는 CI가 Cloudflare Pages에 따로 배포
