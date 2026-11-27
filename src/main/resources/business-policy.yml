@@ -159,10 +159,12 @@ needu:
       retry-delay: ${FRIEND_SYNC_RETRY_DELAY:5m}
       lock-at-most-for: ${FRIEND_SYNC_LOCK_AT_MOST_FOR:10m}
       lock-at-least-for: ${FRIEND_SYNC_LOCK_AT_LEAST_FOR:10s}
+  redis-cache:
+    # Redis 캐시 장애를 캐시 이름별로 Sentry에 보고하는 최소 간격이다. 장애 중 요청마다 이벤트가 쌓이는 것을 막는다
+    failure-report-interval: ${REDIS_CACHE_FAILURE_REPORT_INTERVAL:1m}
   product:
     price-range-cache:
       ttl: ${PRODUCT_PRICE_RANGE_CACHE_TTL:10m}
-      maximum-size: ${PRODUCT_PRICE_RANGE_CACHE_MAXIMUM_SIZE:100000}
     activity:
       # AI 대화를 닫을 때 추천 피드백으로 보내는 좋아요·싫어요·구매 기록의 범위다. 오래된 반응은 지금 취향과 다를 수 있어 뺀다
       lookback: ${PRODUCT_ACTIVITY_LOOKBACK:90d}
